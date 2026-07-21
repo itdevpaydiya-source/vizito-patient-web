@@ -1,0 +1,5521 @@
+
+
+
+Vizito Patient Application – Functional Requirements Document
+
+Module 1: Authentication & Onboarding
+
+
+
+
+1. Overview
+
+The Authentication and Onboarding module allows users to securely access the Vizito Patient Application and create a patient account with minimal information. The onboarding process is designed to be simple, enabling users to complete registration quickly while collecting only the essential information required to use the application.
+
+
+
+
+2. Objectives
+
+Allow new users to register with minimal information.
+
+Provide multiple secure login methods.
+
+Enable quick account creation.
+
+Support OTP-based and password-based authentication.
+
+Ensure a smooth onboarding experience before accessing the application.
+
+
+
+
+3. Authentication Methods
+
+The application shall support the following login methods:
+
+Mobile Number + OTP
+
+Email Address + OTP
+
+Mobile Number + Password
+
+Email Address + Password
+
+The user may choose any available authentication method from the login screen.
+
+
+
+
+4. Login Screen
+
+Purpose
+
+Allow existing users to securely access the application.
+
+
+
+
+Screen Description
+
+The Login screen is the first screen displayed when the application is opened by a user who is not authenticated.
+
+Users can select their preferred login method and continue with authentication.
+
+
+
+
+UI Components
+
+Vizito Logo
+
+Welcome Message
+
+Authentication Method Selector
+
+Mobile Number Input
+
+Email Address Input
+
+Password Input
+
+OTP Input (displayed only when OTP authentication is selected)
+
+Send OTP Button
+
+Verify OTP Button
+
+Login Button
+
+Forgot Password
+
+Create New Account
+
+Only the fields relevant to the selected authentication method shall be displayed.
+
+
+
+
+User Actions
+
+The user can:
+
+Select a login method.
+
+Enter a mobile number.
+
+Enter an email address.
+
+Enter a password.
+
+Request an OTP.
+
+Verify the received OTP.
+
+Log in to the application.
+
+Navigate to account registration.
+
+Navigate to the Forgot Password screen.
+
+
+
+
+Business Rules
+
+Only one authentication method shall be active at a time.
+
+OTP authentication requires successful OTP verification before login.
+
+Password authentication requires valid credentials.
+
+Successful authentication redirects the user to the application dashboard.
+
+Invalid authentication prevents login.
+
+
+
+
+Validations
+
+Mobile Number
+
+Mandatory for mobile authentication.
+
+Must be a valid mobile number.
+
+Email Address
+
+Mandatory for email authentication.
+
+Must be in a valid email format.
+
+Password
+
+Mandatory for password authentication.
+
+OTP
+
+Mandatory for OTP authentication.
+
+OTP must be successfully verified before login.
+
+
+
+
+Success Scenario
+
+Authentication is successful.
+
+User is redirected to the Home Dashboard.
+
+
+
+
+Failure Scenario
+
+Invalid mobile number.
+
+Invalid email address.
+
+Incorrect password.
+
+Invalid OTP.
+
+Expired OTP.
+
+Authentication failure.
+
+Appropriate validation or error messages shall be displayed, and the user shall remain on the Login screen until authentication succeeds.
+
+
+
+
+Acceptance Criteria
+
+User can log in using Mobile Number + OTP.
+
+User can log in using Email + OTP.
+
+User can log in using Mobile Number + Password.
+
+User can log in using Email + Password.
+
+Only the selected authentication method is displayed.
+
+Successful authentication redirects the user to the Home Dashboard.
+
+
+
+
+5. Forgot Password
+
+Purpose
+
+Allow users to securely reset their account password.
+
+
+
+
+Screen Description
+
+Users can recover access to their account by verifying their registered mobile number or registered email address using OTP before creating a new password.
+
+
+
+
+UI Components
+
+Mobile Number / Email Input
+
+Send OTP Button
+
+OTP Input
+
+Verify OTP Button
+
+New Password
+
+Confirm Password
+
+Reset Password Button
+
+
+
+
+User Actions
+
+Enter registered mobile number or email.
+
+Request OTP.
+
+Verify OTP.
+
+Create a new password.
+
+Confirm the new password.
+
+Submit the password reset request.
+
+
+
+
+Business Rules
+
+Password reset is allowed only after successful OTP verification.
+
+The new password becomes the active password after a successful reset.
+
+
+
+
+Validations
+
+Registered mobile number or email is required.
+
+OTP verification is mandatory.
+
+New Password is required.
+
+Confirm Password must match the New Password.
+
+
+
+
+Success Scenario
+
+The password is successfully updated, and the user is redirected to the Login screen.
+
+
+
+
+Failure Scenario
+
+Invalid or expired OTP.
+
+Password confirmation mismatch.
+
+Password reset failure.
+
+
+
+
+Acceptance Criteria
+
+User can reset the password using Mobile Number + OTP.
+
+User can reset the password using Email + OTP.
+
+User is redirected to the Login screen after a successful password reset.
+
+
+
+
+6. New User Registration
+
+Purpose
+
+Allow new users to create a Vizito patient account using only the minimum required information.
+
+
+
+
+Registration Flow
+
+Verify Mobile Number or Email using OTP.
+
+Enter Personal Information.
+
+Enter Address.
+
+Create Password.
+
+Registration Completed.
+
+
+
+
+7. Personal Information
+
+Purpose
+
+Collect the minimum personal information required to create a patient account.
+
+
+
+
+UI Components
+
+Full Name
+
+Mobile Number
+
+Email Address (optional if registering using a mobile number)
+
+Password
+
+Confirm Password
+
+Continue Button
+
+
+
+
+User Actions
+
+Enter personal information.
+
+Create a password.
+
+Continue to the Address section.
+
+
+
+
+Business Rules
+
+Mobile number must be verified through OTP before registration is completed.
+
+If registration is initiated using an email address, the email must be verified through OTP before registration is completed.
+
+Password setup is mandatory for every account.
+
+
+
+
+Validations
+
+Full Name
+
+Mandatory.
+
+Mobile Number
+
+Mandatory.
+
+Must be verified if used for registration.
+
+Email Address
+
+Mandatory only when email is selected as the registration method.
+
+Must be verified if used for registration.
+
+Password
+
+Mandatory.
+
+Confirm Password
+
+Must match the Password.
+
+
+
+
+8. Address Information
+
+Purpose
+
+Capture the patient's primary address.
+
+
+
+
+Screen Description
+
+The application attempts to automatically capture the user's current address. Users may also manually enter or modify the address before saving.
+
+
+
+
+UI Components
+
+Auto Capture Address
+
+Manual Address Entry
+
+Save Address Button
+
+Complete Registration Button
+
+
+
+
+User Actions
+
+Capture the current address automatically.
+
+Manually enter the address.
+
+Edit the captured address if required.
+
+Save the address.
+
+Complete registration.
+
+
+
+
+Business Rules
+
+Users may either use the automatically captured address or manually enter the address.
+
+The address can be modified before completing registration.
+
+
+
+
+Validations
+
+An address must be available before registration is completed.
+
+
+
+
+Success Scenario
+
+The patient account is successfully created, and the user is redirected to the Home Dashboard.
+
+
+
+
+Failure Scenario
+
+Registration cannot be completed if mandatory information is missing.
+
+Registration cannot be completed if OTP verification has not been successfully completed.
+
+
+
+
+Acceptance Criteria
+
+User can register using Mobile Number + OTP.
+
+User can register using Email + OTP.
+
+Registration requires only:
+
+Personal Information
+
+Address
+
+Password Setup
+
+Address supports both automatic capture and manual entry.
+
+Successful registration redirects the user to the Home Dashboard.
+
+Module 2: Home Dashboard
+
+
+
+
+1. Overview
+
+The Home Dashboard is the primary landing screen of the Vizito Patient Application after successful authentication. It serves as the central navigation point, allowing patients to quickly access all available healthcare services, view active bookings, manage family members, and continue their healthcare journey from a single screen.
+
+The dashboard is designed to provide quick access to the most frequently used features while maintaining a clean and consistent user experience.
+
+
+
+
+2. Objectives
+
+Provide quick access to all healthcare services.
+
+Enable patients to search across all available services.
+
+Display ongoing activities and bookings.
+
+Provide easy access to family members.
+
+Allow users to continue unfinished or upcoming bookings.
+
+Serve as the primary navigation hub of the application.
+
+
+
+
+3. Home Dashboard
+
+Purpose
+
+Provide patients with a centralized view of healthcare services, current activities, and quick navigation throughout the application.
+
+
+
+
+Screen Description
+
+The Home Dashboard is displayed immediately after a successful login.
+
+The screen presents all available healthcare services in a single place and provides shortcuts to frequently used actions without requiring users to navigate through multiple menus.
+
+
+
+
+UI Components
+
+Header
+
+Greeting Message
+
+User Name
+
+Notification Icon
+
+
+
+
+Global Search
+
+A universal search bar allowing users to search for:
+
+Doctors
+
+Hospitals
+
+Clinics
+
+Home Care Services
+
+Ambulance Services
+
+Pharmacy
+
+Diagnostic Labs
+
+Medical Equipment Rentals
+
+Selecting a search result navigates the user to the appropriate listing or provider details screen.
+
+
+
+
+Healthcare Services
+
+The dashboard shall display the available healthcare services:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care
+
+Ambulance
+
+Pharmacy
+
+Diagnostic Lab
+
+Equipment Rental
+
+Selecting a service opens the corresponding service listing.
+
+
+
+
+Active Bookings
+
+Displays the patient's ongoing bookings across all services.
+
+Each booking card shall display:
+
+Service Type
+
+Provider Name
+
+Booking Date
+
+Booking Time
+
+Current Status
+
+Selecting a booking opens the Booking Details screen.
+
+
+
+
+Upcoming Bookings
+
+Displays confirmed future bookings.
+
+Each booking card shall display:
+
+Service
+
+Provider
+
+Scheduled Date
+
+Scheduled Time
+
+Selecting a booking opens the Booking Details screen.
+
+
+
+
+Recent Activities
+
+Displays recently completed activities performed by the patient.
+
+Examples include:
+
+Doctor Appointments
+
+Home Care Bookings
+
+Ambulance Bookings
+
+Pharmacy Orders
+
+Lab Bookings
+
+Equipment Rentals
+
+Selecting an activity opens the corresponding Booking Details screen.
+
+
+
+
+Family Members
+
+Displays all registered family members.
+
+The user can:
+
+Select a family member.
+
+Add a new family member.
+
+Selecting a family member filters subsequent bookings and activities for that individual.
+
+
+
+
+Favorites
+
+Displays providers saved by the patient.
+
+Supported provider types include:
+
+Doctors
+
+Hospitals
+
+Clinics
+
+Home Care Providers
+
+Ambulance Providers
+
+Pharmacies
+
+Diagnostic Labs
+
+Equipment Providers
+
+Selecting a favorite opens the Provider Details screen.
+
+
+
+
+Bottom Navigation
+
+The application shall provide persistent navigation to:
+
+Home
+
+Search
+
+Bookings
+
+Profile
+
+
+
+
+User Actions
+
+The user can:
+
+Search for healthcare services.
+
+Select a healthcare service.
+
+View active bookings.
+
+View upcoming bookings.
+
+View recent activities.
+
+Open booking details.
+
+Select a family member.
+
+Add a new family member.
+
+Open favorite providers.
+
+View notifications.
+
+Navigate using the bottom navigation bar.
+
+
+
+
+Business Rules
+
+The Home Dashboard is displayed only after successful authentication.
+
+Active bookings shall display the latest booking status.
+
+Upcoming bookings shall display only confirmed future bookings.
+
+Recent activities shall display completed bookings.
+
+Selecting a family member applies to the user's current session until another member is selected or the user switches back to themselves.
+
+Favorites shall display only providers saved by the logged-in patient.
+
+
+
+
+Success Scenario
+
+Dashboard loads successfully.
+
+Healthcare services are available for selection.
+
+Active bookings and upcoming bookings are displayed correctly.
+
+The patient can navigate to any module from the dashboard.
+
+
+
+
+Failure Scenario
+
+If dashboard information cannot be loaded, the application shall display an appropriate message while keeping the user on the Home Dashboard.
+
+If no active or upcoming bookings exist, the corresponding sections shall display an empty state.
+
+If no favorites have been added, the Favorites section shall display an empty state.
+
+
+
+
+Acceptance Criteria
+
+Dashboard is displayed after successful login.
+
+All supported healthcare services are available from the dashboard.
+
+Universal Search is accessible from the dashboard.
+
+Active bookings display the latest booking status.
+
+Upcoming bookings display confirmed future bookings.
+
+Recent activities display completed services.
+
+Family members are accessible from the dashboard.
+
+Favorite providers are accessible from the dashboard.
+
+Bottom navigation is available throughout the application.
+
+Module 3: Universal Booking Flow
+
+
+
+
+1. Overview
+
+The Universal Booking Flow provides a single and consistent booking experience across all healthcare services available in the Vizito Patient Application.
+
+Instead of creating separate booking flows for each service, the application uses one reusable booking process. The fields and options displayed during the booking process automatically adapt based on the selected service.
+
+This approach ensures a consistent user experience while reducing duplicate screens and simplifying future maintenance.
+
+
+
+
+2. Supported Services
+
+The Universal Booking Flow shall be used for:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+3. Booking Flow
+
+Every booking shall follow the same sequence.
+
+Step 1 – Select Service
+
+The user selects one of the available healthcare services.
+
+Examples:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care
+
+Ambulance
+
+Pharmacy
+
+Diagnostic Lab
+
+Equipment Rental
+
+The selected service determines the fields displayed in subsequent steps.
+
+
+
+
+Step 2 – Select Provider
+
+The application displays the available providers for the selected service.
+
+Each provider card may display information relevant to the selected service.
+
+Examples include:
+
+Provider Name
+
+Rating
+
+Availability
+
+Location
+
+Consultation Fee
+
+Rental Price
+
+Service Charges
+
+Selecting a provider opens the booking process.
+
+
+
+
+Step 3 – Select Patient
+
+The patient selects who the booking is for.
+
+Available options:
+
+Myself
+
+Registered Family Member
+
+If required, the user may add a new family member before continuing.
+
+
+
+
+Step 4 – Booking Details
+
+The application displays only the fields applicable to the selected service.
+
+Examples include:
+
+Doctor Consultation
+
+Consultation Type
+
+Appointment Date
+
+Time Slot
+
+Hospital & Clinic
+
+Department
+
+Appointment Date
+
+Time Slot
+
+Home Care
+
+Service Type
+
+Visit Date
+
+Visit Time
+
+Service Address
+
+Scheduled Ambulance
+
+Pickup Address
+
+Destination
+
+Pickup Date
+
+Pickup Time
+
+Pharmacy
+
+Medicine Selection
+
+Prescription Upload (if required)
+
+Diagnostic Lab
+
+Test Selection
+
+Home Collection or Lab Visit
+
+Appointment Date
+
+Time Slot
+
+Equipment Rental
+
+Equipment Selection
+
+Rental Duration
+
+Delivery Address
+
+Only the fields applicable to the selected service shall be displayed.
+
+
+
+
+Step 5 – Review Booking
+
+The application displays a summary of the booking before confirmation.
+
+The summary includes only information relevant to the selected service.
+
+Typical information may include:
+
+Service
+
+Provider
+
+Patient
+
+Date
+
+Time
+
+Address (if applicable)
+
+Charges
+
+The user may return to previous steps to make changes before proceeding.
+
+
+
+
+Step 6 – Payment
+
+The user completes payment using the available payment methods.
+
+After successful payment, the booking is confirmed.
+
+
+
+
+Step 7 – Booking Confirmation
+
+The application displays the booking confirmation.
+
+The confirmation includes:
+
+Booking Reference
+
+Service
+
+Provider
+
+Patient
+
+Booking Status
+
+Date and Time
+
+Next Available Actions
+
+Available actions may include:
+
+View Booking
+
+Track Booking (where applicable)
+
+Cancel Booking (subject to provider policy)
+
+Rebook
+
+Return to Home
+
+
+
+
+4. User Actions
+
+The user can:
+
+Select a healthcare service.
+
+Select a provider.
+
+Select a patient.
+
+Enter booking details.
+
+Review the booking.
+
+Complete payment.
+
+Confirm the booking.
+
+View the booking.
+
+Track the booking where applicable.
+
+Cancel the booking where permitted.
+
+Rebook an existing booking.
+
+
+
+
+5. Business Rules
+
+A single booking flow shall be used for all supported healthcare services.
+
+Only fields relevant to the selected service shall be displayed.
+
+Booking cannot proceed until all mandatory information has been completed.
+
+Booking is confirmed only after successful payment.
+
+Tracking shall be available only for supported services.
+
+Cancellation and rebooking options shall be displayed according to the booking status.
+
+
+
+
+6. Success Scenario
+
+The booking is successfully completed.
+
+Payment is successful.
+
+Booking confirmation is displayed.
+
+The booking appears under the patient's bookings.
+
+
+
+
+7. Failure Scenario
+
+Booking may fail due to:
+
+Incomplete booking information.
+
+Provider unavailability.
+
+Slot no longer available.
+
+Payment failure.
+
+Booking could not be completed.
+
+The application shall notify the user and allow them to retry where applicable.
+
+
+
+
+8. Acceptance Criteria
+
+A single booking flow is used across all supported services.
+
+The booking flow dynamically displays fields based on the selected service.
+
+Users can complete a booking using the same navigation sequence regardless of service type.
+
+Bookings are confirmed only after successful payment.
+
+Confirmed bookings are available in the patient's booking history.
+
+Module 4: Universal Search
+
+
+
+
+1. Overview
+
+The Universal Search module enables patients to search and discover all healthcare services available within the Vizito Patient Application through a single search interface.
+
+Instead of providing separate search screens for each service, the application uses one reusable search experience that dynamically adapts based on the selected healthcare service.
+
+
+
+
+2. Objectives
+
+Provide a single search experience across all healthcare services.
+
+Allow patients to quickly discover providers and services.
+
+Maintain a consistent user experience throughout the application.
+
+Display only information relevant to the selected service.
+
+
+
+
+3. Supported Services
+
+The Universal Search shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+4. Search Screen
+
+Purpose
+
+Allow patients to search for providers and healthcare services from one unified interface.
+
+
+
+
+Screen Description
+
+The Universal Search screen provides a common search experience for all supported healthcare services.
+
+The displayed results automatically adapt based on the selected service while maintaining the same screen layout.
+
+
+
+
+UI Components
+
+Search Bar
+
+Service Selector
+
+Filter Button
+
+Sort Button
+
+Search Results List
+
+
+
+
+User Actions
+
+The user can:
+
+Select a healthcare service.
+
+Enter search keywords.
+
+Apply filters.
+
+Apply sorting.
+
+View search results.
+
+Open provider details.
+
+
+
+
+5. Search Results
+
+Search results shall be displayed using a reusable card layout.
+
+The overall card design shall remain consistent while displaying only information applicable to the selected service.
+
+Examples of displayed information may include:
+
+Provider Name
+
+Service Name
+
+Rating
+
+Availability
+
+Location
+
+Consultation Fee
+
+Service Charges
+
+Rental Charges
+
+Selecting a result opens the Provider Details screen.
+
+
+
+
+6. Filters
+
+The available filters shall automatically change according to the selected healthcare service.
+
+Only filters applicable to the selected service shall be displayed.
+
+
+
+
+Doctor Consultation
+
+Specialty
+
+Consultation Type
+
+Gender
+
+Language
+
+Experience
+
+Consultation Fee
+
+
+
+
+Hospital & Clinic
+
+Department
+
+Consultation Fee
+
+
+
+
+Home Care Services
+
+Service Type
+
+
+
+
+Scheduled Ambulance
+
+Vehicle Type
+
+
+
+
+Pharmacy
+
+Medicine Category
+
+
+
+
+Diagnostic Lab
+
+Test Category
+
+
+
+
+Equipment Rental
+
+Equipment Category
+
+
+
+
+7. Sorting
+
+The search results may be sorted based on applicable options for the selected service.
+
+Examples include:
+
+Relevance
+
+Name
+
+Price
+
+Only sorting options relevant to the selected service shall be displayed.
+
+
+
+
+8. User Actions from Search Results
+
+From the search results, the user can:
+
+View provider details.
+
+Continue with booking.
+
+
+
+
+9. Business Rules
+
+A single search screen shall be used across all supported healthcare services.
+
+Search results shall display only providers related to the selected service.
+
+Filters and sorting options shall change dynamically based on the selected service.
+
+Selecting a provider shall navigate the user to the Provider Details screen.
+
+
+
+
+10. Success Scenario
+
+Search results are displayed successfully.
+
+The patient can select a provider and continue with the booking process.
+
+
+
+
+11. Failure Scenario
+
+If no matching results are found, the application shall display an appropriate message.
+
+If search cannot be completed, the application shall notify the user and allow another search.
+
+
+
+
+12. Acceptance Criteria
+
+One reusable search screen is used across all supported services.
+
+The search layout remains consistent for every service.
+
+Filters change dynamically based on the selected service.
+
+Sorting options change dynamically based on the selected service.
+
+Selecting a search result opens the Provider Details screen.
+
+Users can proceed to the booking flow from the selected provider.
+
+Module 5: Universal Provider Details
+
+
+
+
+1. Overview
+
+The Universal Provider Details module provides a single reusable screen for displaying detailed information about a selected healthcare provider or service.
+
+Rather than creating separate detail screens for Doctors, Hospitals, Home Care, Ambulance, Pharmacy, Diagnostic Labs, and Equipment Rental, the application shall use one common layout that dynamically displays information relevant to the selected service.
+
+This approach ensures a consistent user experience while reducing duplicate screens throughout the application.
+
+
+
+
+2. Objectives
+
+Provide a consistent provider information screen.
+
+Display only information relevant to the selected service.
+
+Allow patients to review provider details before booking.
+
+Provide direct access to the booking process.
+
+Support adding or removing providers from Favorites.
+
+
+
+
+3. Supported Services
+
+The Universal Provider Details screen shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+4. Provider Details Screen
+
+Purpose
+
+Allow patients to view complete provider information before proceeding with a booking or order.
+
+
+
+
+Screen Description
+
+The Provider Details screen displays information about the selected provider or service.
+
+The screen layout remains consistent across all supported services, while individual sections appear only when applicable to the selected provider.
+
+
+
+
+UI Components
+
+Provider Information
+
+Displays basic information about the selected provider.
+
+Examples include:
+
+Provider Name
+
+Provider Image or Logo
+
+Service Category
+
+Rating
+
+Location
+
+
+
+
+About
+
+Displays a brief description of the provider or service.
+
+
+
+
+Available Services
+
+Displays the services offered by the selected provider.
+
+Examples include:
+
+Doctor
+
+Video Consultation
+
+In-Person Consultation
+
+Hospital & Clinic
+
+Available Departments
+
+Home Care
+
+Available Home Care Services
+
+Ambulance
+
+Available Vehicle Types
+
+Pharmacy
+
+Available Medicine Categories
+
+Diagnostic Lab
+
+Available Test Categories
+
+Equipment Rental
+
+Available Equipment Categories
+
+
+
+
+Availability
+
+Displays the provider's available booking schedule or service availability, depending on the selected service.
+
+
+
+
+Pricing
+
+Displays applicable charges for the selected provider or service.
+
+Examples include:
+
+Consultation Fee
+
+Service Charges
+
+Rental Charges
+
+Test Charges
+
+Only the relevant pricing information shall be displayed.
+
+
+
+
+Reviews
+
+Displays ratings and reviews submitted by patients.
+
+
+
+
+Favorite
+
+Allows the patient to add or remove the provider from their Favorites list.
+
+
+
+
+Book Now
+
+Displays the primary action for proceeding with a booking or order.
+
+Selecting this option starts the Universal Booking Flow.
+
+
+
+
+5. User Actions
+
+The user can:
+
+View provider information.
+
+View available services.
+
+View availability.
+
+View pricing.
+
+View patient reviews.
+
+Add the provider to Favorites.
+
+Remove the provider from Favorites.
+
+Proceed with booking.
+
+
+
+
+6. Business Rules
+
+A single Provider Details screen shall be used across all supported healthcare services.
+
+Only sections relevant to the selected service shall be displayed.
+
+Selecting "Book Now" shall open the Universal Booking Flow.
+
+Providers can be added to or removed from Favorites from this screen.
+
+
+
+
+7. Success Scenario
+
+Provider information is displayed successfully.
+
+The patient reviews the provider details.
+
+The patient proceeds to the booking process or adds the provider to Favorites.
+
+
+
+
+8. Failure Scenario
+
+If provider information cannot be loaded, the application shall display an appropriate message while allowing the user to return to the previous screen.
+
+If pricing or availability cannot be retrieved, the corresponding section shall display an appropriate message.
+
+
+
+
+9. Acceptance Criteria
+
+A single reusable Provider Details screen is used across all supported healthcare services.
+
+The screen layout remains consistent for every service.
+
+Information displayed changes dynamically according to the selected provider.
+
+Patients can add or remove providers from Favorites.
+
+Patients can proceed directly to the Universal Booking Flow from this screen.
+
+Module 6: Universal Booking Details
+
+
+
+
+1. Overview
+
+The Universal Booking Details module provides a single reusable screen for viewing complete information about a booking, order, or rental made through the Vizito Patient Application.
+
+Instead of creating separate booking detail screens for each healthcare service, the application shall use one common layout that dynamically displays information based on the selected booking type.
+
+The available actions and displayed information automatically adapt according to the selected service and the current booking status.
+
+
+
+
+2. Objectives
+
+Provide a single booking details experience across all services.
+
+Display complete booking information.
+
+Allow users to monitor booking progress.
+
+Provide quick access to booking-related actions.
+
+Maintain a consistent user experience.
+
+
+
+
+3. Supported Services
+
+The Universal Booking Details screen shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+4. Booking Details Screen
+
+Purpose
+
+Allow patients to view complete information and status of any booking, order, or rental.
+
+
+
+
+Screen Description
+
+The Booking Details screen displays all information related to the selected booking.
+
+The screen layout remains the same for every supported service, while the displayed information automatically changes according to the selected booking.
+
+
+
+
+UI Components
+
+Booking Summary
+
+Displays a summary of the booking.
+
+Information includes:
+
+Booking Reference
+
+Service Type
+
+Booking Status
+
+Booking Date
+
+Booking Time
+
+
+
+
+Provider Information
+
+Displays details of the selected provider.
+
+Information includes:
+
+Provider Name
+
+Service Category
+
+Location
+
+Only applicable information shall be displayed.
+
+
+
+
+Patient Information
+
+Displays the patient associated with the booking.
+
+Information includes:
+
+Patient Name
+
+Family Member (if applicable)
+
+
+
+
+Service Information
+
+Displays information specific to the selected service.
+
+Examples include:
+
+Doctor Consultation
+
+Consultation Type
+
+Appointment Date
+
+Time Slot
+
+Hospital & Clinic
+
+Department
+
+Appointment Date
+
+Time Slot
+
+Home Care
+
+Service Type
+
+Visit Address
+
+Visit Date
+
+Visit Time
+
+Scheduled Ambulance
+
+Pickup Address
+
+Destination
+
+Pickup Date
+
+Pickup Time
+
+Vehicle Type
+
+Pharmacy
+
+Ordered Medicines
+
+Prescription (if uploaded)
+
+Diagnostic Lab
+
+Selected Tests
+
+Collection Type
+
+Appointment Date
+
+Time Slot
+
+Equipment Rental
+
+Equipment
+
+Rental Duration
+
+Delivery Address
+
+Only fields relevant to the selected service shall be displayed.
+
+
+
+
+Payment Information
+
+Displays payment-related information.
+
+Information includes:
+
+Payment Status
+
+Total Amount
+
+
+
+
+Booking Timeline
+
+Displays the current progress of the booking using the Universal Booking Timeline.
+
+The timeline automatically changes according to the selected service.
+
+
+
+
+Actions
+
+Available actions shall depend on the booking status and selected service.
+
+Actions may include:
+
+Track Booking
+
+Cancel Booking
+
+Rebook Booking
+
+Only applicable actions shall be displayed.
+
+
+
+
+5. User Actions
+
+The user can:
+
+View booking information.
+
+View provider information.
+
+View patient information.
+
+View service information.
+
+View payment information.
+
+View booking timeline.
+
+Track the booking (where applicable).
+
+Cancel the booking (where permitted).
+
+Rebook the booking (where applicable).
+
+
+
+
+6. Business Rules
+
+A single Booking Details screen shall be used across all supported services.
+
+Only information applicable to the selected booking shall be displayed.
+
+Available actions shall change according to the booking status.
+
+Selecting Track Booking shall open the Universal Tracking screen for supported services.
+
+Selecting Cancel Booking shall open the Universal Cancellation flow.
+
+Selecting Rebook shall open the Universal Rebooking flow.
+
+
+
+
+7. Success Scenario
+
+Booking information is displayed successfully.
+
+The patient can review booking details.
+
+The patient can perform any available booking actions.
+
+
+
+
+8. Failure Scenario
+
+If booking information cannot be loaded, the application shall display an appropriate message.
+
+If the booking is unavailable, the user shall be informed and allowed to return to the previous screen.
+
+
+
+
+9. Acceptance Criteria
+
+One reusable Booking Details screen is used across all supported services.
+
+The screen layout remains consistent for every service.
+
+Booking information changes dynamically according to the selected service.
+
+Available actions change dynamically according to the booking status.
+
+Patients can access tracking, cancellation, or rebooking from this screen where applicable.
+
+Module 7: Universal Booking Timeline
+
+
+
+
+1. Overview
+
+The Universal Booking Timeline provides patients with a clear view of the progress of their booking, order, or rental.
+
+A single timeline component shall be used throughout the Vizito Patient Application. The timeline layout remains consistent for every healthcare service while the displayed stages automatically change according to the selected service.
+
+The timeline is available from the Booking Details screen.
+
+
+
+
+2. Objectives
+
+Provide a consistent booking progress experience.
+
+Display the current booking stage.
+
+Keep patients informed throughout the booking lifecycle.
+
+Reuse the same timeline component across all supported services.
+
+
+
+
+3. Supported Services
+
+The Universal Booking Timeline shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+4. Timeline Screen
+
+Purpose
+
+Allow patients to monitor the progress of their booking from confirmation until completion or cancellation.
+
+
+
+
+Screen Description
+
+The timeline displays the complete booking journey.
+
+Each stage shall indicate whether it is:
+
+Completed
+
+Current
+
+Pending
+
+Cancelled (where applicable)
+
+Only the stages applicable to the selected service shall be displayed.
+
+
+
+
+5. Timeline Stages
+
+Doctor Consultation
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Appointment Confirmed
+
+Queue Started (if applicable)
+
+Consultation In Progress
+
+Consultation Completed
+
+
+
+
+Hospital & Clinic
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Appointment Confirmed
+
+Queue Started (if applicable)
+
+Consultation In Progress
+
+Consultation Completed
+
+
+
+
+Home Care Services
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Provider Assigned
+
+Provider On the Way
+
+Service In Progress
+
+Service Completed
+
+
+
+
+Scheduled Ambulance
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Provider Accepted
+
+Driver Assigned
+
+Driver On the Way
+
+Pickup Completed
+
+Trip In Progress
+
+Trip Completed
+
+
+
+
+Pharmacy Orders
+
+Typical timeline stages include:
+
+Order Confirmed
+
+Order Accepted
+
+Order Preparing
+
+Ready for Collection / Out for Delivery by Pharmacy
+
+Order Completed
+
+
+
+
+Diagnostic Lab
+
+Home Collection
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Collection Scheduled
+
+Sample Collected
+
+Testing In Progress
+
+Report Ready
+
+Booking Completed
+
+Lab Visit
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Queue Started (if applicable)
+
+Sample Collected
+
+Testing In Progress
+
+Report Ready
+
+Booking Completed
+
+
+
+
+Equipment Rental
+
+Typical timeline stages include:
+
+Booking Confirmed
+
+Order Confirmed
+
+Equipment Ready
+
+Delivered
+
+Rental Active
+
+Return Completed
+
+Booking Completed
+
+
+
+
+6. User Actions
+
+The user can:
+
+View the current booking stage.
+
+View completed stages.
+
+View pending stages.
+
+
+
+
+7. Business Rules
+
+A single timeline component shall be used across all supported healthcare services.
+
+Timeline stages shall automatically change according to the selected service.
+
+Completed stages shall remain visible after the booking is completed.
+
+If a booking is cancelled, the timeline shall indicate the cancellation status and stop progressing.
+
+Timeline information shall reflect the latest available booking status.
+
+
+
+
+8. Success Scenario
+
+The booking timeline is displayed successfully.
+
+The patient can view the current progress of the booking.
+
+
+
+
+9. Failure Scenario
+
+If timeline information cannot be retrieved, the application shall display an appropriate message while allowing the patient to continue viewing the booking details.
+
+
+
+
+10. Acceptance Criteria
+
+One reusable timeline component is used across all supported healthcare services.
+
+Timeline stages automatically change according to the selected service.
+
+Current, completed, pending, and cancelled stages are clearly identified.
+
+The timeline reflects the latest booking progress.
+
+Module 8: Universal Queue Management
+
+
+
+
+1. Overview
+
+The Universal Queue Management module provides patients with real-time visibility into their position in a service queue after a booking has been confirmed.
+
+A single queue management screen shall be used across all supported healthcare services where queue-based appointments are applicable. The layout remains consistent while the displayed information changes according to the selected service.
+
+This module is intended to improve patient visibility into waiting times and queue progress.
+
+
+
+
+2. Objectives
+
+Display the patient's current queue information.
+
+Provide estimated waiting information.
+
+Reduce uncertainty before appointments.
+
+Maintain a consistent queue experience across supported services.
+
+
+
+
+3. Applicable Services
+
+Queue Management shall be available only for:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Diagnostic Lab (where queue-based appointments are used)
+
+Queue Management is not applicable to:
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Equipment Rental
+
+
+
+
+4. Queue Screen
+
+Purpose
+
+Allow patients to monitor their current position in the service queue before their appointment or service begins.
+
+
+
+
+Screen Description
+
+The Queue Management screen displays the patient's current queue information and updates as the queue progresses.
+
+The screen is accessible from the Booking Details screen whenever queue management is supported by the selected provider.
+
+
+
+
+UI Components
+
+Queue Summary
+
+Displays:
+
+Booking Reference
+
+Service Type
+
+Provider Name
+
+Appointment Date
+
+Appointment Time
+
+
+
+
+Queue Information
+
+Displays:
+
+Queue Number
+
+Current Queue Number
+
+Number of Patients Ahead
+
+Estimated Waiting Time
+
+Queue Status
+
+
+
+
+Queue Status
+
+The queue status may include:
+
+Waiting
+
+Current
+
+Completed
+
+Cancelled
+
+Only one status shall be active at a time.
+
+
+
+
+5. User Actions
+
+The user can:
+
+View queue information.
+
+Monitor queue progress.
+
+Return to Booking Details.
+
+
+
+
+6. Business Rules
+
+Queue information shall only be displayed for providers that support queue management.
+
+Queue information shall reflect the latest available status.
+
+Queue updates shall be reflected automatically as they are received from the provider.
+
+Once the appointment has been completed, the queue information shall no longer be active.
+
+
+
+
+7. Success Scenario
+
+Queue information is displayed successfully.
+
+The patient can monitor their current position and estimated waiting time.
+
+
+
+
+8. Failure Scenario
+
+If queue information is unavailable, the application shall display an appropriate message while allowing the patient to continue viewing their booking details.
+
+If queue management is not supported by the selected provider, the Queue Management screen shall not be displayed.
+
+
+
+
+9. Acceptance Criteria
+
+A single reusable Queue Management screen is used across all supported services.
+
+Queue information is displayed only when supported by the selected provider.
+
+Patients can view their queue number.
+
+Patients can view the current queue number.
+
+Patients can view the number of patients ahead.
+
+Patients can view the estimated waiting time.
+
+Queue information reflects the latest available status.
+
+Module 9: Universal Tracking
+
+
+
+
+1. Overview
+
+The Universal Tracking module allows patients to monitor the latest progress of supported bookings and orders after confirmation.
+
+A single tracking screen shall be used throughout the Vizito Patient Application. The screen layout remains consistent while the displayed tracking information automatically changes according to the selected service.
+
+Tracking information displayed within the application is based on updates provided by the respective healthcare provider or service provider.
+
+
+
+
+2. Objectives
+
+Provide patients with visibility into the progress of supported bookings.
+
+Display the latest available status updates.
+
+Display estimated completion or arrival information where available.
+
+Maintain a consistent tracking experience across supported services.
+
+
+
+
+3. Applicable Services
+
+Tracking shall be available for:
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Equipment Rental
+
+Tracking is not applicable to:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Diagnostic Lab
+
+Doctor, Hospital, Clinic, and Diagnostic Lab bookings use the Universal Booking Timeline and Queue Management (where applicable) instead of live tracking.
+
+
+
+
+4. Tracking Screen
+
+Purpose
+
+Allow patients to monitor the latest available progress of supported bookings and orders.
+
+
+
+
+Screen Description
+
+The Tracking screen displays the current status of the selected booking together with any available estimated progress information provided by the service provider.
+
+The screen layout remains the same for all supported services.
+
+
+
+
+5. UI Components
+
+Booking Summary
+
+Displays:
+
+Booking Reference
+
+Service Type
+
+Provider Name
+
+Booking Status
+
+
+
+
+Current Status
+
+Displays the latest booking or order status received from the provider.
+
+Examples include:
+
+Home Care
+
+Booking Confirmed
+
+Provider Assigned
+
+Provider On the Way
+
+Service In Progress
+
+Service Completed
+
+Scheduled Ambulance
+
+Booking Confirmed
+
+Provider Accepted
+
+Driver Assigned
+
+Driver On the Way
+
+Pickup Completed
+
+Trip In Progress
+
+Trip Completed
+
+Pharmacy Orders
+
+Order Confirmed
+
+Order Accepted
+
+Order Preparing
+
+Ready for Collection
+
+Order Completed
+
+Equipment Rental
+
+Booking Confirmed
+
+Order Confirmed
+
+Equipment Ready
+
+Provider Status Updated
+
+Rental Active
+
+Return Completed
+
+Booking Completed
+
+Only statuses applicable to the selected service shall be displayed.
+
+
+
+
+Estimated Information
+
+Where available, the screen may display:
+
+Estimated Arrival Time
+
+Estimated Completion Time
+
+Estimated Ready Time
+
+Only information provided by the respective provider shall be displayed.
+
+
+
+
+Last Updated
+
+Displays the latest status update time received from the provider.
+
+
+
+
+6. User Actions
+
+The user can:
+
+View the latest booking status.
+
+View estimated progress information.
+
+Return to the Booking Details screen.
+
+
+
+
+7. Business Rules
+
+A single Tracking screen shall be used across all supported services.
+
+Tracking information shall reflect the latest update received from the provider.
+
+Only tracking information applicable to the selected service shall be displayed.
+
+Estimated information shall be displayed only when provided by the service provider.
+
+If tracking is unavailable for a booking, the Tracking screen shall not be displayed.
+
+
+
+
+8. Success Scenario
+
+Tracking information is displayed successfully.
+
+The patient can monitor the latest booking progress.
+
+Estimated information is displayed when available.
+
+
+
+
+9. Failure Scenario
+
+If tracking information cannot be retrieved, the application shall display an appropriate message while allowing the patient to return to the Booking Details screen.
+
+If tracking is not supported for the selected booking, the Tracking option shall not be available.
+
+
+
+
+10. Acceptance Criteria
+
+A single reusable Tracking screen is used across all supported services.
+
+Tracking information changes dynamically according to the selected service.
+
+Patients can view the latest booking or order status.
+
+Estimated information is displayed only when available.
+
+Tracking information reflects the latest update received from the provider.
+
+Module 10: Universal Cancellation
+
+
+
+
+1. Overview
+
+The Universal Cancellation module provides a single cancellation experience for all bookings, orders, and rentals within the Vizito Patient Application.
+
+A single cancellation flow shall be used across all supported healthcare services. The available options and cancellation outcome automatically adapt according to the selected service, booking status, and provider's cancellation policy.
+
+
+
+
+2. Objectives
+
+Provide a consistent cancellation experience.
+
+Allow patients to cancel eligible bookings, orders, or rentals.
+
+Clearly communicate the cancellation outcome.
+
+Maintain a reusable cancellation flow across all supported services.
+
+
+
+
+3. Supported Services
+
+The Universal Cancellation module shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Diagnostic Lab
+
+Equipment Rental
+
+Cancellation availability depends on the booking status and the provider's cancellation policy.
+
+
+
+
+4. Cancellation Flow
+
+The cancellation process shall follow the same sequence for every supported service.
+
+Step 1 – Open Cancellation
+
+The patient selects Cancel Booking from the Booking Details screen.
+
+
+
+
+Step 2 – Cancellation Confirmation
+
+The application displays the booking summary together with the cancellation confirmation.
+
+Information displayed includes:
+
+Booking Reference
+
+Service Type
+
+Provider Name
+
+Booking Date
+
+Booking Time
+
+The patient is asked to confirm whether they wish to continue with the cancellation.
+
+
+
+
+Step 3 – Cancellation Reason
+
+The patient selects a reason for cancelling the booking.
+
+The application may display predefined cancellation reasons together with an option to enter a custom reason.
+
+Providing a cancellation reason is optional.
+
+
+
+
+Step 4 – Review
+
+The application displays the cancellation summary before submission.
+
+The summary includes:
+
+Booking Information
+
+Cancellation Status
+
+Refund Information (if applicable)
+
+The patient confirms the cancellation.
+
+
+
+
+Step 5 – Cancellation Completed
+
+After successful cancellation, the application displays a confirmation screen.
+
+The confirmation includes:
+
+Booking Reference
+
+Service Type
+
+Cancellation Status
+
+Refund Status (if applicable)
+
+The patient may return to the Booking Details screen or Home Dashboard.
+
+
+
+
+5. User Actions
+
+The user can:
+
+View booking information.
+
+Confirm cancellation.
+
+Select a cancellation reason.
+
+Enter an optional custom reason.
+
+Submit the cancellation request.
+
+Return to the previous screen before confirming.
+
+
+
+
+6. Business Rules
+
+A single cancellation flow shall be used across all supported services.
+
+Cancellation shall only be available when permitted by the booking status and provider's cancellation policy.
+
+Cancellation reasons, if provided, shall be recorded with the booking.
+
+Once a booking has been successfully cancelled, its status shall be updated accordingly.
+
+Completed cancellations cannot be reversed.
+
+
+
+
+7. Success Scenario
+
+The booking is successfully cancelled.
+
+The booking status is updated.
+
+The patient receives cancellation confirmation.
+
+Refund information is displayed when applicable.
+
+
+
+
+8. Failure Scenario
+
+Cancellation may fail if:
+
+The booking is no longer eligible for cancellation.
+
+The provider no longer permits cancellation.
+
+The cancellation request cannot be processed.
+
+The application shall display an appropriate message and retain the current booking status.
+
+
+
+
+9. Acceptance Criteria
+
+A single reusable cancellation flow is used across all supported services.
+
+Cancellation is available only for eligible bookings.
+
+Patients can confirm or cancel the cancellation request before submission.
+
+An optional cancellation reason can be provided.
+
+Booking status is updated after successful cancellation.
+
+Cancellation confirmation is displayed after successful processing.
+
+Module 11: Universal Rebooking
+
+
+
+
+1. Overview
+
+The Universal Rebooking module allows patients to quickly create a new booking using information from a previous booking, order, or rental.
+
+A single rebooking flow shall be used across all supported healthcare services. The application automatically retrieves information from the selected booking and pre-populates applicable fields, allowing the patient to complete a new booking with minimal effort.
+
+The new booking shall be treated as a separate booking with its own booking reference and status.
+
+
+
+
+2. Objectives
+
+Provide a consistent rebooking experience.
+
+Reduce the time required to create repeat bookings.
+
+Reuse previously entered booking information where applicable.
+
+Maintain a common rebooking flow across all supported healthcare services.
+
+
+
+
+3. Supported Services
+
+The Universal Rebooking module shall support:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Home Care Services
+
+Scheduled Ambulance
+
+Pharmacy Orders
+
+Diagnostic Lab
+
+Equipment Rental
+
+
+
+
+4. Rebooking Flow
+
+The rebooking process shall follow the same sequence for every supported service.
+
+
+
+
+Step 1 – Select Rebook
+
+The patient selects Rebook from the Booking Details screen.
+
+
+
+
+Step 2 – Retrieve Previous Booking
+
+The application retrieves information from the selected booking.
+
+Applicable booking information shall be automatically populated into the new booking.
+
+Examples include:
+
+Service Type
+
+Provider
+
+Patient or Family Member
+
+Service Details
+
+Address (where applicable)
+
+Only information relevant to the selected service shall be reused.
+
+
+
+
+Step 3 – Update Booking Information
+
+The patient reviews the booking information and updates any fields required for the new booking.
+
+Examples include:
+
+Date
+
+Time
+
+Time Slot
+
+Rental Duration
+
+Quantity (where applicable)
+
+Only editable fields applicable to the selected service shall be available.
+
+
+
+
+Step 4 – Review Booking
+
+The application displays the updated booking summary.
+
+The patient reviews the information before proceeding.
+
+
+
+
+Step 5 – Payment
+
+The patient completes payment using the available payment methods.
+
+After successful payment, the new booking is confirmed.
+
+
+
+
+Step 6 – Rebooking Confirmation
+
+The application displays the confirmation of the newly created booking.
+
+The confirmation includes:
+
+New Booking Reference
+
+Service Type
+
+Provider
+
+Booking Status
+
+Booking Date
+
+Booking Time
+
+The patient may:
+
+View Booking
+
+Return to Home
+
+
+
+
+5. User Actions
+
+The user can:
+
+Select Rebook.
+
+Review previously saved booking information.
+
+Modify editable booking details.
+
+Review the updated booking.
+
+Complete payment.
+
+Confirm the new booking.
+
+
+
+
+6. Business Rules
+
+A single rebooking flow shall be used across all supported healthcare services.
+
+The original booking shall remain unchanged.
+
+Rebooking creates a completely new booking.
+
+A new booking reference shall be generated for every rebooking.
+
+Only applicable booking information shall be pre-populated.
+
+Payment is required to complete the new booking.
+
+
+
+
+7. Success Scenario
+
+Previous booking information is successfully retrieved.
+
+The patient updates the required information.
+
+Payment is completed successfully.
+
+A new booking is successfully created.
+
+
+
+
+8. Failure Scenario
+
+Rebooking may fail if:
+
+The selected provider is no longer available.
+
+The selected service is no longer available.
+
+The selected date or time is unavailable.
+
+Payment cannot be completed.
+
+The application shall display an appropriate message and allow the patient to modify the booking information where applicable.
+
+
+
+
+9. Acceptance Criteria
+
+A single reusable rebooking flow is used across all supported healthcare services.
+
+Applicable booking information is automatically pre-populated.
+
+The patient can modify editable booking information.
+
+A new booking reference is generated after successful rebooking.
+
+The original booking remains unchanged.
+
+Payment is required before the new booking is confirmed.
+
+Module 12: Doctor Consultation
+
+
+
+
+1. Overview
+
+The Doctor Consultation module enables patients to search, view, and book consultations with registered doctors through the Vizito Patient Application.
+
+Patients can discover doctors based on their preferences, review doctor information, select their preferred consultation type, choose an available appointment slot, and complete the booking using the Universal Booking Flow.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for doctors.
+
+Allow patients to view doctor information.
+
+Allow patients to choose the preferred consultation type.
+
+Allow patients to select an available appointment slot.
+
+Allow patients to complete a doctor consultation booking.
+
+
+
+
+3. Consultation Types
+
+The application shall support the following consultation types:
+
+Video Consultation
+
+In-Person Consultation
+
+The consultation types available for booking depend on the services offered by the selected doctor.
+
+
+
+
+4. Doctor Search
+
+Patients can search for doctors using the Universal Search module.
+
+The following filters shall be available:
+
+Specialty
+
+Consultation Type
+
+Gender
+
+Language
+
+Experience
+
+Consultation Fee
+
+Selecting a doctor opens the Universal Provider Details screen.
+
+
+
+
+5. Doctor Information
+
+The Provider Details screen shall display information relevant to the selected doctor.
+
+Information may include:
+
+Doctor Name
+
+Profile Photo
+
+Specialty
+
+Experience
+
+Languages Spoken
+
+Consultation Types
+
+Consultation Fee
+
+Available Appointment Dates
+
+Available Time Slots
+
+Rating
+
+About Doctor
+
+Only information available for the selected doctor shall be displayed.
+
+
+
+
+6. Appointment Booking
+
+Doctor appointments shall be booked using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Consultation Type
+
+Appointment Date
+
+Appointment Time Slot
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+7. Queue Management
+
+If the selected doctor supports queue management, the patient shall be able to view queue information through the Universal Queue Management module.
+
+Queue information may include:
+
+Queue Number
+
+Current Queue Number
+
+Number of Patients Ahead
+
+Estimated Waiting Time
+
+Queue Status
+
+If queue management is not supported by the doctor, this functionality shall not be displayed.
+
+
+
+
+8. Business Rules
+
+Only available appointment dates and time slots shall be displayed.
+
+Appointment availability depends on the selected doctor's schedule.
+
+Patients may book appointments for themselves or a registered family member.
+
+Queue information shall only be available for doctors who support queue management.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+9. Success Scenario
+
+The patient successfully searches for a doctor.
+
+The patient reviews the doctor's information.
+
+The patient selects the consultation type.
+
+The patient selects an available appointment slot.
+
+The booking is successfully completed through the Universal Booking Flow.
+
+
+
+
+10. Failure Scenario
+
+Booking may fail if:
+
+The selected appointment slot is no longer available.
+
+The doctor is unavailable for the selected schedule.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow another appointment slot to be selected or the booking process to be retried.
+
+
+
+
+11. Acceptance Criteria
+
+Patients can search for doctors.
+
+Patients can filter doctor search results.
+
+Patients can view doctor information.
+
+Patients can book Video Consultations.
+
+Patients can book In-Person Consultations.
+
+Patients can select themselves or a registered family member during booking.
+
+Queue information is available only when supported by the selected doctor.
+
+Doctor bookings are completed through the Universal Booking Flow.
+
+Module 13: Hospital & Clinic
+
+
+
+
+1. Overview
+
+The Hospital & Clinic module enables patients to search, view, and book appointments with hospitals and clinics registered on the Vizito platform.
+
+Patients can discover hospitals and clinics, review their information, browse the doctors available within the selected provider, choose a doctor, select an available appointment slot, and complete the booking using the Universal Booking Flow.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for hospitals and clinics.
+
+Allow patients to view hospital and clinic information.
+
+Allow patients to browse doctors available within the selected provider.
+
+Allow patients to select a preferred doctor.
+
+Allow patients to complete an appointment booking.
+
+
+
+
+3. Hospital & Clinic Search
+
+Patients can search for hospitals and clinics using the Universal Search module.
+
+The following filters shall be available:
+
+Hospital / Clinic Name
+
+Department
+
+Consultation Fee
+
+Selecting a hospital or clinic opens the Universal Provider Details screen.
+
+
+
+
+4. Hospital & Clinic Information
+
+The Provider Details screen shall display information relevant to the selected hospital or clinic.
+
+Information may include:
+
+Hospital / Clinic Name
+
+Logo or Image
+
+About Hospital / Clinic
+
+Available Departments
+
+Rating
+
+Location
+
+Consultation Fee (if applicable)
+
+The screen shall also display the list of doctors available within the selected hospital or clinic.
+
+Each doctor listing may include:
+
+Doctor Name
+
+Profile Photo
+
+Specialty
+
+Experience
+
+Consultation Types
+
+Consultation Fee
+
+Available Appointment Dates
+
+Available Time Slots
+
+Selecting a doctor continues the appointment booking process.
+
+Only information available for the selected provider shall be displayed.
+
+
+
+
+5. Appointment Booking
+
+Hospital and clinic appointments shall be booked using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Selected Doctor
+
+Consultation Type
+
+Appointment Date
+
+Appointment Time Slot
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+6. Queue Management
+
+If the selected doctor supports queue management, the patient shall be able to view queue information through the Universal Queue Management module.
+
+Queue information may include:
+
+Queue Number
+
+Current Queue Number
+
+Number of Patients Ahead
+
+Estimated Waiting Time
+
+Queue Status
+
+If queue management is not supported by the selected doctor, this functionality shall not be displayed.
+
+
+
+
+7. Business Rules
+
+Patients shall first select a hospital or clinic before selecting a doctor.
+
+Only doctors associated with the selected hospital or clinic shall be displayed.
+
+Available appointment dates and time slots shall be based on the selected doctor's schedule.
+
+Patients may book appointments for themselves or a registered family member.
+
+Queue information shall only be available for doctors who support queue management.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+8. Success Scenario
+
+The patient successfully searches for a hospital or clinic.
+
+The patient reviews the provider information.
+
+The patient selects a doctor.
+
+The patient selects an available appointment date and time.
+
+The booking is successfully completed through the Universal Booking Flow.
+
+
+
+
+9. Failure Scenario
+
+Booking may fail if:
+
+The selected doctor is unavailable.
+
+The selected appointment slot is no longer available.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow another doctor or appointment slot to be selected, or the booking process to be retried.
+
+
+
+
+10. Acceptance Criteria
+
+Patients can search for hospitals and clinics.
+
+Patients can filter hospital and clinic search results.
+
+Patients can view hospital and clinic information.
+
+Patients can browse doctors associated with the selected hospital or clinic.
+
+Patients can select a doctor.
+
+Patients can select a consultation type.
+
+Patients can select themselves or a registered family member during booking.
+
+Queue information is available only when supported by the selected doctor.
+
+Hospital and clinic appointments are completed through the Universal Booking Flow.
+
+Module 14: Home Care Services
+
+
+
+
+1. Overview
+
+The Home Care Services module enables patients to search, view, and book healthcare services that are provided at their preferred location through registered home care providers on the Vizito platform.
+
+Patients can discover available home care providers, review the services they offer, select a service, choose their preferred appointment date and time, provide the service location, and complete the booking using the Universal Booking Flow.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for home care providers.
+
+Allow patients to view available home care services.
+
+Allow patients to select a preferred home care service.
+
+Allow patients to schedule a home visit.
+
+Allow patients to complete a home care booking.
+
+
+
+
+3. Home Care Search
+
+Patients can search for home care providers using the Universal Search module.
+
+The following filters shall be available:
+
+Service Type
+
+Selecting a home care provider opens the Universal Provider Details screen.
+
+
+
+
+4. Home Care Provider Information
+
+The Provider Details screen shall display information relevant to the selected provider.
+
+Information may include:
+
+Provider Name
+
+Logo or Image
+
+About Provider
+
+Available Home Care Services
+
+Rating
+
+Service Area
+
+Only information available for the selected provider shall be displayed.
+
+
+
+
+5. Available Home Care Services
+
+The provider may offer one or more home care services.
+
+Examples include:
+
+Doctor Visit
+
+Nursing Care
+
+Physiotherapy
+
+Caregiver Services
+
+Elder Care
+
+Vaccination
+
+Sample Collection
+
+Only the services provided by the selected home care provider shall be displayed.
+
+
+
+
+6. Home Care Booking
+
+Home care bookings shall be completed using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Home Care Service
+
+Appointment Date
+
+Appointment Time
+
+Service Address
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+7. Business Rules
+
+Only services offered by the selected provider shall be displayed.
+
+Appointment availability depends on the selected provider.
+
+Patients may book services for themselves or a registered family member.
+
+The service address shall be provided before completing the booking.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+8. Success Scenario
+
+The patient successfully searches for a home care provider.
+
+The patient reviews the provider information.
+
+The patient selects a home care service.
+
+The patient selects the preferred appointment date and time.
+
+The patient provides the service address.
+
+The booking is successfully completed through the Universal Booking Flow.
+
+
+
+
+9. Failure Scenario
+
+Booking may fail if:
+
+The selected service is unavailable.
+
+The selected appointment time is unavailable.
+
+The selected address is outside the provider's service area.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow the booking information to be updated or the booking process to be retried.
+
+
+
+
+10. Acceptance Criteria
+
+Patients can search for home care providers.
+
+Patients can view provider information.
+
+Patients can view available home care services.
+
+Patients can select a home care service.
+
+Patients can select an appointment date and time.
+
+Patients can provide the service address.
+
+Patients can select themselves or a registered family member during booking.
+
+Home care bookings are completed through the Universal Booking Flow.
+
+Module 15: Scheduled Ambulance Services
+
+
+
+
+1. Overview
+
+The Scheduled Ambulance Services module enables patients to book non-emergency ambulance transportation through registered ambulance providers on the Vizito platform.
+
+This module is intended only for planned transportation and scheduled medical travel. It does not support emergency ambulance requests or SOS services.
+
+Patients can search for ambulance providers, review the available vehicle types, schedule a pickup, provide the pickup and destination locations, and complete the booking using the Universal Booking Flow.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for ambulance providers.
+
+Allow patients to view available ambulance services.
+
+Allow patients to schedule non-emergency ambulance transportation.
+
+Allow patients to complete a scheduled ambulance booking.
+
+
+
+
+3. Ambulance Search
+
+Patients can search for ambulance providers using the Universal Search module.
+
+The following filter shall be available:
+
+Vehicle Type
+
+Selecting an ambulance provider opens the Universal Provider Details screen.
+
+
+
+
+4. Ambulance Provider Information
+
+The Provider Details screen shall display information relevant to the selected provider.
+
+Information may include:
+
+Provider Name
+
+Logo or Image
+
+About Provider
+
+Available Vehicle Types
+
+Service Area
+
+Rating
+
+Only information available for the selected provider shall be displayed.
+
+
+
+
+5. Available Ambulance Services
+
+The provider may offer one or more vehicle types.
+
+Examples include:
+
+Basic Ambulance
+
+Advanced Ambulance
+
+Only the vehicle types offered by the selected provider shall be displayed.
+
+
+
+
+6. Ambulance Booking
+
+Scheduled ambulance bookings shall be completed using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Vehicle Type
+
+Pickup Address
+
+Destination Address
+
+Pickup Date
+
+Pickup Time
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+7. Business Rules
+
+Only scheduled ambulance bookings are supported.
+
+Emergency ambulance requests are not supported.
+
+SOS functionality is not available within the application.
+
+Only vehicle types offered by the selected provider shall be displayed.
+
+Pickup and destination addresses are mandatory.
+
+Appointment availability depends on the selected provider.
+
+Patients may book scheduled ambulance services for themselves or a registered family member.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+8. Success Scenario
+
+The patient successfully searches for an ambulance provider.
+
+The patient reviews the provider information.
+
+The patient selects a vehicle type.
+
+The patient provides the pickup and destination addresses.
+
+The patient selects the pickup date and time.
+
+The booking is successfully completed through the Universal Booking Flow.
+
+
+
+
+9. Failure Scenario
+
+Booking may fail if:
+
+The selected vehicle type is unavailable.
+
+The selected pickup time is unavailable.
+
+The provider does not service the selected pickup or destination location.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow the booking information to be updated or the booking process to be retried.
+
+
+
+
+10. Acceptance Criteria
+
+Patients can search for ambulance providers.
+
+Patients can view provider information.
+
+Patients can view available vehicle types.
+
+Patients can select a vehicle type.
+
+Patients can provide pickup and destination addresses.
+
+Patients can select a pickup date and time.
+
+Patients can select themselves or a registered family member during booking.
+
+Only scheduled ambulance bookings are supported.
+
+Emergency ambulance and SOS services are not available.
+
+Scheduled ambulance bookings are completed through the Universal Booking Flow.
+
+Module 16: Pharmacy
+
+
+
+
+1. Overview
+
+The Pharmacy module enables patients to search for pharmacies, browse medicines, upload prescriptions when required, place medicine orders, and complete the order using the Universal Booking Flow.
+
+Patients can discover registered pharmacies, review available medicines, select the required items, upload a prescription where applicable, and place an order.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Order management, cancellation, rebooking, tracking, and order history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for pharmacies.
+
+Allow patients to browse available medicines.
+
+Allow patients to upload prescriptions where required.
+
+Allow patients to place medicine orders.
+
+Allow patients to complete pharmacy orders.
+
+
+
+
+3. Pharmacy Search
+
+Patients can search for pharmacies using the Universal Search module.
+
+The following filter shall be available:
+
+Medicine Category
+
+Selecting a pharmacy opens the Universal Provider Details screen.
+
+
+
+
+4. Pharmacy Information
+
+The Provider Details screen shall display information relevant to the selected pharmacy.
+
+Information may include:
+
+Pharmacy Name
+
+Logo or Image
+
+About Pharmacy
+
+Medicine Categories
+
+Rating
+
+Location
+
+Only information available for the selected pharmacy shall be displayed.
+
+
+
+
+5. Medicine Selection
+
+Patients can browse and select medicines available from the selected pharmacy.
+
+Only medicines available from the selected pharmacy shall be displayed.
+
+Patients may select one or more medicines before proceeding with the order.
+
+
+
+
+6. Prescription Upload
+
+Where applicable, patients shall be able to upload a prescription before completing the order.
+
+Supported document formats shall follow the Universal Document Upload module.
+
+If a selected medicine does not require a prescription, this step shall not be displayed.
+
+
+
+
+7. Pharmacy Order
+
+Medicine orders shall be completed using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Selected Medicines
+
+Prescription (where applicable)
+
+Service Location
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+8. Business Rules
+
+Only medicines available from the selected pharmacy shall be displayed.
+
+Prescription upload shall be available only when required for the selected medicines.
+
+Patients may place orders for themselves or a registered family member.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+Order progress displayed within the application reflects updates provided by the selected pharmacy.
+
+
+
+
+9. Success Scenario
+
+The patient successfully searches for a pharmacy.
+
+The patient reviews the pharmacy information.
+
+The patient selects one or more medicines.
+
+The patient uploads a prescription where required.
+
+The patient completes the order through the Universal Booking Flow.
+
+
+
+
+10. Failure Scenario
+
+Order placement may fail if:
+
+One or more selected medicines are unavailable.
+
+A required prescription has not been provided.
+
+Payment cannot be completed.
+
+The order request cannot be processed.
+
+The application shall notify the patient and allow the order information to be updated or the order process to be retried.
+
+
+
+
+11. Acceptance Criteria
+
+Patients can search for pharmacies.
+
+Patients can view pharmacy information.
+
+Patients can browse available medicines.
+
+Patients can select one or more medicines.
+
+Patients can upload prescriptions where required.
+
+Patients can place orders for themselves or a registered family member.
+
+Pharmacy orders are completed through the Universal Booking Flow.
+
+Order status displayed within the application reflects updates received from the selected pharmacy.
+
+Module 17: Diagnostic Laboratory
+
+
+
+
+1. Overview
+
+The Diagnostic Laboratory module enables patients to search for diagnostic laboratories, browse available laboratory tests and health packages, upload or select supporting documents when required, schedule sample collection or laboratory visits (as supported by the provider), and complete the booking using the Universal Booking Flow.
+
+Patients can discover registered diagnostic laboratories, review available tests and packages, select the required services, choose the preferred sample collection method, and schedule an appointment.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for diagnostic laboratories.
+
+Allow patients to browse available laboratory tests and health packages.
+
+Allow patients to upload or select supporting documents when required.
+
+Allow patients to schedule laboratory services.
+
+Allow patients to complete laboratory bookings.
+
+
+
+
+3. Laboratory Search
+
+Patients can search for diagnostic laboratories using the Universal Search module.
+
+The following filters shall be available:
+
+Test Name
+
+Test Category
+
+Health Package
+
+Selecting a laboratory opens the Universal Provider Details screen.
+
+
+
+
+4. Laboratory Information
+
+The Provider Details screen shall display information relevant to the selected laboratory.
+
+Information may include:
+
+Laboratory Name
+
+Logo or Image
+
+About Laboratory
+
+Available Tests
+
+Available Health Packages
+
+Rating
+
+Location
+
+Only information available for the selected laboratory shall be displayed.
+
+
+
+
+5. Test & Package Selection
+
+Patients can browse and select:
+
+Individual Laboratory Tests
+
+Health Packages
+
+Patients may select one or more services before proceeding with the booking.
+
+Only services offered by the selected laboratory shall be displayed.
+
+
+
+
+6. Supporting Document
+
+Where applicable, patients shall be able to:
+
+Upload from Device
+
+Select from Medical Records
+
+Supporting documents may include:
+
+Doctor Prescription
+
+Previous Laboratory Reports
+
+Medical Documents
+
+If supporting documents are not required, this step shall not be displayed.
+
+
+
+
+7. Sample Collection Preference
+
+If supported by the selected laboratory, patients may choose one of the following:
+
+Home Sample Collection
+
+Laboratory Visit
+
+If Home Sample Collection is selected, the patient shall provide:
+
+Service Location
+
+If Laboratory Visit is selected, the patient shall visit the selected laboratory at the scheduled appointment time.
+
+
+
+
+8. Laboratory Booking
+
+Laboratory bookings shall be completed using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Selected Test(s) or Health Package(s)
+
+Sample Collection Preference
+
+Appointment Date
+
+Appointment Time
+
+Supporting Documents (where applicable)
+
+Service Location (for Home Sample Collection only)
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+9. Business Rules
+
+Only tests and packages offered by the selected laboratory shall be displayed.
+
+Supporting documents shall be requested only when required.
+
+Home Sample Collection shall be available only if supported by the selected laboratory.
+
+Patients may book services for themselves or a registered family member.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+10. Success Scenario
+
+The patient successfully searches for a laboratory.
+
+The patient reviews laboratory information.
+
+The patient selects one or more tests or health packages.
+
+The patient chooses the sample collection preference.
+
+The patient uploads or selects supporting documents where required.
+
+The patient completes the booking through the Universal Booking Flow.
+
+
+
+
+11. Failure Scenario
+
+Booking may fail if:
+
+The selected test or package is unavailable.
+
+The selected appointment slot is unavailable.
+
+Required supporting documents have not been provided.
+
+Home Sample Collection is unavailable for the selected location.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow the booking information to be updated or the booking process to be retried.
+
+
+
+
+12. Acceptance Criteria
+
+Patients can search for diagnostic laboratories.
+
+Patients can view laboratory information.
+
+Patients can browse available tests and health packages.
+
+Patients can select one or more laboratory services.
+
+Patients can upload documents from their device or select them from Medical Records when required.
+
+Patients can choose Home Sample Collection or Laboratory Visit when supported.
+
+Patients can provide a service location for Home Sample Collection.
+
+Patients can select themselves or a registered family member during booking.
+
+Laboratory bookings are completed through the Universal Booking Flow.
+
+Module 18: Medical Equipment Rental
+
+
+
+
+1. Overview
+
+The Medical Equipment Rental module enables patients to search for medical equipment providers, browse available equipment, select a rental duration, provide the service location, and complete the rental booking using the Universal Booking Flow.
+
+Patients can discover registered equipment providers, review available medical equipment, choose the required equipment, specify the rental period, and schedule delivery to their preferred location.
+
+This module utilizes the following reusable modules:
+
+Universal Search
+
+Universal Provider Details
+
+Universal Booking Flow
+
+Booking management, cancellation, rebooking, tracking, and booking history are managed through the Bookings module.
+
+
+
+
+2. Objectives
+
+Allow patients to search for medical equipment providers.
+
+Allow patients to browse available medical equipment.
+
+Allow patients to rent medical equipment.
+
+Allow patients to specify the rental duration.
+
+Allow patients to complete equipment rental bookings.
+
+
+
+
+3. Equipment Search
+
+Patients can search for medical equipment providers using the Universal Search module.
+
+The following filters shall be available:
+
+Equipment Name
+
+Equipment Category
+
+Selecting an equipment provider opens the Universal Provider Details screen.
+
+
+
+
+4. Equipment Provider Information
+
+The Provider Details screen shall display information relevant to the selected provider.
+
+Information may include:
+
+Provider Name
+
+Logo or Image
+
+About Provider
+
+Available Equipment
+
+Rating
+
+Service Area
+
+Only information available for the selected provider shall be displayed.
+
+
+
+
+5. Equipment Selection
+
+Patients can browse and select medical equipment available from the selected provider.
+
+Examples include:
+
+Wheelchair
+
+Hospital Bed
+
+Oxygen Concentrator
+
+Oxygen Cylinder
+
+Walker
+
+Patient Monitor
+
+Suction Machine
+
+Nebulizer
+
+Only equipment available from the selected provider shall be displayed.
+
+Patients may select one or more equipment items before proceeding with the booking.
+
+
+
+
+6. Rental Details
+
+The patient shall provide the rental details required to complete the booking.
+
+Rental details include:
+
+Rental Duration
+
+Preferred Delivery Date
+
+Service Location
+
+The available rental duration options shall be determined by the selected provider.
+
+
+
+
+7. Equipment Rental Booking
+
+Equipment rental bookings shall be completed using the Universal Booking Flow.
+
+The patient shall provide:
+
+Patient Selection (Myself or Family Member)
+
+Selected Equipment
+
+Rental Duration
+
+Preferred Delivery Date
+
+Service Location
+
+The remaining booking process follows the Universal Booking Flow.
+
+
+
+
+8. Business Rules
+
+Only equipment offered by the selected provider shall be displayed.
+
+Rental duration options shall depend on the selected provider.
+
+Patients may rent one or more equipment items in a single booking.
+
+Patients may book equipment rentals for themselves or a registered family member.
+
+The service location shall be provided before completing the booking.
+
+Booking confirmation is completed through the Universal Booking Flow after successful payment.
+
+
+
+
+9. Success Scenario
+
+The patient successfully searches for an equipment provider.
+
+The patient reviews the provider information.
+
+The patient selects one or more equipment items.
+
+The patient specifies the rental duration.
+
+The patient selects the preferred delivery date.
+
+The patient provides the service location.
+
+The booking is successfully completed through the Universal Booking Flow.
+
+
+
+
+10. Failure Scenario
+
+Booking may fail if:
+
+The selected equipment is unavailable.
+
+The requested rental duration is unavailable.
+
+Delivery is unavailable for the selected service location.
+
+Payment cannot be completed.
+
+The booking request cannot be processed.
+
+The application shall notify the patient and allow the booking information to be updated or the booking process to be retried.
+
+
+
+
+11. Acceptance Criteria
+
+Patients can search for medical equipment providers.
+
+Patients can view provider information.
+
+Patients can browse available medical equipment.
+
+Patients can select one or more equipment items.
+
+Patients can specify the rental duration.
+
+Patients can select a preferred delivery date.
+
+Patients can provide the service location.
+
+Patients can select themselves or a registered family member during booking.
+
+Equipment rental bookings are completed through the Universal Booking Flow.
+
+Module 19: Bookings
+
+
+
+
+1. Overview
+
+The Bookings module provides a centralized location for patients to view and manage all healthcare bookings and orders created through the Vizito Patient Application.
+
+It enables patients to monitor the status of active and upcoming bookings, review completed and cancelled bookings, access booking details, view booking progress, track supported services, cancel eligible bookings, and create new bookings using the rebooking functionality.
+
+The Bookings module consolidates bookings from all supported healthcare services into a single interface, providing a consistent and organized experience.
+
+
+
+
+2. Objectives
+
+Allow patients to view all bookings in one place.
+
+Allow patients to monitor booking status.
+
+Allow patients to access booking details.
+
+Allow patients to view booking progress.
+
+Allow patients to track supported services.
+
+Allow patients to cancel eligible bookings.
+
+Allow patients to rebook completed or cancelled bookings.
+
+
+
+
+3. Booking Categories
+
+The Bookings module shall organize bookings into the following categories:
+
+Active
+
+Upcoming
+
+Completed
+
+Cancelled
+
+Each category shall display only the bookings that belong to that status.
+
+
+
+
+4. Booking List
+
+Each booking shall display summary information, which may include:
+
+Booking ID
+
+Service Type
+
+Provider Name
+
+Patient Name
+
+Booking Date
+
+Appointment Date (where applicable)
+
+Current Status
+
+Selecting a booking opens the Universal Booking Details screen.
+
+
+
+
+5. Booking Details
+
+Detailed booking information shall be displayed using the Universal Booking Details module.
+
+Information displayed shall vary depending on the selected service.
+
+Examples include:
+
+Provider Information
+
+Patient Information
+
+Appointment Information
+
+Selected Services
+
+Payment Summary
+
+Booking Status
+
+
+
+
+6. Booking Timeline
+
+Patients shall be able to view the booking progress using the Universal Booking Timeline module.
+
+The timeline displays the current stage of the booking from creation until completion or cancellation.
+
+
+
+
+7. Tracking
+
+Tracking shall be available only for supported services.
+
+Supported services include:
+
+Home Care
+
+Scheduled Ambulance
+
+Pharmacy
+
+Medical Equipment Rental
+
+Tracking information shall be displayed using the Universal Tracking module.
+
+
+
+
+8. Queue Information
+
+Queue information shall be available only for services that support queue management.
+
+Supported services include:
+
+Doctor Consultation
+
+Hospital & Clinic
+
+Diagnostic Laboratory
+
+Queue information shall be displayed using the Universal Queue Management module.
+
+
+
+
+9. Booking Cancellation
+
+Patients shall be able to cancel eligible bookings using the Universal Cancellation module.
+
+Cancellation availability depends on the service provider's cancellation policy.
+
+
+
+
+10. Rebooking
+
+Patients shall be able to create a new booking using the Universal Rebooking module.
+
+Rebooking availability depends on the selected service.
+
+
+
+
+11. Business Rules
+
+All bookings shall be displayed within a single centralized module.
+
+Booking information shall be grouped according to its current status.
+
+Booking details shall vary depending on the selected service.
+
+Tracking shall only be displayed for supported services.
+
+Queue information shall only be displayed for supported services.
+
+Cancellation shall only be available for eligible bookings.
+
+Rebooking shall only be be available for supported services.
+
+
+
+
+12. Success Scenario
+
+The patient opens the Bookings module.
+
+The patient views bookings grouped by status.
+
+The patient selects a booking.
+
+The patient views booking details.
+
+The patient accesses tracking, queue information, cancellation, or rebooking where applicable.
+
+
+
+
+13. Failure Scenario
+
+The application shall notify the patient if:
+
+Booking information cannot be retrieved.
+
+Booking details are temporarily unavailable.
+
+Tracking information cannot be loaded.
+
+Queue information is unavailable.
+
+Cancellation cannot be processed.
+
+Rebooking cannot be initiated.
+
+The patient shall be able to retry the requested action.
+
+
+
+
+14. Acceptance Criteria
+
+Patients can view all bookings in one centralized module.
+
+Bookings are grouped into Active, Upcoming, Completed, and Cancelled categories.
+
+Patients can open booking details.
+
+Patients can view the booking timeline.
+
+Patients can access tracking for supported services.
+
+Patients can access queue information for supported services.
+
+Patients can cancel eligible bookings.
+
+Patients can create a new booking using the rebooking functionality where supported.
+
+Module 20: Medical Records
+
+
+
+
+1. Overview
+
+The Medical Records module enables patients to securely manage their personal and family medical documents within the Vizito Patient Application.
+
+Patients can upload, organize, view, download, share, and delete medical records. These records can also be selected during supported healthcare services, such as Pharmacy and Diagnostic Laboratory bookings, eliminating the need to upload the same documents multiple times.
+
+Medical records are maintained separately for each registered patient and family member.
+
+
+
+
+2. Objectives
+
+Allow patients to securely store medical records.
+
+Allow patients to organize medical documents.
+
+Allow patients to access records at any time.
+
+Allow patients to share records during supported healthcare services.
+
+Allow patients to manage records for themselves and registered family members.
+
+
+
+
+3. Medical Record List
+
+The module shall display all uploaded medical records for the selected patient.
+
+Each record may display:
+
+Document Name
+
+Record Category
+
+Patient Name
+
+Upload Date
+
+File Type
+
+Patients shall be able to switch between themselves and registered family members to view the respective records.
+
+
+
+
+4. Record Categories
+
+Medical records may be organized into categories such as:
+
+Prescriptions
+
+Laboratory Reports
+
+Diagnostic Reports
+
+Discharge Summaries
+
+Vaccination Records
+
+Medical Certificates
+
+Other Medical Documents
+
+
+
+
+5. Upload Medical Record
+
+Patients shall be able to upload medical records from their device.
+
+Supported file formats may include:
+
+PDF
+
+JPG
+
+JPEG
+
+PNG
+
+Patients shall provide:
+
+Record Category
+
+Document Name
+
+The uploaded file shall then be associated with the selected patient.
+
+
+
+
+6. Record Details
+
+Patients shall be able to open an individual medical record to view its details.
+
+The details may include:
+
+Document Name
+
+Record Category
+
+Patient Name
+
+Upload Date
+
+File Type
+
+Patients shall also be able to open the uploaded document for viewing.
+
+
+
+
+7. Download Medical Record
+
+Patients shall be able to download stored medical records to their device.
+
+
+
+
+8. Share Medical Record
+
+Patients shall be able to share medical records during supported healthcare services.
+
+Supported modules include:
+
+Pharmacy
+
+Diagnostic Laboratory
+
+The selected document shall be attached to the booking process.
+
+
+
+
+9. Delete Medical Record
+
+Patients shall be able to delete medical records that are no longer required.
+
+The application shall request confirmation before permanently deleting the selected record.
+
+
+
+
+10. Business Rules
+
+Medical records shall be maintained separately for each patient and family member.
+
+Only the owner of the account shall be able to manage their medical records.
+
+Supported file formats shall be validated before upload.
+
+Deleted medical records shall no longer be available for future bookings.
+
+Medical records may be selected during supported healthcare services where applicable.
+
+
+
+
+11. Success Scenario
+
+The patient opens the Medical Records module.
+
+The patient selects the appropriate patient profile.
+
+The patient uploads a medical record.
+
+The record is successfully stored and appears in the Medical Records list.
+
+The patient can later select the stored record during a supported booking.
+
+
+
+
+12. Failure Scenario
+
+The application shall notify the patient if:
+
+The selected file format is unsupported.
+
+The upload cannot be completed.
+
+The document cannot be opened.
+
+The document cannot be downloaded.
+
+The record cannot be deleted.
+
+The patient shall be able to retry the requested action.
+
+
+
+
+13. Acceptance Criteria
+
+Patients can upload medical records.
+
+Patients can organize records by category.
+
+Patients can view medical record details.
+
+Patients can download medical records.
+
+Patients can delete medical records.
+
+Patients can manage records for themselves and registered family members.
+
+Patients can select stored medical records during supported healthcare services.
+
+Module 21: Profile & Account Management
+
+
+
+
+1. Overview
+
+The Profile & Account Management module enables patients to view and manage their account information within the Vizito Patient Application.
+
+Patients can update their personal information, manage contact details and addresses, change their password, manage family members, configure notification preferences, and access account-related settings.
+
+This module provides a centralized location for managing patient account information while maintaining a secure and personalized user experience.
+
+
+
+
+2. Objectives
+
+Allow patients to manage their personal information.
+
+Allow patients to manage contact details.
+
+Allow patients to manage addresses.
+
+Allow patients to change their password.
+
+Allow patients to manage registered family members.
+
+Allow patients to configure notification preferences.
+
+Allow patients to access account settings.
+
+
+
+
+3. Personal Information
+
+Patients shall be able to view and update their personal information.
+
+Information may include:
+
+Profile Photo
+
+Full Name
+
+Date of Birth
+
+Gender
+
+
+
+
+4. Contact Information
+
+Patients shall be able to manage their contact information.
+
+Information includes:
+
+Mobile Number
+
+Email Address
+
+Verification may be required when updating the registered mobile number or email address.
+
+
+
+
+5. Address Management
+
+Patients shall be able to manage one or more saved addresses.
+
+For each address, patients shall be able to:
+
+Add Address
+
+Edit Address
+
+Delete Address
+
+Set Default Address
+
+Saved addresses may be used during supported healthcare bookings.
+
+
+
+
+6. Change Password
+
+Patients using password-based authentication shall be able to change their account password.
+
+The patient shall provide:
+
+Current Password
+
+New Password
+
+Confirm New Password
+
+
+
+
+7. Family Member Management
+
+Patients shall be able to manage registered family members.
+
+Available actions include:
+
+View Family Members
+
+Add Family Member
+
+Edit Family Member
+
+Delete Family Member
+
+Family member details shall be used during supported healthcare bookings.
+
+
+
+
+8. Notification Preferences
+
+Patients shall be able to configure notification preferences for application updates.
+
+Notification preferences may include:
+
+Appointment Notifications
+
+Order Notifications
+
+Promotional Notifications
+
+
+
+
+9. Account Settings
+
+Patients shall be able to access account-related settings, including:
+
+Language Preference
+
+Logout
+
+
+
+
+10. Business Rules
+
+Patients may update their profile information at any time.
+
+Verification may be required before updating registered contact information.
+
+One saved address may be designated as the default address.
+
+Password changes are available only for password-based accounts.
+
+Family members shall be available across all supported healthcare services.
+
+Notification preferences shall apply to future notifications only.
+
+
+
+
+11. Success Scenario
+
+The patient opens the Profile & Account Management module.
+
+The patient updates the required account information.
+
+The requested changes are successfully saved.
+
+Updated information becomes available throughout the application.
+
+
+
+
+12. Failure Scenario
+
+The application shall notify the patient if:
+
+Profile information cannot be updated.
+
+Contact information verification fails.
+
+Password validation fails.
+
+Address information cannot be saved.
+
+Family member information cannot be updated.
+
+The patient shall be able to correct the information and retry the requested action.
+
+
+
+
+13. Acceptance Criteria
+
+Patients can update their personal information.
+
+Patients can manage contact information.
+
+Patients can manage saved addresses.
+
+Patients can change their password when applicable.
+
+Patients can manage registered family members.
+
+Patients can configure notification preferences.
+
+Patients can access account settings.
+
+Updated account information is reflected throughout the application.
+
+Module 22: Notifications
+
+
+
+
+1. Overview
+
+The Notifications module enables patients to receive and manage application notifications related to healthcare services and account activities within the Vizito Patient Application.
+
+Notifications keep patients informed about important events such as booking confirmations, appointment updates, order progress, payment updates, and account-related activities.
+
+All notifications are presented in a centralized notification center.
+
+
+
+
+2. Objectives
+
+Allow patients to receive application notifications.
+
+Allow patients to view notification history.
+
+Allow patients to identify unread notifications.
+
+Allow patients to manage notification status.
+
+Keep patients informed about healthcare and account activities.
+
+
+
+
+3. Notification List
+
+The Notifications module shall display notifications in chronological order, with the most recent notification displayed first.
+
+Each notification may display:
+
+Notification Title
+
+Notification Summary
+
+Date and Time
+
+Read or Unread Status
+
+Unread notifications shall be visually distinguishable from notifications that have already been read.
+
+
+
+
+4. Notification Details
+
+Patients shall be able to open a notification to view its complete details.
+
+The notification details may include:
+
+Notification Title
+
+Notification Description
+
+Related Service
+
+Date and Time
+
+Where applicable, selecting a notification may navigate the patient to the relevant module within the application.
+
+
+
+
+5. Notification Categories
+
+Notifications may include activities related to:
+
+Appointments
+
+Bookings
+
+Orders
+
+Queue Updates
+
+Tracking Updates
+
+Payments
+
+Medical Records
+
+Account Activities
+
+General Announcements
+
+
+
+
+6. Notification Management
+
+Patients shall be able to:
+
+Mark a notification as Read
+
+Mark all notifications as Read
+
+Delete an individual notification
+
+Clear all notifications
+
+
+
+
+7. Business Rules
+
+Notifications shall be displayed in reverse chronological order.
+
+New notifications shall initially be marked as unread.
+
+Opening a notification shall automatically mark it as read.
+
+Deleting a notification shall remove it only from the patient's notification list.
+
+Clearing notifications shall not affect the underlying booking, order, or account information.
+
+
+
+
+8. Success Scenario
+
+The patient receives a new notification.
+
+The notification appears in the notification list.
+
+The patient opens the notification.
+
+The notification is marked as read.
+
+The patient views the related information or navigates to the associated module where applicable.
+
+
+
+
+9. Failure Scenario
+
+The application shall notify the patient if:
+
+Notifications cannot be retrieved.
+
+Notification details cannot be opened.
+
+Notification status cannot be updated.
+
+Notification deletion cannot be completed.
+
+The patient shall be able to retry the requested action.
+
+
+
+
+10. Acceptance Criteria
+
+Patients can view all notifications in a centralized notification center.
+
+Notifications are displayed in reverse chronological order.
+
+Patients can distinguish between read and unread notifications.
+
+Patients can open and view notification details.
+
+Patients can mark individual notifications as read.
+
+Patients can mark all notifications as read.
+
+Patients can delete individual notifications.
+
+Patients can clear all notifications.
+
+Relevant notifications can navigate patients to the associated module within the application.
+
+Module 23: Help & Support
+
+
+
+
+1. Overview
+
+The Help & Support module enables patients to quickly contact the Vizito support team whenever they require assistance while using the application.
+
+The module provides essential support information and allows patients to contact customer support through the available communication channels.
+
+
+
+
+2. Objectives
+
+Allow patients to contact customer support.
+
+Provide essential support contact information.
+
+Allow patients to report issues or request assistance.
+
+
+
+
+3. Contact Support
+
+Patients shall be able to contact the Vizito support team using the available contact options.
+
+Available contact methods may include:
+
+Phone Number
+
+Email Address
+
+Selecting a contact option shall initiate the corresponding action on the patient's device.
+
+
+
+
+4. Send Support Request
+
+Patients shall be able to submit a support request.
+
+The support request shall include:
+
+Subject
+
+Message
+
+After successful submission, the application shall notify the patient that the request has been received.
+
+
+
+
+5. Business Rules
+
+Support requests shall require both a subject and a message.
+
+Contact information shall be displayed using the latest configured support details.
+
+Support requests shall be submitted only by authenticated patients.
+
+
+
+
+6. Success Scenario
+
+The patient opens the Help & Support module.
+
+The patient selects a contact method or submits a support request.
+
+The application confirms that the request has been successfully submitted.
+
+
+
+
+7. Failure Scenario
+
+The application shall notify the patient if:
+
+The support request cannot be submitted.
+
+Support information cannot be loaded.
+
+The patient shall be able to retry the requested action.
+
+
+
+
+8. Acceptance Criteria
+
+Patients can view customer support contact information.
+
+Patients can contact support using the available contact methods.
+
+Patients can submit a support request.
+
+The application confirms successful support request submission.
+
+
