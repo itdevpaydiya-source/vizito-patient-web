@@ -24,7 +24,8 @@ import {
   Microscope,
   Accessibility,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Star
 } from 'lucide-react';
 import { useLanguage } from '../../../store/language/LanguageContext';
 
@@ -329,6 +330,9 @@ export default function MyConsultationsScreen() {
   const [cancelModalBooking, setCancelModalBooking] = useState<PatientBookingItem | null>(null);
   const [cancelReason, setCancelReason] = useState('Change of plans');
   const [rebookModalBooking, setRebookModalBooking] = useState<PatientBookingItem | null>(null);
+  const [reviewModalBooking, setReviewModalBooking] = useState<PatientBookingItem | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Load bookings from localStorage combined with INITIAL_MOCK_BOOKINGS
@@ -951,6 +955,21 @@ export default function MyConsultationsScreen() {
               </button>
 
               <div className="flex items-center gap-2">
+                {/* Rate & Review Action for Completed Bookings */}
+                {selectedBooking.tabCategory === 'completed' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewModalBooking(selectedBooking);
+                      setReviewRating(5);
+                      setReviewComment('');
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs border border-amber-200 transition-colors flex items-center gap-1.5"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> Rate & Review
+                  </button>
+                )}
+
                 {/* Cancel Booking Action */}
                 {selectedBooking.tabCategory !== 'completed' && selectedBooking.tabCategory !== 'cancelled' && (
                   <button
@@ -973,6 +992,84 @@ export default function MyConsultationsScreen() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Rate & Review Dialog Modal */}
+      {reviewModalBooking && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center font-extrabold text-xl">
+                  ★
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">Rate & Review Service</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {reviewModalBooking.providerName} • {reviewModalBooking.serviceType}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReviewModalBooking(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              <div className="text-center space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <span className="text-xs font-bold text-slate-600 block">How was your healthcare experience?</span>
+                <div className="flex items-center justify-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="p-1 text-amber-500 hover:scale-125 transition-transform"
+                    >
+                      <Star className={`w-7 h-7 ${star <= reviewRating ? 'fill-amber-500 text-amber-500' : 'text-slate-300'}`} />
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs font-extrabold text-amber-700 block mt-1">
+                  {reviewRating === 5 ? 'Excellent 🌟' : reviewRating === 4 ? 'Very Good 👍' : reviewRating === 3 ? 'Average 😐' : 'Poor 👎'}
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Your Written Review (Optional)</label>
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share details about doctor punctuality, staff behavior, treatment quality..."
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 min-h-[90px]"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReviewModalBooking(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewModalBooking(null);
+                  showToast(`Thank you! Your rating & review for ${reviewModalBooking.providerName} has been submitted.`);
+                }}
+                className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-98"
+              >
+                Submit Review
+              </button>
+            </div>
           </div>
         </div>
       )}

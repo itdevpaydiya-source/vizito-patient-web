@@ -34,11 +34,13 @@ import {
   MOCK_LAB_TESTS_CATALOG,
   MOCK_EQUIPMENT_CATALOG,
   MOCK_AVAILABLE_SLOTS,
+  MOCK_PROVIDER_REVIEWS,
   type HealthcareServiceOption,
   type ProviderItem,
   type MedicineItem,
   type LabTestItem,
-  type RentalEquipmentItem
+  type RentalEquipmentItem,
+  type ProviderReview
 } from '../../../mocks/universalBookingMocks';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -65,6 +67,13 @@ export default function HealthcareServicesScreen() {
   const [genderFilter, setGenderFilter] = useState('All');
   const [consultTypeFilter, setConsultTypeFilter] = useState('All');
   const [feeFilter, setFeeFilter] = useState('All');
+  const [sortBy, setSortBy] = useState<'relevance' | 'rating_high' | 'fee_low' | 'fee_high'>('relevance');
+
+  // Review System State
+  const [reviewsList, setReviewsList] = useState<ProviderReview[]>(MOCK_PROVIDER_REVIEWS);
+  const [isWritingReview, setIsWritingReview] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState('');
 
   // Selected Provider Details Modal State
   const [selectedProvider, setSelectedProvider] = useState<ProviderItem | null>(null);
@@ -93,7 +102,7 @@ export default function HealthcareServicesScreen() {
   );
 
   // Filter Providers for selected tab/category
-  const activeProviders = MOCK_UNIVERSAL_PROVIDERS.filter((p) => {
+  let activeProviders = MOCK_UNIVERSAL_PROVIDERS.filter((p) => {
     if (activeCategory !== 'all' && p.serviceId !== activeCategory) return false;
 
     const matchesSearch =
@@ -116,6 +125,14 @@ export default function HealthcareServicesScreen() {
 
     return matchesSearch && matchesSpecialty && matchesGender && matchesFee;
   });
+
+  if (sortBy === 'rating_high') {
+    activeProviders = [...activeProviders].sort((a, b) => b.rating - a.rating);
+  } else if (sortBy === 'fee_low') {
+    activeProviders = [...activeProviders].sort((a, b) => a.priceValue - b.priceValue);
+  } else if (sortBy === 'fee_high') {
+    activeProviders = [...activeProviders].sort((a, b) => b.priceValue - a.priceValue);
+  }
 
   const handleBookNow = (provider: ProviderItem) => {
     navigate(`/booking?service=${provider.serviceId}`);
@@ -288,12 +305,25 @@ export default function HealthcareServicesScreen() {
                 <option value="high">Above ₹600</option>
               </select>
 
-              {(providerSearch || specialtyFilter !== 'All' || feeFilter !== 'All') && (
+              {/* Sort By Dropdown */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-700 focus:outline-none focus:border-teal-500"
+              >
+                <option value="relevance">Sort: Relevance</option>
+                <option value="rating_high">Sort: Rating (High to Low)</option>
+                <option value="fee_low">Sort: Fee (Low to High)</option>
+                <option value="fee_high">Sort: Fee (High to Low)</option>
+              </select>
+
+              {(providerSearch || specialtyFilter !== 'All' || feeFilter !== 'All' || sortBy !== 'relevance') && (
                 <button
                   onClick={() => {
                     setProviderSearch('');
                     setSpecialtyFilter('All');
                     setFeeFilter('All');
+                    setSortBy('relevance');
                   }}
                   className="text-rose-600 hover:text-rose-700 font-bold px-2 py-1 text-xs"
                 >
@@ -690,6 +720,143 @@ export default function HealthcareServicesScreen() {
                   </span>
                 </div>
               )}
+
+              {/* Patient Ratings & Reviews Section (Module 5 Requirement) */}
+              <div className="pt-5 border-t border-slate-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Patient Ratings & Reviews</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Feedback verified from completed patient visits</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsWritingReview(!isWritingReview)}
+                    className="text-xs font-bold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-xl border border-teal-200 transition-colors flex items-center gap-1"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-teal-600 text-teal-600" />
+                    {isWritingReview ? 'Cancel' : 'Write a Review'}
+                  </button>
+                </div>
+
+                {/* Rating Overview Summary Box */}
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex flex-col sm:flex-row items-center gap-5">
+                  <div className="text-center sm:text-left shrink-0">
+                    <div className="text-3xl font-black text-slate-900 flex items-center justify-center sm:justify-start gap-1">
+                      <span>{selectedProvider.rating}</span>
+                      <Star className="w-6 h-6 text-amber-500 fill-amber-500" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">{selectedProvider.reviewsCount} total ratings</p>
+                  </div>
+
+                  <div className="flex-1 w-full space-y-1 text-xs">
+                    {[
+                      { stars: 5, pct: '82%' },
+                      { stars: 4, pct: '12%' },
+                      { stars: 3, pct: '4%' },
+                      { stars: 2, pct: '1%' },
+                      { stars: 1, pct: '1%' }
+                    ].map((row) => (
+                      <div key={row.stars} className="flex items-center gap-2">
+                        <span className="w-8 text-[11px] font-bold text-slate-600 shrink-0">{row.stars} ★</span>
+                        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full" style={{ width: row.pct }} />
+                        </div>
+                        <span className="w-8 text-[10px] font-bold text-slate-400 text-right">{row.pct}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Write Review Form */}
+                {isWritingReview && (
+                  <div className="p-4 rounded-2xl bg-teal-50/50 border border-teal-200 space-y-3 animate-in fade-in duration-200">
+                    <span className="text-xs font-extrabold text-teal-900 block">Share your feedback</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setNewRating(star)}
+                          className="p-1 text-amber-500 hover:scale-110 transition-transform"
+                        >
+                          <Star className={`w-5 h-5 ${star <= newRating ? 'fill-amber-500' : 'text-slate-300'}`} />
+                        </button>
+                      ))}
+                      <span className="text-xs font-bold text-slate-700 ml-2">{newRating} Stars</span>
+                    </div>
+
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Write your experience with this doctor or healthcare provider..."
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 min-h-[80px]"
+                    />
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newComment.trim()) {
+                            setReviewsList([
+                              {
+                                id: `rev_${Date.now()}`,
+                                patientName: 'Ravi Teja (You)',
+                                rating: newRating,
+                                date: 'Just now',
+                                comment: newComment.trim(),
+                                verified: true
+                              },
+                              ...reviewsList
+                            ]);
+                            setNewComment('');
+                            setIsWritingReview(false);
+                          }
+                        }}
+                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                      >
+                        Submit Review
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Patient Written Reviews List */}
+                <div className="space-y-3 max-h-60 overflow-y-auto modal-scrollbar pr-1">
+                  {reviewsList.map((rev) => (
+                    <div key={rev.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-teal-600 text-white font-bold text-[11px] flex items-center justify-center">
+                            {rev.patientName[0]}
+                          </div>
+                          <div>
+                            <span className="text-xs font-extrabold text-slate-800 block">{rev.patientName}</span>
+                            {rev.verified && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 inline-block">
+                                Verified Patient
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="flex items-center gap-0.5 justify-end">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`w-3 h-3 ${i < rev.rating ? 'text-amber-500 fill-amber-500' : 'text-slate-200'}`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium">{rev.date}</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-600 font-medium leading-relaxed pt-1">
+                        "{rev.comment}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Modal Actions Footer */}

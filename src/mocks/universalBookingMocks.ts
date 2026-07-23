@@ -80,6 +80,17 @@ export interface ExperienceHistoryItem {
   isPresent?: boolean;
 }
 
+export interface ProviderReview {
+  id: string;
+  providerId?: string;
+  patientName: string;
+  patientAvatar?: string;
+  rating: number;
+  date: string;
+  comment: string;
+  verified?: boolean;
+}
+
 export interface ProviderItem {
   id: string;
   serviceId: string;
@@ -106,7 +117,43 @@ export interface ProviderItem {
   waitingTime?: string;
   supportsTracking?: boolean;
   trackingStatus?: string;
+  reviewsList?: ProviderReview[];
 }
+
+export const MOCK_PROVIDER_REVIEWS: ProviderReview[] = [
+  {
+    id: 'rev_1',
+    patientName: 'Anita Sharma',
+    rating: 5,
+    date: '2 days ago',
+    comment: 'Extremely polite and thorough diagnosis. Explained the treatment plan clearly and took time to address all my concerns.',
+    verified: true
+  },
+  {
+    id: 'rev_2',
+    patientName: 'Rajesh Kumar',
+    rating: 5,
+    date: '1 week ago',
+    comment: 'Punctual appointment with zero wait time. Highly professional healthcare service!',
+    verified: true
+  },
+  {
+    id: 'rev_3',
+    patientName: 'Priya Verma',
+    rating: 4,
+    date: '2 weeks ago',
+    comment: 'Great experience overall. The nursing staff and facility were clean and well organized.',
+    verified: true
+  },
+  {
+    id: 'rev_4',
+    patientName: 'Vikram Mehta',
+    rating: 5,
+    date: '3 weeks ago',
+    comment: 'Very happy with the quick response and prescription guidance. Would definitely recommend to my family.',
+    verified: true
+  }
+];
 
 export const MOCK_UNIVERSAL_PROVIDERS: ProviderItem[] = [
   // 1. Doctor Providers

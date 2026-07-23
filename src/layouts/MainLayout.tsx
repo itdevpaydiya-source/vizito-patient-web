@@ -51,7 +51,7 @@ const MainLayout = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 relative z-30 shrink-0">
 
           <div className="flex items-center gap-3 flex-1">
             {/* Hamburger - mobile only */}
@@ -70,15 +70,15 @@ const MainLayout = () => {
                 placeholder={t("Search healthcare services, doctors, records...")}
                 className="w-full pl-9 pr-14 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+              {/* <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                 <kbd className="text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded px-1 py-0.5">Ctrl + K</kbd>
-              </div>
+              </div> */}
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Notification Bell */}
-            <button 
+            <button
               onClick={() => navigate('/notifications')}
               className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"
             >
@@ -116,12 +116,12 @@ const MainLayout = () => {
 
               {isProfileMenuOpen && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-10 cursor-default" 
-                    onClick={() => setIsProfileMenuOpen(false)} 
+                  <div
+                    className="fixed inset-0 z-30 cursor-default"
+                    onClick={() => setIsProfileMenuOpen(false)}
                   />
-                  <div 
-                    className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl py-1.5 z-20 animate-fade"
+                  <div
+                    className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl py-1.5 z-40 animate-fade"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button

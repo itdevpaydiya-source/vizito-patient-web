@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, type ReactNode } from 'react';
-import type { UserRole,  } from '../../components/UserTypeSelection';
+import type { UserRole } from '../../presentation/components/UserTypeSelection';
 
 interface RoleContextType {
   role: UserRole | 'doctor';

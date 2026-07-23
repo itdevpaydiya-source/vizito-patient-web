@@ -17,7 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { HealthcareServiceOption, ProviderItem } from '../../../../mocks/universalBookingMocks';
 import type { FamilyMember } from '../../../../mocks/patientFlowMocks';
-import type { BookingDetailsData } from './DynamicDetailsStep';
+import type { BookingDetailsData } from '../../../../presentation/modules/booking/components/DynamicDetailsStep';
 
 interface BookingConfirmationStepProps {
   service: HealthcareServiceOption;
