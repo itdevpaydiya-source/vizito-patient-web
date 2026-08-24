@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Smartphone,
   Mail,
@@ -16,12 +16,42 @@ import {
   UserPlus
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
-import { loginPatientApi, sendOtpApi, verifyOtpApi } from '../../../services/authHelper';
+import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
 
 interface AuthModuleProps {
   onLoginSuccess: (user: any) => void;
   onRegisterClick: () => void;
 }
+
+// Google Sign-In web client ID — must match GOOGLE_CLIENT_ID in vizito-auth/.env. Mirrors the
+// working provider-side implementation (vizito-partner-main/src/presentation/components/AuthModule.tsx).
+const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || '';
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+// Loads the Google Identity Services script once and resolves when ready.
+const loadGoogleIdentity = (): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) return resolve();
+    const existing = document.getElementById('google-gis-script') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error('Failed to load Google script')));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.id = 'google-gis-script';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google script'));
+    document.head.appendChild(script);
+  });
 
 type AuthMethodOption = 'mobile-otp' | 'mobile-password' | 'email-otp' | 'email-password';
 type AuthScreenState = 'login' | 'forgot-input' | 'forgot-otp' | 'forgot-reset' | 'forgot-success';
@@ -98,7 +128,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
   };
 
   // Validation functions
-  const validateMobile = (num: string) => /^\d{10}$/.test(num);
+  const validateMobile = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
   const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
 
   // Handle Switching Method
@@ -117,7 +147,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     setSuccessMessage('');
 
     if (selectedMethod.startsWith('mobile') && !validateMobile(mobile)) {
-      setErrorMessage('Please enter a valid 10-digit mobile number (e.g. 9876543210)');
+      setErrorMessage('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9');
       return;
     }
     if (selectedMethod.startsWith('email') && !validateEmail(email)) {
@@ -133,7 +163,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
       setOtpSent(true);
       setOtpCountdown(300);
-      setSuccessMessage(`OTP sent to ${selectedMethod.startsWith('mobile') ? '+91 ' + mobile : email}. Use code: 123456`);
+      setSuccessMessage(`OTP sent to ${selectedMethod.startsWith('mobile') ? '+91 ' + mobile : email}.`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -159,22 +189,23 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsVerifyingOtp(true);
     try {
-      const identifier = selectedMethod.startsWith('mobile') ? mobile : email;
-      await verifyOtpApi(identifier, otp);
+      const type = selectedMethod.startsWith('mobile') ? 'mobile' : 'email';
+      const identifier = type === 'mobile' ? mobile : email;
+      const response = await verifyOtpApi(identifier, otp, type);
 
-      // Successfully authenticated
+      // Authenticated — use only the real backend response.
       const patientUser = {
-        patient_id: `PAT-${Math.floor(100000 + Math.random() * 900000)}`,
-        fullName: selectedMethod.startsWith('mobile') ? `Patient (+91 ${mobile})` : email.split('@')[0],
-        email: selectedMethod.startsWith('email') ? email : '',
-        mobile: selectedMethod.startsWith('mobile') ? mobile : '',
-        role: 'patient',
-        token: `jwt_patient_token_${Date.now()}`
+        patient_id: response.patient_id,
+        fullName: response.full_name,
+        email: response.email || '',
+        mobile: response.mobile || '',
+        role: response.role || 'patient',
+        token: response.access_token || response.token
       };
 
       onLoginSuccess(patientUser);
     } catch (err: any) {
-      setErrorMessage('Invalid OTP code. Please check and enter code: 123456');
+      setErrorMessage(err.response?.data?.message || 'Invalid or expired OTP. Please try again.');
       registerFailureAttempt();
     } finally {
       setIsVerifyingOtp(false);
@@ -211,31 +242,93 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsSubmitting(true);
     try {
-      const identifier = selectedMethod === 'mobile-password' ? mobile : email;
-      const response = await loginPatientApi({
-        identifier,
-        loginType: selectedMethod === 'mobile-password' ? 'mobile' : 'email',
-        authMethod: 'password',
-        password
-      });
+      const isMobile = selectedMethod === 'mobile-password';
+      const response = await loginPatientApi(
+        isMobile ? { phone: mobile, password } : { email, password }
+      );
 
+      // Use only the real backend response — no fabricated identity/token.
       const patientUser = {
-        patient_id: response.patient_id || `PAT-108420`,
-        fullName: response.full_name || (selectedMethod === 'mobile-password' ? `Patient (${mobile})` : email.split('@')[0]),
-        email: response.email || (selectedMethod === 'email-password' ? email : ''),
-        mobile: response.mobile || (selectedMethod === 'mobile-password' ? mobile : ''),
-        role: 'patient',
-        token: response.token || `jwt_patient_token_${Date.now()}`
+        patient_id: response.patient_id,
+        fullName: response.full_name,
+        email: response.email || '',
+        mobile: response.mobile || '',
+        role: response.role || 'patient',
+        token: response.access_token || response.token
       };
 
       onLoginSuccess(patientUser);
     } catch (err: any) {
-      setErrorMessage('Invalid credentials. Please check your password.');
+      setErrorMessage(err.response?.data?.message || 'Invalid credentials. Please check your password.');
       registerFailureAttempt();
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+
+  // Receives the Google ID token, forwards it to the backend /patient/auth/google endpoint
+  // (already fully implemented — only this frontend wiring was ever missing), then reuses the
+  // exact same post-login handling as manual login.
+  const handleGoogleCredential = async (response: any) => {
+    const idToken = response?.credential;
+    if (!idToken) {
+      setErrorMessage('Google sign-in failed. Please try again.');
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMessage('');
+    try {
+      const res = await googlePatientApi(idToken);
+      const patientUser = {
+        patient_id: res.patient_id,
+        fullName: res.full_name,
+        email: res.email || '',
+        mobile: res.mobile || '',
+        role: res.role || 'patient',
+        token: res.access_token || res.token,
+      };
+      onLoginSuccess(patientUser);
+    } catch (error: any) {
+      const rawMsg = error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.';
+      setErrorMessage(Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Loads Google Identity Services and renders the official Google button whenever the login
+  // screen is shown.
+  useEffect(() => {
+    if (screenState !== 'login' || !GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+    loadGoogleIdentity()
+      .then(() => {
+        if (cancelled || !window.google?.accounts?.id) return;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredential,
+        });
+        if (googleBtnRef.current) {
+          googleBtnRef.current.innerHTML = '';
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'outline',
+            size: 'large',
+            text: 'continue_with',
+            shape: 'pill',
+            width: 380,
+          });
+        }
+      })
+      .catch(() => {
+        // Google script blocked/offline — manual auth still works; button stays hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenState]);
 
   const registerFailureAttempt = () => {
     const nextAttempts = failedAttempts + 1;
@@ -266,9 +359,9 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       await sendOtpApi(recoveryIdentifier, recoveryType);
       setOtpCountdown(300);
       setScreenState('forgot-otp');
-      setSuccessMessage(`Recovery OTP sent to ${recoveryIdentifier}. Mock OTP code: 123456`);
+      setSuccessMessage(`Recovery OTP sent to ${recoveryIdentifier}.`);
     } catch (err: any) {
-      setErrorMessage('Failed to send recovery OTP.');
+      setErrorMessage(err.response?.data?.message || 'Failed to send recovery OTP.');
     } finally {
       setIsSubmitting(false);
     }
@@ -277,12 +370,21 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
   const handleForgotVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (recoveryOtp !== '123456' && recoveryOtp !== '000000') {
-      setErrorMessage('Invalid OTP code. Use mock code 123456');
+    if (!recoveryOtp || recoveryOtp.length !== 6) {
+      setErrorMessage('Please enter the 6-digit OTP code');
       return;
     }
-    setScreenState('forgot-reset');
-    setSuccessMessage('');
+    setIsSubmitting(true);
+    try {
+      // Verify against the real backend OTP — no universal/hardcoded code accepted.
+      await verifyOtpApi(recoveryIdentifier, recoveryOtp, recoveryType as 'mobile' | 'email');
+      setScreenState('forgot-reset');
+      setSuccessMessage('');
+    } catch (err: any) {
+      setErrorMessage(err.response?.data?.message || 'Invalid or expired OTP code.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleResetPasswordSubmit = (e: React.FormEvent) => {
@@ -714,6 +816,17 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                   </button>
                 </form>
               )}
+
+              {/* OR separator + Google Sign-In — coexists with manual auth. Mirrors the working
+                  provider-side implementation in vizito-partner-main/AuthModule.tsx. */}
+              <div className="flex items-center gap-3 my-6">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">or</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+              <div className="flex justify-center min-h-[44px]">
+                <div ref={googleBtnRef} className="w-full flex justify-center" />
+              </div>
 
               {/* Bottom Options: Remember Me & Forgot Password */}
               <div className="flex items-center justify-between mt-5 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">

@@ -23,51 +23,24 @@ import {
   Check,
   Calendar
 } from 'lucide-react';
-import { MOCK_FAMILY_MEMBERS, type FamilyMember } from '../../../mocks/patientFlowMocks';
-
-export interface SavedAddressItem {
-  id: string;
-  label: string;
-  addressLine: string;
-  landmark: string;
-  city: string;
-  state: string;
-  pinCode: string;
-  isDefault: boolean;
-}
-
-export const INITIAL_SAVED_ADDRESSES: SavedAddressItem[] = [
-  {
-    id: 'addr_1',
-    label: 'Home',
-    addressLine: 'H.No 4-12, Near Metro Station, Madhapur',
-    landmark: 'Opposite Inorbit Mall',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    pinCode: '500081',
-    isDefault: true
-  },
-  {
-    id: 'addr_2',
-    label: 'Work',
-    addressLine: 'Cyber Towers, 4th Floor, Hitec City',
-    landmark: 'Mindspace IT Park Gateway',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    pinCode: '500081',
-    isDefault: false
-  },
-  {
-    id: 'addr_3',
-    label: 'Parents House',
-    addressLine: 'Plot 45, Road No 36, Jubilee Hills',
-    landmark: 'Near Peddamma Temple',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    pinCode: '500033',
-    isDefault: false
-  }
-];
+import {
+  getPatientProfileApi,
+  updateProfileApi,
+  changePasswordApi,
+  getAddressesApi,
+  deleteAddressApi,
+  setDefaultAddressApi,
+  type PatientAddress,
+} from '../../../services/patientHelper';
+import {
+  getMyUserId,
+  getFamilyMembersApi,
+  addFamilyMemberApi,
+  removeFamilyMemberApi,
+  FAMILY_RELATIONSHIPS,
+  type PatientFamilyMember,
+  type FamilyRelationship,
+} from '../../../services/familyHelper';
 
 export default function ProfileLayout() {
   const navigate = useNavigate();
@@ -80,51 +53,46 @@ export default function ProfileLayout() {
   // Toasts Feedback State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 1. Personal Info State
-  const [profilePhoto, setProfilePhoto] = useState<string>(
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80'
-  );
-  const [fullName, setFullName] = useState('Ravi Teja');
-  const [dob, setDob] = useState('2000-07-20');
+  // 1. Personal Info State — avatar starts empty (initials shown); a real photo is loaded from the
+  // backend when present. No fabricated stock image.
+  const [profilePhoto, setProfilePhoto] = useState<string>('');
+  // Name/email/phone/dob/gender are populated from the real backend (/patients/me) and persisted
+  // via PATCH /patients/profile — no fabricated defaults, no local-only fields.
+  const [fullName, setFullName] = useState('');
+  const [dob, setDob] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [savingPersonal, setSavingPersonal] = useState(false);
 
-  // 2. Contact Info State
-  const [mobileNumber, setMobileNumber] = useState('+91 9876543210');
-  const [emailAddress, setEmailAddress] = useState('ravi@email.com');
+  // 2. Contact Info State — real values loaded from /patients/me, persisted via PATCH /patients/profile.
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [emailAddress, setEmailAddress] = useState('');
   const [isEditingContact, setIsEditingContact] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
 
-  // OTP Verification Dialog State for Contact Update
-  const [showOtpDialog, setShowOtpDialog] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [pendingContactUpdate, setPendingContactUpdate] = useState<{ mobile: string; email: string } | null>(null);
+  // Authenticated user's own users.id (needed for the path-scoped family API).
+  const [userId, setUserId] = useState<number | null>(null);
 
-  // 3. Address Management State
-  const [addresses, setAddresses] = useState<SavedAddressItem[]>([]);
-  const [addressModal, setAddressModal] = useState<SavedAddressItem | null | 'new'>(null);
-  const [addressDeleteModal, setAddressDeleteModal] = useState<SavedAddressItem | null>(null);
-  const [addressForm, setAddressForm] = useState<Omit<SavedAddressItem, 'id'>>({
-    label: 'Home',
-    addressLine: '',
-    landmark: '',
-    city: 'Hyderabad',
-    state: 'Telangana',
-    pinCode: '',
-    isDefault: false
-  });
+  // 3. Address Management State — list is real (GET /patients/me); delete + set-default are real APIs.
+  // Create/edit are NOT wired: the backend requires catalogue city/state/country IDs validated via
+  // /locations/validate, which needs location pickers in the UI. Reported as a blocker rather than
+  // fabricating location IDs.
+  const [addresses, setAddresses] = useState<PatientAddress[]>([]);
+  const [addressDeleteModal, setAddressDeleteModal] = useState<PatientAddress | null>(null);
 
-  // 4. Family Member Management State
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
-  const [familyModal, setFamilyModal] = useState<FamilyMember | null | 'new'>(null);
-  const [familyDeleteModal, setFamilyDeleteModal] = useState<FamilyMember | null>(null);
+  // 4. Family Member Management State (real /users/:id/family-members API — add + delete)
+  const [familyMembers, setFamilyMembers] = useState<PatientFamilyMember[]>([]);
+  const [familyModal, setFamilyModal] = useState<PatientFamilyMember | null | 'new'>(null);
+  const [familyDeleteModal, setFamilyDeleteModal] = useState<PatientFamilyMember | null>(null);
+  const [familySubmitting, setFamilySubmitting] = useState(false);
   const [familyForm, setFamilyForm] = useState<{
     name: string;
     dob: string;
-    relationship: string;
+    relationship: FamilyRelationship;
     gender: string;
   }>({
     name: '',
-    dob: '1970-01-01',
+    dob: '',
     relationship: 'Father',
     gender: 'Male'
   });
@@ -141,12 +109,14 @@ export default function ProfileLayout() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // 7. Account Settings State
   const [language, setLanguage] = useState('English');
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  // Load saved state from localStorage
+  // Load identity from the session for a fast paint, then hydrate authoritative profile, addresses,
+  // and family members from the backend. No mock/localStorage business data is used as a source.
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('vizito_user');
@@ -156,17 +126,45 @@ export default function ProfileLayout() {
         if (u.email) setEmailAddress(u.email);
         if (u.mobile) setMobileNumber(u.mobile);
       }
+    } catch { /* ignore */ }
 
-      const storedAddrs = localStorage.getItem('vizito_patient_addresses');
-      setAddresses(storedAddrs ? JSON.parse(storedAddrs) : INITIAL_SAVED_ADDRESSES);
+    let mounted = true;
+    (async () => {
+      try {
+        const profile = await getPatientProfileApi();
+        if (mounted && profile) {
+          if (profile.fullName) setFullName(profile.fullName);
+          if (profile.email) setEmailAddress(profile.email);
+          if (profile.phone) setMobileNumber(profile.phone);
+          if (profile.dateOfBirth) setDob(profile.dateOfBirth);
+          if (profile.gender === 'Male' || profile.gender === 'Female' || profile.gender === 'Other') setGender(profile.gender);
+          if (profile.profilePicture) setProfilePhoto(profile.profilePicture);
+          setUserId(profile.userId);
+          try {
+            const stored = localStorage.getItem('vizito_user');
+            const user = stored ? JSON.parse(stored) : {};
+            localStorage.setItem('vizito_user', JSON.stringify({
+              ...user,
+              fullName: profile.fullName ?? user.fullName,
+              email: profile.email ?? user.email,
+              mobile: profile.phone ?? user.mobile,
+            }));
+          } catch { /* non-fatal */ }
+          // Family members (real). Non-fatal on error — render empty, never mock.
+          try {
+            const fam = await getFamilyMembersApi(profile.userId);
+            if (mounted) setFamilyMembers(fam);
+          } catch { if (mounted) setFamilyMembers([]); }
+        }
+      } catch { /* keep localStorage identity; inject no fabricated data */ }
 
-      const storedFamily = localStorage.getItem('vizito_family_members');
-      setFamilyMembers(storedFamily ? JSON.parse(storedFamily) : MOCK_FAMILY_MEMBERS.filter((m) => !m.isSelf));
-    } catch (err) {
-      console.error(err);
-      setAddresses(INITIAL_SAVED_ADDRESSES);
-      setFamilyMembers(MOCK_FAMILY_MEMBERS.filter((m) => !m.isSelf));
-    }
+      // Addresses (real, from /patients/me). Non-fatal on error.
+      try {
+        const addrs = await getAddressesApi();
+        if (mounted) setAddresses(addrs);
+      } catch { if (mounted) setAddresses([]); }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   const showToast = (msg: string) => {
@@ -174,189 +172,154 @@ export default function ProfileLayout() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // 1. Personal Information Submit
-  const handleSavePersonal = (e: React.FormEvent) => {
+  // 1. Personal Information Submit — persisted to the backend (PATCH /patients/profile).
+  const handleSavePersonal = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const stored = localStorage.getItem('vizito_user');
-      const user = stored ? JSON.parse(stored) : {};
-      localStorage.setItem('vizito_user', JSON.stringify({ ...user, fullName }));
-    } catch (err) {
-      console.error(err);
+    if (!fullName.trim()) {
+      showToast('Full name is required.');
+      return;
     }
-    setIsEditingPersonal(false);
-    showToast('Profile updated successfully.');
+    setSavingPersonal(true);
+    try {
+      await updateProfileApi({
+        fullName: fullName.trim(),
+        dateOfBirth: dob || '',
+        gender,
+      });
+      try {
+        const stored = localStorage.getItem('vizito_user');
+        const user = stored ? JSON.parse(stored) : {};
+        localStorage.setItem('vizito_user', JSON.stringify({ ...user, fullName: fullName.trim() }));
+      } catch { /* non-fatal */ }
+      setIsEditingPersonal(false);
+      showToast('Profile updated successfully.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      showToast(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to update profile.'));
+    } finally {
+      setSavingPersonal(false);
+    }
   };
 
-  // Profile Photo Upload Simulation
+  // Profile photo preview. There is no patient image-upload/storage endpoint yet, so this shows the
+  // selected image locally only — it is NOT persisted, and we say so honestly rather than fake a save.
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setProfilePhoto(URL.createObjectURL(file));
-      showToast('Profile photo updated.');
+      showToast('Preview only — photo upload will be saved once storage is enabled.');
     }
   };
 
-  // 2. Contact Information Submit & OTP Trigger
-  const handleInitiateContactUpdate = (e: React.FormEvent) => {
+  // 2. Contact Information Submit — persisted to the backend (PATCH /patients/profile). The backend
+  // validates the mobile format and rejects duplicate phone/email, so failures surface the real error.
+  const handleSaveContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPendingContactUpdate({ mobile: mobileNumber, email: emailAddress });
-    setOtpInput('');
-    setShowOtpDialog(true);
-  };
-
-  const handleVerifyOtp = () => {
-    if (otpInput.trim().length !== 4 && otpInput.trim().length !== 6) {
-      showToast('Please enter a valid OTP code (e.g. 1234)');
+    const cleanedMobile = mobileNumber.replace(/\D/g, '').slice(-10);
+    if (cleanedMobile.length !== 10) {
+      showToast('Please enter a valid 10-digit mobile number.');
       return;
     }
-
-    if (pendingContactUpdate) {
-      setMobileNumber(pendingContactUpdate.mobile);
-      setEmailAddress(pendingContactUpdate.email);
+    setSavingContact(true);
+    try {
+      await updateProfileApi({ phone: cleanedMobile, email: emailAddress.trim() });
+      setMobileNumber(cleanedMobile);
       try {
         const stored = localStorage.getItem('vizito_user');
         const user = stored ? JSON.parse(stored) : {};
-        localStorage.setItem(
-          'vizito_user',
-          JSON.stringify({
-            ...user,
-            email: pendingContactUpdate.email,
-            mobile: pendingContactUpdate.mobile
-          })
-        );
-      } catch (err) {
-        console.error(err);
-      }
+        localStorage.setItem('vizito_user', JSON.stringify({ ...user, email: emailAddress.trim(), mobile: cleanedMobile }));
+      } catch { /* non-fatal */ }
+      setIsEditingContact(false);
+      showToast('Contact information updated successfully.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      showToast(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to update contact information.'));
+    } finally {
+      setSavingContact(false);
     }
-
-    setShowOtpDialog(false);
-    setIsEditingContact(false);
-    showToast('Contact information updated successfully.');
   };
 
-  // 3. Address Management Functions
-  const handleSaveAddress = (e: React.FormEvent) => {
-    e.preventDefault();
-    let updated: SavedAddressItem[];
+  // 3. Address Management Functions — real backend. Reloads from the source of truth after writes.
+  const reloadAddresses = async () => {
+    try { setAddresses(await getAddressesApi()); } catch { /* keep current list */ }
+  };
 
-    if (addressModal === 'new') {
-      const newAddr: SavedAddressItem = {
-        id: `addr_${Date.now()}`,
-        ...addressForm
-      };
-      if (newAddr.isDefault) {
-        updated = addresses.map((a) => ({ ...a, isDefault: false }));
-        updated.push(newAddr);
-      } else {
-        updated = [...addresses, newAddr];
-      }
-    } else if (addressModal && typeof addressModal === 'object') {
-      updated = addresses.map((a) => {
-        if (a.id === addressModal.id) {
-          return { ...addressForm, id: a.id };
-        }
-        return addressForm.isDefault ? { ...a, isDefault: false } : a;
-      });
-    } else {
-      return;
-    }
-
-    setAddresses(updated);
+  const handleSetDefaultAddress = async (id: string) => {
     try {
-      localStorage.setItem('vizito_patient_addresses', JSON.stringify(updated));
-    } catch (err) {
-      console.error(err);
+      await setDefaultAddressApi(id);
+      await reloadAddresses();
+      showToast('Default address updated.');
+    } catch {
+      showToast('Failed to update default address.');
     }
-
-    setAddressModal(null);
-    showToast('Address saved successfully.');
   };
 
-  const handleSetDefaultAddress = (id: string) => {
-    const updated = addresses.map((a) => ({
-      ...a,
-      isDefault: a.id === id
-    }));
-    setAddresses(updated);
-    try {
-      localStorage.setItem('vizito_patient_addresses', JSON.stringify(updated));
-    } catch (err) {
-      console.error(err);
-    }
-    showToast('Default address updated.');
-  };
-
-  const handleConfirmDeleteAddress = () => {
+  const handleConfirmDeleteAddress = async () => {
     if (!addressDeleteModal) return;
-    const updated = addresses.filter((a) => a.id !== addressDeleteModal.id);
-    setAddresses(updated);
+    const target = addressDeleteModal;
     try {
-      localStorage.setItem('vizito_patient_addresses', JSON.stringify(updated));
-    } catch (err) {
-      console.error(err);
+      await deleteAddressApi(target.addressId);
+      setAddresses((prev) => prev.filter((a) => a.addressId !== target.addressId));
+      showToast('Address deleted successfully.');
+    } catch {
+      showToast('Failed to delete address.');
+    } finally {
+      setAddressDeleteModal(null);
     }
-    setAddressDeleteModal(null);
-    showToast('Address deleted successfully.');
   };
 
-  // 4. Family Member Management Functions
-  const handleSaveFamilyMember = (e: React.FormEvent) => {
+  // 4. Family Member Management Functions — real API. Only add + delete are supported by the backend
+  // association endpoints; editing an existing member is not wired (guarded below).
+  const handleSaveFamilyMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!familyForm.name.trim()) {
       showToast('Please enter family member name.');
       return;
     }
-
-    let updated: FamilyMember[];
-    if (familyModal === 'new') {
-      const newMem: FamilyMember = {
-        id: `fam_${Date.now()}`,
-        name: familyForm.name,
-        relationship: familyForm.relationship,
-        age: 30, // calculated mock
-        gender: familyForm.gender,
-        bloodGroup: 'O+'
-      };
-      updated = [...familyMembers, newMem];
-    } else if (familyModal && typeof familyModal === 'object') {
-      updated = familyMembers.map((f) => {
-        if (f.id === familyModal.id) {
-          return {
-            ...f,
-            name: familyForm.name,
-            relationship: familyForm.relationship,
-            gender: familyForm.gender
-          };
-        }
-        return f;
-      });
-    } else {
+    if (userId == null) {
+      showToast('Your account could not be resolved. Please refresh.');
       return;
     }
-
-    setFamilyMembers(updated);
-    try {
-      localStorage.setItem('vizito_family_members', JSON.stringify(updated));
-    } catch (err) {
-      console.error(err);
+    if (familyModal !== 'new') {
+      // No update endpoint for the linked member's details yet — close without fabricating a change.
+      setFamilyModal(null);
+      return;
     }
-
-    setFamilyModal(null);
-    showToast('Family member saved successfully.');
+    setFamilySubmitting(true);
+    try {
+      await addFamilyMemberApi(userId, {
+        first_name: familyForm.name.trim(),
+        full_name: familyForm.name.trim(),
+        relationship: familyForm.relationship,
+        gender: familyForm.gender,
+        date_of_birth: familyForm.dob || undefined,
+      });
+      setFamilyMembers(await getFamilyMembersApi(userId));
+      setFamilyModal(null);
+      showToast('Family member added successfully.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Failed to add family member.';
+      showToast(Array.isArray(msg) ? msg.join(', ') : String(msg));
+    } finally {
+      setFamilySubmitting(false);
+    }
   };
 
-  const handleConfirmDeleteFamilyMember = () => {
-    if (!familyDeleteModal) return;
-    const updated = familyMembers.filter((f) => f.id !== familyDeleteModal.id);
-    setFamilyMembers(updated);
-    try {
-      localStorage.setItem('vizito_family_members', JSON.stringify(updated));
-    } catch (err) {
-      console.error(err);
+  const handleConfirmDeleteFamilyMember = async () => {
+    if (!familyDeleteModal || userId == null) {
+      setFamilyDeleteModal(null);
+      return;
     }
-    setFamilyDeleteModal(null);
-    showToast('Family member deleted successfully.');
+    const target = familyDeleteModal;
+    try {
+      await removeFamilyMemberApi(userId, target.associationId);
+      setFamilyMembers((prev) => prev.filter((f) => f.associationId !== target.associationId));
+      showToast('Family member removed.');
+    } catch {
+      showToast('Failed to remove family member.');
+    } finally {
+      setFamilyDeleteModal(null);
+    }
   };
 
   // 5. Notification Preference Toggle
@@ -368,8 +331,8 @@ export default function ProfileLayout() {
     });
   };
 
-  // 6. Change Password Submit
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  // 6. Change Password Submit — real backend operation (verifies the current password server-side).
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
 
@@ -386,10 +349,19 @@ export default function ProfileLayout() {
       return;
     }
 
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    showToast('Password changed successfully.');
+    setSavingPassword(true);
+    try {
+      await changePasswordApi(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast('Password changed successfully.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      setPasswordError(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to change password.'));
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   // 7. Logout Handler
@@ -401,7 +373,7 @@ export default function ProfileLayout() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 max-w-6xl mx-auto">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 max-w-7xl mx-auto">
       {/* Toast Banner */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-top-3">
@@ -422,11 +394,19 @@ export default function ProfileLayout() {
       <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
         <div className="flex items-center gap-5 z-10">
           <div className="relative group">
-            <img
-              src={profilePhoto}
-              alt={fullName}
-              className="w-20 h-20 rounded-2xl object-cover border-2 border-white/30 shadow-md"
-            />
+            {profilePhoto ? (
+              <img
+                src={profilePhoto}
+                alt={fullName || 'Patient'}
+                className="w-20 h-20 rounded-2xl object-cover border-2 border-white/30 shadow-md"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-2xl border-2 border-white/30 shadow-md bg-white/15 backdrop-blur-md flex items-center justify-center">
+                <span className="text-2xl font-black text-white tracking-tight">
+                  {(fullName || 'Patient').split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'P'}
+                </span>
+              </div>
+            )}
             <label className="absolute -bottom-1 -right-1 bg-teal-500 hover:bg-teal-600 text-white p-1.5 rounded-xl cursor-pointer shadow-md transition-transform group-hover:scale-110">
               <Camera className="w-3.5 h-3.5" />
               <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
@@ -443,12 +423,18 @@ export default function ProfileLayout() {
         </div>
 
         <div className="flex items-center gap-2 z-10">
-          <button
-            onClick={() => setProfilePhoto('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80')}
-            className="text-xs font-bold text-teal-200 hover:text-white bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/20 transition-all"
-          >
-            Remove Photo
-          </button>
+          {profilePhoto && (
+            <button
+              onClick={async () => {
+                setProfilePhoto('');
+                try { await updateProfileApi({ profilePicture: '' }); showToast('Profile photo removed.'); }
+                catch { showToast('Failed to remove photo.'); }
+              }}
+              className="text-xs font-bold text-teal-200 hover:text-white bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/20 transition-all"
+            >
+              Remove Photo
+            </button>
+          )}
         </div>
       </div>
 
@@ -624,9 +610,10 @@ export default function ProfileLayout() {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md"
+                      disabled={savingPersonal}
+                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold shadow-md"
                     >
-                      Save Profile
+                      {savingPersonal ? 'Saving...' : 'Save Profile'}
                     </button>
                   </div>
                 )}
@@ -651,7 +638,7 @@ export default function ProfileLayout() {
                 )}
               </div>
 
-              <form onSubmit={handleInitiateContactUpdate} className="space-y-4 text-xs">
+              <form onSubmit={handleSaveContact} className="space-y-4 text-xs">
                 <div>
                   <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Mobile Number</label>
                   <input
@@ -683,13 +670,6 @@ export default function ProfileLayout() {
                 </div>
 
                 {isEditingContact && (
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>OTP verification code will be sent to confirm contact changes.</span>
-                  </div>
-                )}
-
-                {isEditingContact && (
                   <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                     <button
                       type="button"
@@ -700,9 +680,10 @@ export default function ProfileLayout() {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md"
+                      disabled={savingContact}
+                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold shadow-md"
                     >
-                      Update & Verify OTP
+                      {savingContact ? 'Saving...' : 'Save Contact Info'}
                     </button>
                   </div>
                 )}
@@ -718,33 +699,24 @@ export default function ProfileLayout() {
                   <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
                     <MapPin className="w-5 h-5 text-teal-600" /> Saved Addresses
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Manage doorstep delivery and home visit locations.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Your saved delivery and home-visit locations.</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setAddressForm({
-                      label: 'Home',
-                      addressLine: '',
-                      landmark: '',
-                      city: 'Hyderabad',
-                      state: 'Telangana',
-                      pinCode: '',
-                      isDefault: false
-                    });
-                    setAddressModal('new');
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" /> Add Address
-                </button>
               </div>
 
-              {/* Address Cards List */}
+              {/* Adding/editing an address requires selecting country/state/city from the catalogue
+                  (numeric IDs validated server-side). Those pickers are not built yet, so creation is
+                  reported here rather than fabricated. Viewing, deleting, and set-default are live. */}
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Adding a new address is coming soon (requires city/state selection). You can view, delete, or change your default address below.</span>
+              </div>
+
+              {/* Address Cards List (real, from /patients/me) */}
               {addresses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {addresses.map((addr) => (
                     <div
-                      key={addr.id}
+                      key={addr.addressId}
                       className={`p-4 rounded-2xl border flex flex-col justify-between space-y-3 relative ${
                         addr.isDefault
                           ? 'border-teal-600 bg-teal-50/20 ring-2 ring-teal-600/20 shadow-xs'
@@ -753,14 +725,14 @@ export default function ProfileLayout() {
                     >
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-extrabold text-slate-900 text-sm">{addr.label}</span>
+                          <span className="font-extrabold text-slate-900 text-sm">{addr.label || 'Address'}</span>
                           {addr.isDefault ? (
                             <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-100 px-2.5 py-0.5 rounded-full border border-teal-200">
                               Default
                             </span>
                           ) : (
                             <button
-                              onClick={() => handleSetDefaultAddress(addr.id)}
+                              onClick={() => handleSetDefaultAddress(addr.addressId)}
                               className="text-[10px] font-bold text-slate-500 hover:text-teal-700 underline"
                             >
                               Set as Default
@@ -768,31 +740,13 @@ export default function ProfileLayout() {
                           )}
                         </div>
 
-                        <p className="text-xs text-slate-700 font-semibold">{addr.addressLine}</p>
+                        {addr.addressLine1 && <p className="text-xs text-slate-700 font-semibold">{addr.addressLine1}</p>}
+                        {addr.addressLine2 && <p className="text-xs text-slate-600">{addr.addressLine2}</p>}
                         {addr.landmark && <p className="text-xs text-slate-500">Landmark: {addr.landmark}</p>}
-                        <p className="text-xs text-slate-500">
-                          {addr.city}, {addr.state} - {addr.pinCode}
-                        </p>
+                        {addr.pincode && <p className="text-xs text-slate-500">Pincode: {addr.pincode}</p>}
                       </div>
 
                       <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/60 text-xs font-bold">
-                        <button
-                          onClick={() => {
-                            setAddressForm({
-                              label: addr.label,
-                              addressLine: addr.addressLine,
-                              landmark: addr.landmark,
-                              city: addr.city,
-                              state: addr.state,
-                              pinCode: addr.pinCode,
-                              isDefault: addr.isDefault
-                            });
-                            setAddressModal(addr);
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-slate-700 hover:bg-slate-200 flex items-center gap-1"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" /> Edit
-                        </button>
                         <button
                           onClick={() => setAddressDeleteModal(addr)}
                           className="px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-100 flex items-center gap-1"
@@ -806,7 +760,6 @@ export default function ProfileLayout() {
               ) : (
                 <div className="py-12 text-center text-slate-500 text-xs">
                   <p className="font-bold">No saved addresses.</p>
-                  <p>Add a new address to use for home care, delivery, and ambulance pickup.</p>
                 </div>
               )}
             </div>
@@ -824,7 +777,7 @@ export default function ProfileLayout() {
                 </div>
                 <button
                   onClick={() => {
-                    setFamilyForm({ name: '', dob: '1970-01-01', relationship: 'Father', gender: 'Male' });
+                    setFamilyForm({ name: '', dob: '', relationship: 'Father', gender: 'Male' });
                     setFamilyModal('new');
                   }}
                   className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
@@ -837,7 +790,7 @@ export default function ProfileLayout() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {familyMembers.map((member) => (
                     <div
-                      key={member.id}
+                      key={member.associationId}
                       className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-center justify-between"
                     >
                       <div className="space-y-0.5">
@@ -848,25 +801,11 @@ export default function ProfileLayout() {
                           </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-500">
-                          {member.gender || 'Male'} • {member.age} Years
+                          {member.gender || '—'}{member.age != null ? ` • ${member.age} Years` : ''}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2 text-xs font-bold">
-                        <button
-                          onClick={() => {
-                            setFamilyForm({
-                              name: member.name,
-                              dob: '1970-01-01',
-                              relationship: member.relationship,
-                              gender: member.gender || 'Male'
-                            });
-                            setFamilyModal(member);
-                          }}
-                          className="p-2 text-slate-600 hover:bg-slate-200 rounded-xl"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
                         <button
                           onClick={() => setFamilyDeleteModal(member)}
                           className="p-2 text-rose-600 hover:bg-rose-100 rounded-xl"
@@ -995,9 +934,10 @@ export default function ProfileLayout() {
 
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all"
+                  disabled={savingPassword}
+                  className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold text-xs shadow-md transition-all"
                 >
-                  Update Password
+                  {savingPassword ? 'Updating...' : 'Update Password'}
                 </button>
               </form>
             </div>
@@ -1046,171 +986,6 @@ export default function ProfileLayout() {
         </div>
       </div>
 
-      {/* OTP Verification Modal */}
-      {showOtpDialog && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2 text-teal-700">
-                <ShieldCheck className="w-5 h-5 text-teal-600" /> Verify Contact Change
-              </h3>
-              <button onClick={() => setShowOtpDialog(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-slate-600 font-medium">
-              Enter the 4-digit verification OTP code sent to your updated mobile ({pendingContactUpdate?.mobile}):
-            </p>
-
-            <div>
-              <input
-                type="text"
-                maxLength={6}
-                value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value)}
-                placeholder="Enter 4-digit OTP (e.g. 1234)"
-                className="w-full text-center tracking-widest text-lg font-black p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowOtpDialog(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleVerifyOtp}
-                className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md"
-              >
-                Verify & Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Address Form Modal */}
-      {addressModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2 text-teal-700">
-                <MapPin className="w-5 h-5 text-teal-600" /> {addressModal === 'new' ? 'Add Address' : 'Edit Address'}
-              </h3>
-              <button onClick={() => setAddressModal(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAddress} className="space-y-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Label</label>
-                <select
-                  value={addressForm.label}
-                  onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
-                >
-                  <option value="Home">Home</option>
-                  <option value="Work">Work</option>
-                  <option value="Parents House">Parents House</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Address Line</label>
-                <input
-                  type="text"
-                  required
-                  value={addressForm.addressLine}
-                  onChange={(e) => setAddressForm({ ...addressForm, addressLine: e.target.value })}
-                  placeholder="House/Flat No, Building, Street"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Landmark</label>
-                <input
-                  type="text"
-                  value={addressForm.landmark}
-                  onChange={(e) => setAddressForm({ ...addressForm, landmark: e.target.value })}
-                  placeholder="Near landmark..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    required
-                    value={addressForm.city}
-                    onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">State</label>
-                  <input
-                    type="text"
-                    required
-                    value={addressForm.state}
-                    onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Pincode</label>
-                  <input
-                    type="text"
-                    required
-                    value={addressForm.pinCode}
-                    onChange={(e) => setAddressForm({ ...addressForm, pinCode: e.target.value })}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="chkDefault"
-                  checked={addressForm.isDefault}
-                  onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
-                  className="w-4 h-4 text-teal-600 rounded"
-                />
-                <label htmlFor="chkDefault" className="font-bold text-slate-700 cursor-pointer">
-                  Set as default delivery address
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setAddressModal(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md"
-                >
-                  Save Address
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Delete Address Confirmation */}
       {addressDeleteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1224,7 +999,7 @@ export default function ProfileLayout() {
               </button>
             </div>
             <p className="text-slate-600 font-semibold">
-              Are you sure you want to delete <strong className="text-slate-800">{addressDeleteModal.label} Address</strong>?
+              Are you sure you want to delete <strong className="text-slate-800">{addressDeleteModal.label || 'this'} address</strong>?
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <button
@@ -1276,15 +1051,10 @@ export default function ProfileLayout() {
                 <label className="block font-bold text-slate-700 mb-1">Relationship</label>
                 <select
                   value={familyForm.relationship}
-                  onChange={(e) => setFamilyForm({ ...familyForm, relationship: e.target.value })}
+                  onChange={(e) => setFamilyForm({ ...familyForm, relationship: e.target.value as FamilyRelationship })}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
                 >
-                  <option value="Father">Father</option>
-                  <option value="Mother">Mother</option>
-                  <option value="Spouse">Spouse</option>
-                  <option value="Child">Child</option>
-                  <option value="Sibling">Sibling</option>
-                  <option value="Other">Other</option>
+                  {FAMILY_RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
 
@@ -1322,9 +1092,10 @@ export default function ProfileLayout() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md"
+                  disabled={familySubmitting}
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold shadow-md"
                 >
-                  Save Member
+                  {familySubmitting ? 'Saving...' : 'Save Member'}
                 </button>
               </div>
             </form>

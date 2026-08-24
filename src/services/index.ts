@@ -52,14 +52,23 @@ apiClient.interceptors.response.use(
     if (error.response) {
       const { status } = error.response;
 
+      // Only force-logout on a 401 that came back from an authenticated request
+      // (one that actually carried a bearer token) — that's a real session expiry.
+      // A 401 on an unauthenticated auth call (login, register, forgot-password,
+      // OTP verify) is a normal "wrong credentials" response and must be left alone
+      // so the calling component's own catch block can show its error message,
+      // instead of the page silently reloading out from under it.
       if (status === 401) {
-        // Clear auth details on unauthorized response
-        localStorage.removeItem('vizito_user');
-        localStorage.removeItem('vizito_token');
+        const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
+        if (hadAuthHeader) {
+          // Clear auth details on unauthorized response
+          localStorage.removeItem('vizito_user');
+          localStorage.removeItem('vizito_token');
 
-        // Redirect to login screen if window object exists
-        if (typeof window !== 'undefined') {
-          window.location.href = '/auth/login';
+          // Redirect to login screen if window object exists
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
+          }
         }
       }
     }

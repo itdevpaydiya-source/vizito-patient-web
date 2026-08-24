@@ -15,7 +15,7 @@ import {
   AlertCircle,
   RefreshCw
 } from 'lucide-react';
-import { registerPatientApi, sendOtpApi, verifyOtpApi } from '../../../services/authHelper';
+import { registerPatientApi, registerSendOtpApi, registerVerifyOtpApi } from '../../../services/authHelper';
 
 interface RegistrationModuleProps {
   onBackToLogin?: () => void;
@@ -39,6 +39,9 @@ export default function RegistrationModule({
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [otpTimer, setOtpTimer] = useState(300);
+  // Backend-issued proof of contact verification. Held only for the registration flow — it is
+  // NOT a patient auth token and must never be stored in vizito_token.
+  const [registrationToken, setRegistrationToken] = useState('');
 
   // Step 2: Personal Information State
   const [fullName, setFullName] = useState('');
@@ -63,7 +66,7 @@ export default function RegistrationModule({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validation functions
-  const validateMobile = (num: string) => /^\d{10}$/.test(num);
+  const validateMobile = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
   const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
 
   // --- STEP 1: SEND & VERIFY OTP ---
@@ -73,7 +76,7 @@ export default function RegistrationModule({
     setSuccessMessage('');
 
     if (verificationType === 'mobile' && !validateMobile(mobileNumber)) {
-      setErrorMessage('Please enter a valid 10-digit mobile number');
+      setErrorMessage('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9');
       return;
     }
     if (verificationType === 'email' && !validateEmail(emailAddress)) {
@@ -84,12 +87,15 @@ export default function RegistrationModule({
     setIsSubmitting(true);
     try {
       const target = verificationType === 'mobile' ? mobileNumber : emailAddress;
-      await sendOtpApi(target, verificationType);
+      await registerSendOtpApi(target, verificationType);
       setIsOtpSent(true);
       setOtpTimer(300);
-      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + mobileNumber : emailAddress}. Use mock code: 123456`);
+      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + mobileNumber : emailAddress}.`);
     } catch (err: any) {
-      setErrorMessage('Failed to send OTP. Please try again.');
+      // 409 = the phone/email already belongs to a patient — steer the user to login.
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message;
+      setErrorMessage(status === 409 ? (msg || 'An account already exists. Please log in instead.') : (msg || 'Failed to send OTP. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -107,7 +113,9 @@ export default function RegistrationModule({
     setIsSubmitting(true);
     try {
       const target = verificationType === 'mobile' ? mobileNumber : emailAddress;
-      await verifyOtpApi(target, otpCode);
+      const result = await registerVerifyOtpApi(target, otpCode, verificationType);
+      // Store the backend proof for the final registration request only (never as an auth token).
+      setRegistrationToken(result?.registration_token || '');
       setIsOtpVerified(true);
       setSuccessMessage('Contact verified successfully! Proceeding to Personal Info...');
       setTimeout(() => {
@@ -116,7 +124,7 @@ export default function RegistrationModule({
         setCurrentStep(2);
       }, 800);
     } catch (err: any) {
-      setErrorMessage('Invalid OTP code. Use code: 123456');
+      setErrorMessage(err.response?.data?.message || 'Invalid or expired OTP code.');
     } finally {
       setIsSubmitting(false);
     }
@@ -163,38 +171,135 @@ export default function RegistrationModule({
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
+        async (position) => {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
           setLatitude(lat);
           setLongitude(lng);
 
-          // Pre-fill mock geocoded address
-          setStreet('Flat 402, Green Valley Apartments, Jubilee Hills');
-          setCity('Hyderabad');
-          setState('Telangana');
-          setPincode('500033');
-          setIsDetectingLocation(false);
-          setAddressMode('auto');
-          setSuccessMessage('Location detected automatically! You can edit the address fields if needed.');
+          try {
+            let detectedStreet = '';
+            let detectedCity = '';
+            let detectedState = '';
+            let detectedPincode = '';
+
+            // 1. Primary High-Accuracy Reverse Geocoding via OpenStreetMap Nominatim (zoom=18 includes postal code)
+            try {
+              const nomRes = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+                { headers: { 'Accept-Language': 'en' } }
+              );
+              if (nomRes.ok) {
+                const nomData = await nomRes.json();
+                const addr = nomData.address || {};
+
+                detectedStreet = [
+                  addr.building,
+                  addr.house_number,
+                  addr.road,
+                  addr.suburb || addr.neighbourhood || addr.residential
+                ].filter(Boolean).join(', ');
+
+                detectedCity = addr.city || addr.town || addr.city_district || addr.district || addr.county || '';
+                detectedState = addr.state || '';
+
+                if (addr.postcode) {
+                  const cleanPin = String(addr.postcode).replace(/\D/g, '').slice(0, 6);
+                  if (cleanPin.length === 6) detectedPincode = cleanPin;
+                }
+                if (!detectedPincode && nomData.display_name) {
+                  const pinMatch = nomData.display_name.match(/\b([1-9]\d{5})\b/);
+                  if (pinMatch) detectedPincode = pinMatch[1];
+                }
+              }
+            } catch (nomErr) {
+              console.warn('[handleAutoCaptureAddress] Nominatim error:', nomErr);
+            }
+
+            // 2. Secondary fallback via BigDataCloud to fill any remaining missing fields
+            if (!detectedCity || !detectedState || !detectedPincode || !detectedStreet) {
+              try {
+                const bdcRes = await fetch(
+                  `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+                );
+                if (bdcRes.ok) {
+                  const bdcData = await bdcRes.json();
+                  if (!detectedStreet) detectedStreet = [bdcData.locality, bdcData.principalSubdivisionCity].filter(Boolean).join(', ');
+                  if (!detectedCity) detectedCity = bdcData.city || bdcData.locality || bdcData.principalSubdivisionCity || '';
+                  if (!detectedState) detectedState = bdcData.principalSubdivision || '';
+                  if (!detectedPincode && bdcData.postcode) {
+                    const cleanPin = String(bdcData.postcode).replace(/\D/g, '').slice(0, 6);
+                    if (cleanPin.length === 6) detectedPincode = cleanPin;
+                  }
+                }
+              } catch (bdcErr) {
+                console.warn('[handleAutoCaptureAddress] BigDataCloud error:', bdcErr);
+              }
+            }
+
+            // 3. If Pincode is still missing but we have City/Area, query Nominatim search for the pincode
+            if (!detectedPincode && (detectedCity || detectedStreet)) {
+              try {
+                const searchQ = [detectedStreet, detectedCity, detectedState].filter(Boolean).join(', ');
+                const searchRes = await fetch(
+                  `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQ)}&format=json&addressdetails=1&limit=1`
+                );
+                if (searchRes.ok) {
+                  const searchData = await searchRes.json();
+                  if (searchData && searchData[0]?.address?.postcode) {
+                    const cleanPin = String(searchData[0].address.postcode).replace(/\D/g, '').slice(0, 6);
+                    if (cleanPin.length === 6) detectedPincode = cleanPin;
+                  }
+                }
+              } catch (searchErr) {}
+            }
+
+            if (detectedStreet && !street) setStreet(detectedStreet);
+            if (detectedCity) setCity(detectedCity);
+            if (detectedState) setState(detectedState);
+            if (detectedPincode) setPincode(detectedPincode);
+
+            setSuccessMessage('Location detected and all address fields auto-filled! You can edit any field below.');
+          } catch (geoErr) {
+            console.warn('[handleAutoCaptureAddress] Reverse geocode error:', geoErr);
+            setSuccessMessage('Location coordinates captured. Please enter your address details below.');
+          } finally {
+            setIsDetectingLocation(false);
+            setAddressMode('manual');
+          }
         },
         () => {
-          // Fallback if location permission denied/unavailable
-          setLatitude(17.4399);
-          setLongitude(78.3809);
-          setStreet('Flat 102, Sunrise Towers, Hitech City');
-          setCity('Hyderabad');
-          setState('Telangana');
-          setPincode('500081');
           setIsDetectingLocation(false);
-          setAddressMode('auto');
-          setSuccessMessage('Location approximation retrieved. Please review and adjust the address details.');
+          setAddressMode('manual');
+          setErrorMessage('Could not detect your location automatically. Please enter your address manually.');
         },
-        { timeout: 8000 }
+        { timeout: 10000, enableHighAccuracy: true }
       );
     } else {
       setIsDetectingLocation(false);
       setErrorMessage('Geolocation is not supported by your browser. Please enter address manually.');
+    }
+  };
+
+  const handlePincodeChange = async (val: string) => {
+    const cleanPin = val.replace(/\D/g, '').slice(0, 6);
+    setPincode(cleanPin);
+    if (errorMessage) setErrorMessage('');
+
+    if (cleanPin.length === 6) {
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+            const po = data[0].PostOffice[0];
+            if (po.District) setCity(po.District);
+            if (po.State) setState(po.State);
+          }
+        }
+      } catch (pinErr) {
+        console.warn('[handlePincodeChange] Postal API lookup error:', pinErr);
+      }
     }
   };
 
@@ -203,12 +308,19 @@ export default function RegistrationModule({
     setErrorMessage('');
 
     if (!street.trim() || !city.trim() || !state.trim() || !pincode.trim()) {
-      setErrorMessage('At least one valid complete address is required before completing registration.');
+      setErrorMessage('Please fill in all mandatory address fields before proceeding.');
+      return;
+    }
+
+    if (pincode.trim().length !== 6) {
+      setErrorMessage('Please enter a valid 6-digit pincode.');
       return;
     }
 
     setIsAddressSaved(true);
-    setSuccessMessage('Address saved successfully! Click Complete Registration to finalize.');
+    setErrorMessage('');
+    setSuccessMessage('');
+    setCurrentStep(4);
   };
 
   // --- STEP 4: COMPLETE REGISTRATION ---
@@ -225,9 +337,11 @@ export default function RegistrationModule({
     try {
       const result = await registerPatientApi({
         full_name: fullName,
-        mobile: mobileNumber || '9876543210',
-        email: emailAddress,
+        phone: mobileNumber,
+        email: emailAddress || undefined,
         password,
+        // Backend-authoritative proof that the phone/email was OTP-verified (Step 1).
+        registration_token: registrationToken,
         address: {
           street,
           city,
@@ -239,19 +353,20 @@ export default function RegistrationModule({
         }
       });
 
+      // Use only the real backend response — no fabricated identity/token.
       const userData = {
-        patient_id: result.patient_id || `PAT-${Math.floor(100000 + Math.random() * 900000)}`,
-        fullName: fullName,
-        mobile: mobileNumber || '9876543210',
-        email: emailAddress || 'patient@vizito.com',
-        role: 'patient',
-        token: result.token || `jwt_patient_token_${Date.now()}`
+        patient_id: result.patient_id,
+        fullName: result.full_name || fullName,
+        mobile: result.mobile || mobileNumber,
+        email: result.email || emailAddress || '',
+        role: result.role || 'patient',
+        token: result.access_token || result.token
       };
 
       // Auto Login & Redirect to Dashboard
       onRegisterSuccess(userData);
     } catch (err: any) {
-      setErrorMessage('Registration failed. Please check your information and try again.');
+      setErrorMessage(err.response?.data?.message || 'Registration failed. Please check your information and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -660,7 +775,10 @@ export default function RegistrationModule({
                   <input
                     type="text"
                     value={street}
-                    onChange={(e) => setStreet(e.target.value)}
+                    onChange={(e) => {
+                      setStreet(e.target.value);
+                      if (errorMessage) setErrorMessage('');
+                    }}
                     placeholder="House/Flat No, Street, Area"
                     className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary outline-none"
                     required
@@ -673,7 +791,10 @@ export default function RegistrationModule({
                     <input
                       type="text"
                       value={city}
-                      onChange={(e) => setCity(e.target.value)}
+                      onChange={(e) => {
+                        setCity(e.target.value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
                       placeholder="City"
                       className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary outline-none"
                       required
@@ -685,7 +806,10 @@ export default function RegistrationModule({
                     <input
                       type="text"
                       value={state}
-                      onChange={(e) => setState(e.target.value)}
+                      onChange={(e) => {
+                        setState(e.target.value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
                       placeholder="State"
                       className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary outline-none"
                       required
@@ -700,7 +824,7 @@ export default function RegistrationModule({
                       type="text"
                       maxLength={6}
                       value={pincode}
-                      onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                      onChange={(e) => handlePincodeChange(e.target.value)}
                       placeholder="6-digit Pincode"
                       className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary outline-none"
                       required
@@ -717,21 +841,17 @@ export default function RegistrationModule({
 
                 <div className="flex gap-3 pt-3">
                   <button
-                    type="submit"
-                    className="flex-1 bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl font-bold text-xs cursor-pointer transition-all"
-                  >
-                    Save Address
-                  </button>
-                  <button
                     type="button"
                     onClick={() => {
-                      if (!street || !city || !state || !pincode) {
-                        setErrorMessage('At least one valid address is required before proceeding.');
-                        return;
-                      }
-                      setIsAddressSaved(true);
-                      setCurrentStep(4);
+                      setErrorMessage('');
+                      setCurrentStep(2);
                     }}
+                    className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold text-xs cursor-pointer transition-all"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
                     className="flex-1 bg-primary hover:bg-primary-hover text-white py-3 rounded-xl font-bold text-xs shadow-md shadow-primary/20 cursor-pointer transition-all"
                   >
                     Proceed to Review

@@ -125,7 +125,23 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           <span>{t('Medical Records')}</span>
         </NavLink>
 
-        {/* 5. Notifications */}
+        {/* 5. Ratings & Reviews */}
+        <NavLink
+          to="/reviews"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 shadow-xs ring-1 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Star className="w-4 h-4 shrink-0" />
+          <span>{t('Ratings & Reviews')}</span>
+        </NavLink>
+
+        {/* 6. Notifications */}
         <NavLink
           to="/notifications"
           onClick={onClose}
@@ -141,9 +157,6 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             <Bell className="w-4 h-4 shrink-0" />
             <span>{t('Notifications')}</span>
           </div>
-          <span className="text-[10px] font-bold bg-rose-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-            4
-          </span>
         </NavLink>
 
         {/* Separator */}

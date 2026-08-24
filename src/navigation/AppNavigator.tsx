@@ -22,6 +22,7 @@ import SettingsScreen from '../presentation/modules/settings/SettingsScreen';
 import BookConsultationScreen from '../presentation/modules/consultations/BookConsultationScreen';
 import PharmacyOrdersScreen from '../presentation/modules/pharmacy/PharmacyOrdersScreen';
 import FamilyProfilesScreen from '../presentation/modules/family/FamilyProfilesScreen';
+import ReviewsScreen from '../presentation/modules/reviews/ReviewsScreen';
 
 import { useRole } from '../store/role/RoleContext';
 
@@ -60,6 +61,9 @@ const LoginWrapper = () => {
         if (userData.token) {
           localStorage.setItem('vizito_token', userData.token);
         }
+        // Tell the NotificationsContext (mounted above the router) to fetch now that a session exists,
+        // so the bell populates immediately instead of waiting for the next poll.
+        window.dispatchEvent(new Event('vizito-auth-changed'));
         setRole('patient');
         navigate('/dashboard');
       }}
@@ -90,6 +94,7 @@ const RegisterWrapper = () => {
         if (userData.token) {
           localStorage.setItem('vizito_token', userData.token);
         }
+        window.dispatchEvent(new Event('vizito-auth-changed'));
         setRole('patient');
         navigate('/dashboard');
       }}
@@ -127,6 +132,7 @@ const AppNavigator = () => {
         <Route path="/equipment-rentals" element={<UniversalBookingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />
+        <Route path="/reviews" element={<ReviewsScreen />} />
         <Route path="/my-consultations" element={<MyConsultationsScreen />} />
         <Route path="/bookings" element={<MyConsultationsScreen />} />
         <Route path="/appointments" element={<MyConsultationsScreen />} />

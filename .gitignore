@@ -26,3 +26,9 @@ dist-ssr
 # Testing and agent resources
 .testsprite/
 .agents/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

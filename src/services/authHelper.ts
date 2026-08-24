@@ -3,9 +3,11 @@ import apiClient from "./index";
 
 export interface PatientRegisterPayload {
   full_name: string;
-  mobile: string;
+  phone: string;
   email?: string;
   password: string;
+  // Backend-issued proof that the phone/email was OTP-verified (from registerVerifyOtpApi).
+  registration_token: string;
   address?: {
     street: string;
     city: string;
@@ -17,67 +19,55 @@ export interface PatientRegisterPayload {
   };
 }
 
-export interface LoginPayload {
-  identifier: string; // Mobile or Email
-  loginType: 'mobile' | 'email';
-  authMethod: 'otp' | 'password';
-  password?: string;
-  otp?: string;
+// NEW-patient registration Step 1: request a registration OTP for a not-yet-registered phone/email.
+export const registerSendOtpApi = async (identifier: string, type: 'mobile' | 'email') => {
+  const payload = type === 'mobile' ? { phone: identifier } : { email: identifier };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.REGISTER_SEND_OTP, payload);
+  return response.data;
+};
+
+// NEW-patient registration Step 2: verify the OTP; returns a short-lived registration_token.
+export const registerVerifyOtpApi = async (identifier: string, otp: string, type: 'mobile' | 'email') => {
+  const payload = type === 'mobile' ? { phone: identifier, otp } : { email: identifier, otp };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.REGISTER_VERIFY_OTP, payload);
+  return response.data;
+};
+
+export interface PatientLoginPayload {
+  email?: string;
+  phone?: string;
+  password: string;
 }
 
+// Registers a patient against the real backend. A backend failure throws the real error —
+// there is intentionally NO fake/success fallback.
 export const registerPatientApi = async (payload: PatientRegisterPayload) => {
-  try {
-    const response = await apiClient.post(ENDPOINTS.AUTH.REGISTER, payload);
-    return response.data;
-  } catch (err) {
-    // Fallback simulation for client side testing
-    return {
-      success: true,
-      token: `jwt_patient_token_${Date.now()}`,
-      patient_id: `PAT-${Math.floor(100000 + Math.random() * 900000)}`,
-      full_name: payload.full_name,
-      mobile: payload.mobile,
-      email: payload.email || '',
-      role: 'patient'
-    };
-  }
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.REGISTER, payload);
+  return response.data;
 };
 
-export const loginPatientApi = async (payload: LoginPayload) => {
-  try {
-    const response = await apiClient.post(ENDPOINTS.AUTH.LOGIN, payload);
-    return response.data;
-  } catch (err) {
-    // Fallback simulation for client side testing
-    return {
-      success: true,
-      token: `jwt_patient_token_${Date.now()}`,
-      patient_id: `PAT-984210`,
-      full_name: 'Alex Morgan',
-      mobile: payload.loginType === 'mobile' ? payload.identifier : '9876543210',
-      email: payload.loginType === 'email' ? payload.identifier : 'alex.morgan@example.com',
-      role: 'patient'
-    };
-  }
+// Logs a patient in with email/phone + password. No fake fallback.
+export const loginPatientApi = async (payload: PatientLoginPayload) => {
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.LOGIN, payload);
+  return response.data;
 };
 
-export const verifyOtpApi = async (identifier: string, otp: string) => {
-  try {
-    const response = await apiClient.post('/auth/verify-otp', { identifier, otp });
-    return response.data;
-  } catch (err) {
-    if (otp === '123456' || otp === '000000') {
-      return { success: true, verified: true };
-    }
-    throw new Error('Invalid OTP code');
-  }
+// Google patient sign-in — points at the patient route (backend Google flow unchanged).
+export const googlePatientApi = async (idToken: string) => {
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.GOOGLE, { idToken });
+  return response.data;
 };
 
+// Requests a login OTP for an existing patient. No fake fallback.
 export const sendOtpApi = async (identifier: string, type: 'mobile' | 'email') => {
-  try {
-    const response = await apiClient.post('/auth/send-otp', { identifier, type });
-    return response.data;
-  } catch (err) {
-    return { success: true, message: `OTP sent successfully to ${identifier}` };
-  }
+  const payload = type === 'mobile' ? { phone: identifier } : { email: identifier };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.SEND_OTP, payload);
+  return response.data;
+};
+
+// Verifies a login OTP and returns the real auth response (tokens). No fake fallback.
+export const verifyOtpApi = async (identifier: string, otp: string, type: 'mobile' | 'email') => {
+  const payload = type === 'mobile' ? { phone: identifier, otp } : { email: identifier, otp };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.VERIFY_OTP, payload);
+  return response.data;
 };
