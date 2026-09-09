@@ -1,7 +1,7 @@
 import axios, { AxiosError, type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 
 // Get API base URL from Vite environment variables or default to localhost API
-const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
+const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://157.173.220.89/';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
