@@ -150,8 +150,8 @@ export default function RegistrationModule({
       return;
     }
 
-    if (!password || password.length < 6) {
-      setErrorMessage('Password is mandatory and must be at least 6 characters');
+    if (!password || password.length < 8) {
+      setErrorMessage('Password is mandatory and must be at least 8 characters');
       return;
     }
 
@@ -683,7 +683,7 @@ export default function RegistrationModule({
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 6 characters"
+                    placeholder="Minimum 8 characters"
                     className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none pr-8"
                     required
                   />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
@@ -162,7 +162,60 @@ export default function UniversalBookingScreen() {
 
   // Derived (never stored) so the Clinic/Branch display and the slots grid can never disagree or go
   // stale — both read straight from the current `slots`/`selectedSlot` state on every render.
-  const activeSlots = slots.filter((s) => !isSlotInPast(s.slot_date || selectedDate, s.start_time));
+  // Fills missing slots between consecutive intervals with is_booked: true so that booked slots
+  // are shown in the UI and the 4-column hourly grid layout never shifts or leaves incomplete rows.
+  const activeSlots = useMemo(() => {
+    const raw = slots.filter((s) => !isSlotInPast(s.slot_date || selectedDate, s.start_time));
+    if (raw.length <= 1) return raw;
+
+    const toMins = (t: string) => {
+      const [h, m] = (t || '').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+    const formatMins = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    };
+
+    // Detect common duration step (e.g. 15 mins)
+    let step = 15;
+    for (let i = 1; i < raw.length; i++) {
+      const diff = toMins(raw[i].start_time) - toMins(raw[i - 1].start_time);
+      if (diff > 0 && diff <= 60 && (diff === 15 || diff === 20 || diff === 30 || diff === 45 || diff === 60)) {
+        step = diff;
+        break;
+      }
+    }
+
+    const result: AvailableSlot[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      if (i > 0) {
+        const prevMins = toMins(raw[i - 1].start_time);
+        const currMins = toMins(raw[i].start_time);
+        // If there's an interval gap between consecutive slots (e.g. 3:00 to 3:30), fill with booked slots
+        if (currMins > prevMins + step && currMins - prevMins <= 120) {
+          for (let m = prevMins + step; m < currMins; m += step) {
+            result.push({
+              time_slot_id: -(i * 1000 + m),
+              slot_date: raw[i].slot_date || selectedDate,
+              start_time: formatMins(m),
+              end_time: formatMins(m + step),
+              facility_id: raw[i].facility_id,
+              fee: raw[i].fee,
+              facility_name: raw[i].facility_name,
+              facility_type: raw[i].facility_type,
+              facility_address: raw[i].facility_address,
+              is_booked: true,
+            });
+          }
+        }
+      }
+      result.push(raw[i]);
+    }
+    return result;
+  }, [slots, selectedDate]);
+
   // A doctor-direct doctor can hold slots at more than one clinic on the same day — dedupe by
   // facility_id so the "multiple locations" case can be detected honestly instead of guessing.
   const distinctFacilities = Array.from(
@@ -317,7 +370,7 @@ export default function UniversalBookingScreen() {
   // a slot away from a patient who'd actually pay for it. For online modes this just moves to the
   // payment step; the booking is only created in submitPayment(), atomically with a successful charge.
   const proceedToPayment = () => {
-    if (!bookingDoctorPartnerId || !selectedSlot) return;
+    if (!bookingDoctorPartnerId || !selectedSlot || selectedSlot.is_booked) return;
     setError(null);
     setCreatedBooking(null);
     setPaymentResult(null);
@@ -325,7 +378,7 @@ export default function UniversalBookingScreen() {
   };
 
   const confirmCashAtClinic = async () => {
-    if (!bookingDoctorPartnerId || !selectedSlot) return;
+    if (!bookingDoctorPartnerId || !selectedSlot || selectedSlot.is_booked) return;
     setIsProcessingPayment(true);
     setError(null);
     try {
@@ -847,11 +900,36 @@ export default function UniversalBookingScreen() {
                     <p className="text-slate-500 text-sm font-medium py-3 text-center">No appointments available for this date.</p>
                   ) : (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {activeSlots.map((s) => (
-                        <button key={s.time_slot_id} onClick={() => setSelectedSlot(s)} className={`py-2 rounded-lg border text-xs font-bold ${selectedSlot?.time_slot_id === s.time_slot_id ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600 hover:border-teal-300'}`}>
-                          {formatSlotTime(s.start_time)}
-                        </button>
-                      ))}
+                      {activeSlots.map((s) => {
+                        const isBooked = Boolean(s.is_booked);
+                        const isSelected = selectedSlot?.time_slot_id === s.time_slot_id;
+                        return (
+                          <button
+                            key={s.time_slot_id}
+                            type="button"
+                            disabled={isBooked}
+                            onClick={() => {
+                              if (!isBooked) setSelectedSlot(s);
+                            }}
+                            className={`py-2 px-1.5 rounded-lg border text-xs font-bold transition-all flex flex-col items-center justify-center min-h-[46px] ${
+                              isBooked
+                                ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed select-none'
+                                : isSelected
+                                ? 'border-teal-600 bg-teal-50 text-teal-800 ring-2 ring-teal-500/20 shadow-xs'
+                                : 'border-slate-200 text-slate-600 hover:border-teal-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className={isBooked ? 'line-through opacity-70' : ''}>
+                              {formatSlotTime(s.start_time)}
+                            </span>
+                            {isBooked && (
+                              <span className="text-[9px] font-extrabold uppercase tracking-wider text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/50 mt-0.5">
+                                Booked
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

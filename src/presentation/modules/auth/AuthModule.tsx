@@ -10,13 +10,11 @@ import {
   AlertCircle,
   CheckCircle2,
   Send,
-  ChevronDown,
-  KeyRound,
-  ShieldCheck,
   UserPlus
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
 import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
+import { validateIndianMobile } from '../../../utils/phoneValidation';
 
 interface AuthModuleProps {
   onLoginSuccess: (user: any) => void;
@@ -53,15 +51,19 @@ const loadGoogleIdentity = (): Promise<void> =>
     document.head.appendChild(script);
   });
 
-type AuthMethodOption = 'mobile-otp' | 'mobile-password' | 'email-otp' | 'email-password';
-type AuthScreenState = 'login' | 'forgot-input' | 'forgot-otp' | 'forgot-reset' | 'forgot-success';
+type AuthMethod = 'password' | 'otp';
+type LoginType = 'mobile' | 'email';
+type AuthScreenState = 'login' | 'otp-verify' | 'forgot-input' | 'forgot-otp' | 'forgot-reset' | 'forgot-success';
 
 export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModuleProps) {
-  // Authentication Method Choice (Default: Mobile + OTP)
-  const [selectedMethod, setSelectedMethod] = useState<AuthMethodOption>('mobile-otp');
+  // Navigation & UI States
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('password');
   const [screenState, setScreenState] = useState<AuthScreenState>('login');
+  const [loginType, setLoginType] = useState<LoginType>('mobile');
 
   // Input Fields
+  // `identifier` is the single "email or mobile" input box on the login screen
+  const [identifier, setIdentifier] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -127,16 +129,66 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Validation functions
-  const validateMobile = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
+  // Validations
+  const validateMobile = (num: string) => validateIndianMobile(num);
   const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
 
-  // Handle Switching Method
-  const handleMethodSelect = (method: AuthMethodOption) => {
-    setSelectedMethod(method);
+  // "@" is the discriminator for the unified identifier box
+  const isEmailIdentifier = (val: string) => val.includes('@');
+
+  // Normalizes phone input by removing non-digits and leading +91 / 91 / 0
+  const normalizeMobileCandidate = (raw: string): string => {
+    let digits = raw.replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+    else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    return digits;
+  };
+
+  type ClassifiedIdentifier = { type: 'email'; value: string } | { type: 'mobile'; value: string };
+
+  const classifyIdentifier = (raw: string): ClassifiedIdentifier | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      setErrorMessage('Please enter your mobile number or email');
+      return null;
+    }
+    if (isEmailIdentifier(trimmed)) {
+      if (!validateEmail(trimmed)) {
+        setErrorMessage('Please enter a valid email address (e.g. user@domain.com)');
+        return null;
+      }
+      return { type: 'email', value: trimmed };
+    }
+    const digits = normalizeMobileCandidate(trimmed);
+    if (!validateMobile(digits)) {
+      setErrorMessage(digits ? 'Please enter a valid 10-digit mobile number' : 'Please enter a valid mobile number or email address');
+      return null;
+    }
+    return { type: 'mobile', value: digits };
+  };
+
+  const syncIdentifierState = (classified: ClassifiedIdentifier) => {
+    setLoginType(classified.type);
+    if (classified.type === 'email') {
+      setEmail(classified.value);
+      setMobile('');
+    } else {
+      setMobile(classified.value);
+      setEmail('');
+    }
+  };
+
+  const toggleAuthMethod = () => {
+    setAuthMethod((prev) => (prev === 'password' ? 'otp' : 'password'));
+    setPassword('');
     setErrorMessage('');
     setSuccessMessage('');
-    setOtpSent(false);
+  };
+
+  const goBackToLogin = () => {
+    setScreenState('login');
+    setErrorMessage('');
+    setSuccessMessage('');
     setOtp('');
   };
 
@@ -146,24 +198,19 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (selectedMethod.startsWith('mobile') && !validateMobile(mobile)) {
-      setErrorMessage('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9');
-      return;
-    }
-    if (selectedMethod.startsWith('email') && !validateEmail(email)) {
-      setErrorMessage('Please enter a valid email address (e.g. user@domain.com)');
-      return;
-    }
+    const classified = classifyIdentifier(identifier);
+    if (!classified) return;
+    syncIdentifierState(classified);
+
+    const displayValue = classified.type === 'mobile' ? '+91 ' + classified.value : classified.value;
 
     setIsSubmitting(true);
     try {
-      const identifier = selectedMethod.startsWith('mobile') ? mobile : email;
-      const type = selectedMethod.startsWith('mobile') ? 'mobile' : 'email';
-      await sendOtpApi(identifier, type);
-
+      await sendOtpApi(classified.value, classified.type);
       setOtpSent(true);
       setOtpCountdown(300);
-      setSuccessMessage(`OTP sent to ${selectedMethod.startsWith('mobile') ? '+91 ' + mobile : email}.`);
+      setScreenState('otp-verify');
+      setSuccessMessage(`OTP sent to ${displayValue}.`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -189,11 +236,9 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsVerifyingOtp(true);
     try {
-      const type = selectedMethod.startsWith('mobile') ? 'mobile' : 'email';
-      const identifier = type === 'mobile' ? mobile : email;
-      const response = await verifyOtpApi(identifier, otp, type);
+      const activeIdentifier = loginType === 'mobile' ? mobile : email;
+      const response = await verifyOtpApi(activeIdentifier, otp, loginType);
 
-      // Authenticated — use only the real backend response.
       const patientUser = {
         patient_id: response.patient_id,
         fullName: response.full_name,
@@ -223,31 +268,23 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       return;
     }
 
-    if (selectedMethod === 'mobile-password') {
-      if (!validateMobile(mobile)) {
-        setErrorMessage('Please enter a valid 10-digit mobile number');
-        return;
-      }
-    } else {
-      if (!validateEmail(email)) {
-        setErrorMessage('Please enter a valid email address');
-        return;
-      }
-    }
+    const classified = classifyIdentifier(identifier);
+    if (!classified) return;
+    syncIdentifierState(classified);
 
     if (!password) {
-      setErrorMessage('Password is mandatory');
+      setErrorMessage('Password is required');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const isMobile = selectedMethod === 'mobile-password';
-      const response = await loginPatientApi(
-        isMobile ? { phone: mobile, password } : { email, password }
-      );
+      const payload = classified.type === 'mobile'
+        ? { phone: classified.value, password }
+        : { email: classified.value, password };
 
-      // Use only the real backend response — no fabricated identity/token.
+      const response = await loginPatientApi(payload);
+
       const patientUser = {
         patient_id: response.patient_id,
         fullName: response.full_name,
@@ -268,9 +305,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  // Receives the Google ID token, forwards it to the backend /patient/auth/google endpoint
-  // (already fully implemented — only this frontend wiring was ever missing), then reuses the
-  // exact same post-login handling as manual login.
+  // Receives the Google ID token and logs the patient in
   const handleGoogleCredential = async (response: any) => {
     const idToken = response?.credential;
     if (!idToken) {
@@ -298,8 +333,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     }
   };
 
-  // Loads Google Identity Services and renders the official Google button whenever the login
-  // screen is shown.
+  // Loads Google Identity Services
   useEffect(() => {
     if (screenState !== 'login' || !GOOGLE_CLIENT_ID) return;
     let cancelled = false;
@@ -322,7 +356,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
         }
       })
       .catch(() => {
-        // Google script blocked/offline — manual auth still works; button stays hidden.
+        // Google script blocked/offline
       });
     return () => {
       cancelled = true;
@@ -376,7 +410,6 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     }
     setIsSubmitting(true);
     try {
-      // Verify against the real backend OTP — no universal/hardcoded code accepted.
       await verifyOtpApi(recoveryIdentifier, recoveryOtp, recoveryType as 'mobile' | 'email');
       setScreenState('forgot-reset');
       setSuccessMessage('');
@@ -391,8 +424,8 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     e.preventDefault();
     setErrorMessage('');
 
-    if (!newPassword || newPassword.length < 6) {
-      setErrorMessage('New Password is required and must be at least 6 characters');
+    if (!newPassword || newPassword.length < 8) {
+      setErrorMessage('New Password is required and must be at least 8 characters');
       return;
     }
 
@@ -425,15 +458,12 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
             <p className="text-[11px] font-bold text-teal-600 uppercase tracking-widest mt-0.5">Your Health. Connected.</p>
           </div>
 
-          {/* Navigation Back Button for Forgot Sub-Flow */}
+          {/* Navigation Back Button for OTP Verification & Forgot Sub-Flows */}
           {screenState !== 'login' && screenState !== 'forgot-success' && (
             <button
-              onClick={() => {
-                setScreenState('login');
-                setErrorMessage('');
-                setSuccessMessage('');
-              }}
-              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-xs font-bold uppercase mb-4 transition-colors cursor-pointer"
+              type="button"
+              onClick={goBackToLogin}
+              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-primary text-xs font-bold uppercase mb-4 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" /> Back to Login
             </button>
@@ -473,271 +503,56 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
           {/* ── LOGIN SCREEN ── */}
           {!isLocked && screenState === 'login' && (
-            <div>
+            <div className="animate-fade">
               <div className="mb-6 text-center">
-                <h2 className="text-2xl font-black text-slate-800">Welcome Back</h2>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Welcome Back</h2>
                 <p className="text-slate-500 text-xs mt-1 font-medium">Log in to access your Patient Portal</p>
               </div>
 
-              {/* 4 Authentication Method Selector Tabs */}
-              <div className="grid grid-cols-4 border-b border-slate-100 mb-6 pb-2 text-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleMethodSelect('mobile-otp')}
-                  className={`pb-2.5 flex flex-col items-center gap-1 cursor-pointer transition-all border-b-2 ${
-                    selectedMethod === 'mobile-otp'
-                      ? 'border-primary text-primary font-bold'
-                      : 'border-transparent text-slate-400 hover:text-slate-600 font-semibold'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                  <span className="text-[10px] whitespace-nowrap">Mobile + OTP</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMethodSelect('mobile-password')}
-                  className={`pb-2.5 flex flex-col items-center gap-1 cursor-pointer transition-all border-b-2 ${
-                    selectedMethod === 'mobile-password'
-                      ? 'border-primary text-primary font-bold'
-                      : 'border-transparent text-slate-400 hover:text-slate-600 font-semibold'
-                  }`}
-                >
-                  <div className="relative">
-                    <Smartphone className="w-4 h-4" />
-                    <Lock className="w-2.5 h-2.5 absolute -bottom-1 -right-1 text-slate-500" />
-                  </div>
-                  <span className="text-[10px] whitespace-nowrap">Mobile + Pass</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMethodSelect('email-otp')}
-                  className={`pb-2.5 flex flex-col items-center gap-1 cursor-pointer transition-all border-b-2 ${
-                    selectedMethod === 'email-otp'
-                      ? 'border-primary text-primary font-bold'
-                      : 'border-transparent text-slate-400 hover:text-slate-600 font-semibold'
-                  }`}
-                >
-                  <Mail className="w-4 h-4" />
-                  <span className="text-[10px] whitespace-nowrap">Email + OTP</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMethodSelect('email-password')}
-                  className={`pb-2.5 flex flex-col items-center gap-1 cursor-pointer transition-all border-b-2 ${
-                    selectedMethod === 'email-password'
-                      ? 'border-primary text-primary font-bold'
-                      : 'border-transparent text-slate-400 hover:text-slate-600 font-semibold'
-                  }`}
-                >
-                  <KeyRound className="w-4 h-4" />
-                  <span className="text-[10px] whitespace-nowrap">Email + Pass</span>
-                </button>
-              </div>
-
-              {/* DYNAMIC METHOD FORMS - Active fields ONLY */}
-
-              {/* 1. Mobile + OTP Form */}
-              {selectedMethod === 'mobile-otp' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                      <div className="flex items-center gap-1 px-3 py-3 bg-slate-50 border-r border-slate-200 text-slate-700 font-bold text-xs">
-                        <span>🇮🇳</span>
-                        <span>+91</span>
-                      </div>
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        value={mobile}
-                        onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Enter 10-digit mobile number"
-                        className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {!otpSent ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSendOTP()}
-                      disabled={isSubmitting}
-                      className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-                    >
-                      {isSubmitting ? (
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      ) : (
-                        <>
-                          <span>Send OTP</span>
-                          <Send className="w-3.5 h-3.5" />
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <form onSubmit={handleVerifyOTPAndLogin} className="space-y-3 pt-2">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold text-slate-700">Enter 6-Digit OTP *</label>
-                          <span className="text-[10px] font-semibold text-slate-400">
-                            Expires: <strong className={otpCountdown < 60 ? 'text-rose-500' : 'text-slate-600'}>{formatTime(otpCountdown)}</strong>
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={otp}
-                          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                          placeholder="e.g. 123456"
-                          className="w-full text-center text-xl font-mono font-bold tracking-widest py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
-                          required
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <button
-                          type="button"
-                          disabled={otpCountdown > 0}
-                          onClick={() => handleSendOTP()}
-                          className="text-primary font-bold hover:underline disabled:text-slate-300 disabled:no-underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3" /> Resend OTP
-                        </button>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={isVerifyingOtp}
-                        className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-                      >
-                        {isVerifyingOtp ? (
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        ) : (
-                          <span>Verify OTP &amp; Login</span>
-                        )}
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-
-              {/* 2. Email + OTP Form */}
-              {selectedMethod === 'email-otp' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+              {/* Main Auth Form */}
+              <form
+                onSubmit={authMethod === 'otp' ? handleSendOTP : handlePasswordLogin}
+                className="space-y-4"
+              >
+                {/* Unified Identifier Input */}
+                <div className="form-group mb-0 text-left">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number or Email</label>
+                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                    {isEmailIdentifier(identifier) ? (
                       <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="abc@gmail.com"
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
-                        required
-                      />
-                    </div>
+                    ) : (
+                      <Smartphone className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+                    )}
+                    <input
+                      type="text"
+                      inputMode="email"
+                      autoComplete="username"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="Enter mobile number or email"
+                      className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
+                    />
                   </div>
-
-                  {!otpSent ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSendOTP()}
-                      disabled={isSubmitting}
-                      className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-                    >
-                      {isSubmitting ? (
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                      ) : (
-                        <>
-                          <span>Send OTP to Email</span>
-                          <Send className="w-3.5 h-3.5" />
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <form onSubmit={handleVerifyOTPAndLogin} className="space-y-3 pt-2">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold text-slate-700">Enter 6-Digit OTP *</label>
-                          <span className="text-[10px] font-semibold text-slate-400">
-                            Expires: <strong className={otpCountdown < 60 ? 'text-rose-500' : 'text-slate-600'}>{formatTime(otpCountdown)}</strong>
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={otp}
-                          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                          placeholder="e.g. 123456"
-                          className="w-full text-center text-xl font-mono font-bold tracking-widest py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
-                          required
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <button
-                          type="button"
-                          disabled={otpCountdown > 0}
-                          onClick={() => handleSendOTP()}
-                          className="text-primary font-bold hover:underline disabled:text-slate-300 disabled:no-underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3" /> Resend OTP
-                        </button>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={isVerifyingOtp}
-                        className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-                      >
-                        {isVerifyingOtp ? (
-                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        ) : (
-                          <span>Verify OTP &amp; Login</span>
-                        )}
-                      </button>
-                    </form>
+                  {authMethod === 'otp' && (
+                    <p className="text-[11px] text-slate-400 font-semibold mt-1.5">
+                      We will send you a 6-digit OTP to verify it's you
+                    </p>
                   )}
                 </div>
-              )}
 
-              {/* 3. Mobile + Password Form */}
-              {selectedMethod === 'mobile-password' && (
-                <form onSubmit={handlePasswordLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                      <div className="flex items-center gap-1 px-3 py-3 bg-slate-50 border-r border-slate-200 text-slate-700 font-bold text-xs">
-                        <span>🇮🇳</span>
-                        <span>+91</span>
-                      </div>
-                      <input
-                        type="tel"
-                        maxLength={10}
-                        value={mobile}
-                        onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
-                        placeholder="10-digit mobile number"
-                        className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Password *</label>
-                    <div className="relative flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                {/* Password Field (Only for password auth) */}
+                {authMethod === 'password' && (
+                  <div className="form-group mb-0 text-left">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                    <div className="relative flex items-center border border-slate-200 rounded-xl overflow-hidden px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
                       <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                       <input
                         type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your password"
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 pr-8"
-                        required
+                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 pr-10"
                       />
                       <button
                         type="button"
@@ -748,77 +563,37 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                       </button>
                     </div>
                   </div>
+                )}
 
+                {/* Switch between Password / OTP sign-in */}
+                <div className="flex justify-end -mt-1">
                   <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 mt-2"
+                    type="button"
+                    onClick={toggleAuthMethod}
+                    className="text-primary text-xs font-bold hover:underline cursor-pointer"
                   >
-                    {isSubmitting ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    ) : (
-                      <span>Login</span>
-                    )}
+                    {authMethod === 'password' ? 'Login with OTP instead' : 'Login with password instead'}
                   </button>
-                </form>
-              )}
+                </div>
 
-              {/* 4. Email + Password Form */}
-              {selectedMethod === 'email-password' && (
-                <form onSubmit={handlePasswordLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                      <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="abc@gmail.com"
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
-                        required
-                      />
-                    </div>
-                  </div>
+                {/* Action Submit Button */}
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center relative shadow-md shadow-primary/20 cursor-pointer mt-5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <>
+                      <span>{authMethod === 'otp' ? 'Send OTP' : 'Login'}</span>
+                      <Send className="w-3.5 h-3.5 absolute right-4 text-white/90" />
+                    </>
+                  )}
+                </button>
+              </form>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Password *</label>
-                    <div className="relative flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                      <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter your password"
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 pr-8"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 mt-2"
-                  >
-                    {isSubmitting ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    ) : (
-                      <span>Login</span>
-                    )}
-                  </button>
-                </form>
-              )}
-
-              {/* OR separator + Google Sign-In — coexists with manual auth. Mirrors the working
-                  provider-side implementation in vizito-partner-main/AuthModule.tsx. */}
+              {/* OR separator + Google Sign-In */}
               <div className="flex items-center gap-3 my-6">
                 <div className="flex-1 h-px bg-slate-200" />
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">or</span>
@@ -865,6 +640,62 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                   <span>Create New Account</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── DEDICATED OTP VERIFICATION SCREEN ── */}
+          {!isLocked && screenState === 'otp-verify' && (
+            <div className="animate-fade">
+              <div className="mb-6 text-center">
+                <h2 className="text-2xl font-black text-slate-800">Enter OTP</h2>
+                <p className="text-slate-500 text-xs mt-1 font-medium leading-relaxed">
+                  We've sent a 6-digit passcode to{' '}
+                  <strong className="text-slate-700">{loginType === 'mobile' ? '+91 ' + mobile : email}</strong>.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOTPAndLogin} className="space-y-4">
+                <div className="form-group text-center mb-0">
+                  <label className="block text-xs font-bold text-slate-700 mb-1 text-left">6-Digit Verification Code</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 123456"
+                    className="w-full text-center text-2xl font-black tracking-widest font-mono py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs py-1 font-semibold">
+                  <span className="text-slate-400">
+                    OTP expires in:{' '}
+                    <strong className={otpCountdown < 60 ? 'text-rose-500' : 'text-slate-600'}>{formatTime(otpCountdown)}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={otpCountdown > 0 || isSubmitting}
+                    onClick={() => handleSendOTP()}
+                    className="text-primary font-bold hover:underline disabled:text-slate-350 disabled:no-underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Resend OTP
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isVerifyingOtp}
+                  className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center cursor-pointer shadow-md shadow-primary/20 mt-2 disabled:opacity-50"
+                >
+                  {isVerifyingOtp ? (
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <span>Verify OTP &amp; Login</span>
+                  )}
+                </button>
+              </form>
             </div>
           )}
 
@@ -1007,7 +838,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="At least 8 characters"
                     className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none pr-8"
                     required
                   />
@@ -1059,7 +890,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                 type="button"
                 onClick={() => {
                   setScreenState('login');
-                  setSelectedMethod('email-password');
+                  setAuthMethod('password');
                   setErrorMessage('');
                   setSuccessMessage('Password reset successfully! Please log in.');
                 }}

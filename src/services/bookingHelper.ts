@@ -68,6 +68,7 @@ export interface AvailableSlot {
   facility_name: string | null;
   facility_type: string | null;   // e.g. "Clinic" / "Hospital" / "Sub Branch"
   facility_address: string | null;
+  is_booked?: boolean;
 }
 
 export interface CreatedBooking {
