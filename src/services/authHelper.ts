@@ -8,6 +8,9 @@ export interface PatientRegisterPayload {
   password: string;
   // Backend-issued proof that the phone/email was OTP-verified (from registerVerifyOtpApi).
   registration_token: string;
+  // YYYY-MM-DD. Age is derived from this on read — never sent/stored separately.
+  date_of_birth?: string;
+  gender?: string;
   address?: {
     street: string;
     city: string;

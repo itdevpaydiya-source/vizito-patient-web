@@ -33,13 +33,40 @@ export interface AddFamilyMemberInput {
   phone?: string;
 }
 
-function ageFromDob(dob: string | null): number | null {
+export function ageFromDob(dob: string | null): number | null {
   if (!dob) return null;
   const d = new Date(dob);
   if (isNaN(d.getTime())) return null;
   const diff = Date.now() - d.getTime();
   const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
   return age >= 0 && age < 150 ? age : null;
+}
+
+// Human-readable age for display. ageFromDob() floors to whole years, so anyone under 1 year old
+// always comes back as 0 — meaningless for an infant. This instead falls back to months, then days.
+export function ageLabelFromDob(dob: string | null): string | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  if (d.getTime() > now.getTime()) return null;
+
+  let years = now.getFullYear() - d.getFullYear();
+  let months = now.getMonth() - d.getMonth();
+  let days = now.getDate() - d.getDate();
+  if (days < 0) {
+    months -= 1;
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years >= 150) return null;
+
+  if (years >= 1) return `${years} year${years === 1 ? '' : 's'}`;
+  if (months >= 1) return `${months} month${months === 1 ? '' : 's'}`;
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 function mapAssociation(assoc: any): PatientFamilyMember {
