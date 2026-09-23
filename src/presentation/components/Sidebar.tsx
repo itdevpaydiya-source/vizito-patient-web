@@ -12,7 +12,8 @@ import {
   User,
   Settings,
   LogOut,
-  Sparkles
+  Sparkles,
+  Pill
 } from 'lucide-react';
 import { useLanguage } from '../../store/language/LanguageContext';
 import logoImg from '../../assets/vizito_logo.png';
@@ -123,6 +124,22 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         >
           <HeartPulse className="w-4 h-4 shrink-0" />
           <span>{t('Medical Records')}</span>
+        </NavLink>
+
+        {/* 4b. Pharmacy Orders */}
+        <NavLink
+          to="/pharmacy-orders"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 shadow-xs ring-1 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Pill className="w-4 h-4 shrink-0" />
+          <span>{t('Pharmacy Orders')}</span>
         </NavLink>
 
         {/* 5. Ratings & Reviews */}

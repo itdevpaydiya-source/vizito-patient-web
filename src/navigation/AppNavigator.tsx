@@ -21,6 +21,8 @@ import HelpSupportScreen from '../presentation/modules/support/HelpSupportScreen
 import SettingsScreen from '../presentation/modules/settings/SettingsScreen';
 import BookConsultationScreen from '../presentation/modules/consultations/BookConsultationScreen';
 import PharmacyOrdersScreen from '../presentation/modules/pharmacy/PharmacyOrdersScreen';
+import OrderBuilderScreen from '../presentation/modules/pharmacy/OrderBuilderScreen';
+import OrderDetailScreen from '../presentation/modules/pharmacy/OrderDetailScreen';
 import FamilyProfilesScreen from '../presentation/modules/family/FamilyProfilesScreen';
 import ReviewsScreen from '../presentation/modules/reviews/ReviewsScreen';
 
@@ -137,6 +139,8 @@ const AppNavigator = () => {
         <Route path="/bookings" element={<MyConsultationsScreen />} />
         <Route path="/appointments" element={<MyConsultationsScreen />} />
         <Route path="/pharmacy-orders" element={<PharmacyOrdersScreen />} />
+        <Route path="/pharmacy-orders/new" element={<OrderBuilderScreen />} />
+        <Route path="/pharmacy-orders/:id" element={<OrderDetailScreen />} />
         <Route path="/family-profiles" element={<FamilyProfilesScreen />} />
 
         {/* Patient Preference & Utility Modules */}

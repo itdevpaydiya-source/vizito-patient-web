@@ -1,16 +1,34 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { FileText, AlertCircle, RotateCcw, Calendar, Printer, X, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, AlertCircle, RotateCcw, Calendar, Printer, X, Eye, Pill, Send } from 'lucide-react';
 import { getPrescriptionsApi, type PatientPrescription } from '../../../services/patientHelper';
+import { createPharmacyRequestApi } from '../../../services/pharmacyOrderHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
+import SelectPharmacyModal from '../pharmacy/SelectPharmacyModal';
+import type { ProviderItem } from '../../../services/types';
+
+// A prescription can be re-sent once it's never been routed, or once a prior request
+// was rejected/expired — never while genuinely in flight or already fulfilled.
+const canSendToPharmacy = (status: string | null) =>
+  !status || status === 'Rejected' || status === 'Expired' || status === 'Cancelled';
+
+const pharmacyStatusLabel: Record<string, { label: string; className: string }> = {
+  Sent: { label: 'Sent to pharmacy', className: 'bg-sky-50 text-sky-700 border-sky-100' },
+  Processing: { label: 'Pharmacy is processing', className: 'bg-amber-50 text-amber-700 border-amber-100' },
+  Dispensed: { label: 'Dispensed', className: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+};
 
 // Medical Records — shows the patient's real, finalized prescriptions (consultation output). Each opens
 // a full prescription preview that mirrors the doctor's printout, with a Print / Download (Save as PDF)
 // option. Empty until a consultation is completed. No fabricated records.
 export default function MyRecordsScreen() {
+  const navigate = useNavigate();
   const [prescriptions, setPrescriptions] = useState<PatientPrescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PatientPrescription | null>(null);
+  const [sendingRx, setSendingRx] = useState<PatientPrescription | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -23,6 +41,20 @@ export default function MyRecordsScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSendToPharmacy = async (pharmacy: ProviderItem) => {
+    if (!sendingRx) return;
+    setSendError(null);
+    try {
+      await createPharmacyRequestApi(sendingRx.id, pharmacy.id);
+      setSendingRx(null);
+      // Track status from here on out — same "My Requests" list the direct-order path uses.
+      navigate('/pharmacy-orders?tab=requests');
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Unable to send this prescription to the pharmacy. Please try again.';
+      setSendError(Array.isArray(msg) ? msg.join(', ') : String(msg));
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 w-full">
@@ -71,16 +103,46 @@ export default function MyRecordsScreen() {
                 </div>
                 {rx.diagnosis && <p className="text-xs text-slate-600 mt-3"><span className="font-bold text-slate-400 uppercase text-[10px]">Diagnosis: </span>{rx.diagnosis}</p>}
                 <p className="text-[11px] text-slate-400 mt-1">{rx.prescription_number}</p>
+                {rx.pharmacy_status && pharmacyStatusLabel[rx.pharmacy_status] && (
+                  <span className={`inline-flex items-center gap-1 mt-2 text-[10px] font-bold px-2 py-1 rounded-lg border ${pharmacyStatusLabel[rx.pharmacy_status].className}`}>
+                    <Pill className="w-3 h-3" /> {pharmacyStatusLabel[rx.pharmacy_status].label}
+                  </span>
+                )}
               </div>
-              <button onClick={() => setSelected(rx)} className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all">
-                <Eye className="w-4 h-4" /> View Prescription
-              </button>
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => setSelected(rx)} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all">
+                  <Eye className="w-4 h-4" /> View
+                </button>
+                {canSendToPharmacy(rx.pharmacy_status) && (
+                  <button
+                    onClick={() => { setSendError(null); setSendingRx(rx); }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-teal-200 text-teal-700 hover:bg-teal-50 font-bold text-xs transition-all"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Send to Pharmacy
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
 
       {selected && <PrescriptionPreview rx={selected} onClose={() => setSelected(null)} />}
+
+      {sendingRx && (
+        <SelectPharmacyModal
+          title="Send Prescription to Pharmacy"
+          onSelect={handleSendToPharmacy}
+          onClose={() => setSendingRx(null)}
+        />
+      )}
+
+      {sendError && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 max-w-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" /> {sendError}
+          <button onClick={() => setSendError(null)} className="ml-1 text-rose-400 hover:text-rose-700"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
     </div>
   );
 }

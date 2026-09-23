@@ -224,6 +224,11 @@ export interface PatientPrescription {
   signature_url: string | null;
   status: string | null;
   patient_name: string | null;
+  // Doctor-routed pharmacy status ('Sent'|'Processing'|'Dispensed') — set once EITHER the
+  // doctor sends this prescription directly to a pharmacy, or the patient's own pharmacy
+  // request is accepted and fulfilled (see pharmacyOrderHelper.ts). null = never routed.
+  pharmacy_status: string | null;
+  pharmacy_partner_id: string | null;
   doctor: PrescriptionDoctor | null;
   vitals?: {
     bp?: string | null;
@@ -256,6 +261,8 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     signature_url: p.signature_url ?? null,
     status: p.status ?? null,
     patient_name: p.patient_name ?? null,
+    pharmacy_status: p.pharmacy_status ?? null,
+    pharmacy_partner_id: p.pharmacy_partner_id ?? null,
     doctor: p.doctor ? {
       name: p.doctor.name ?? null,
       qualification: p.doctor.qualification ?? null,

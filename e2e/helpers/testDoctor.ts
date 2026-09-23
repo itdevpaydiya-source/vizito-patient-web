@@ -13,8 +13,14 @@ export interface TestDoctor {
 // gate, which is unrelated to what's under test here (the booking/payment flow, not the approval
 // workflow). This mirrors the identical DB shortcut already used throughout this project's
 // scratchpad live-test scripts this session, not a new pattern.
-async function activatePartner(partnerId: string): Promise<void> {
-  const mysql = await import('file:///c:/Users/battu/Downloads/Vizito-latest3/Vizito-latest3/vizito-replica-backend/vizito-auth/node_modules/mysql2/promise.js');
+//
+// Needed because GET /patients/providers (patient-facing discovery) filters to
+// status IN ('Active','Approved') — unlike the doctor-facing GET /partners/search, which a
+// freshly-registered account already passes. A brand-new partner otherwise defaults to
+// 'Draft' and is simply invisible to any patient-facing discovery screen until this happens
+// (in production, presumably via a real admin-approval step this dev environment has no UI for).
+export async function activatePartner(partnerId: string): Promise<void> {
+  const mysql = await import('../../../vizito-replica-backend/vizito-auth/node_modules/mysql2/promise.js');
   const conn = await mysql.createConnection({ host: 'localhost', port: 3306, user: 'root', password: 'root', database: 'vizito_auth' });
   await conn.execute("UPDATE partners SET status = 'Active' WHERE id = ?", [partnerId]);
   await conn.end();

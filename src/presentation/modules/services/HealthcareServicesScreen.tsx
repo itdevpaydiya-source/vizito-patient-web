@@ -169,10 +169,13 @@ export default function HealthcareServicesScreen() {
                       {service.emoji}
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/booking?service=${service.id}`); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`);
+                      }}
                       className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
                     >
-                      Book Now &rarr;
+                      {service.id === 'pharmacy' ? 'Order Now' : 'Book Now'} &rarr;
                     </button>
                   </div>
                   <h3 className="font-extrabold text-slate-800 text-base group-hover:text-teal-700 transition-colors">{service.name}</h3>
@@ -267,10 +270,13 @@ export default function HealthcareServicesScreen() {
                   </div>
 
                   <button
-                    onClick={() => navigate(`/booking?service=${provider.serviceId || activeCategory}`)}
+                    onClick={() => {
+                      const svc = provider.serviceId || activeCategory;
+                      navigate(svc === 'pharmacy' ? `/pharmacy-orders/new?pharmacy=${provider.id}` : `/booking?service=${svc}`);
+                    }}
                     className="w-full mt-5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all shadow-xs"
                   >
-                    Book Now
+                    {(provider.serviceId || activeCategory) === 'pharmacy' ? 'Order Now' : 'Book Now'}
                   </button>
                 </div>
               );
