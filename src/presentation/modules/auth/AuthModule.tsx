@@ -206,11 +206,15 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsSubmitting(true);
     try {
-      await sendOtpApi(classified.value, classified.type);
+      const res = await sendOtpApi(classified.value, classified.type);
+      // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
+      // pre-fill it instead of making the user read it off the API response and retype it.
+      const devOtp = res?.dev_otp || res?.otp || '';
+      if (devOtp) setOtp(String(devOtp));
       setOtpSent(true);
       setOtpCountdown(300);
       setScreenState('otp-verify');
-      setSuccessMessage(`OTP sent to ${displayValue}.`);
+      setSuccessMessage(`OTP sent to ${displayValue}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -390,10 +394,14 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsSubmitting(true);
     try {
-      await sendOtpApi(recoveryIdentifier, recoveryType);
+      const res = await sendOtpApi(recoveryIdentifier, recoveryType);
+      // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
+      // pre-fill it instead of making the user read it off the API response and retype it.
+      const devOtp = res?.dev_otp || res?.otp || '';
+      if (devOtp) setRecoveryOtp(String(devOtp));
       setOtpCountdown(300);
       setScreenState('forgot-otp');
-      setSuccessMessage(`Recovery OTP sent to ${recoveryIdentifier}.`);
+      setSuccessMessage(`Recovery OTP sent to ${recoveryIdentifier}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || 'Failed to send recovery OTP.');
     } finally {
