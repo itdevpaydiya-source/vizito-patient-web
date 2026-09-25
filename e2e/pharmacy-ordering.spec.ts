@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { activatePartner } from './helpers/testDoctor';
+import { standardCategoryResponse } from './helpers/catalog';
 
 const API = 'http://localhost:3000';
 
@@ -34,9 +35,7 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
       extra: { medicalRegNo: `PW-OTC-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4 },
     });
 
-    const catRes = await request.post(`${API}/category`, {
-      headers: { Authorization: `Bearer ${doctor.token}` }, data: { name: `PW OTC Cat ${unique}`, code: `PWOC${unique}` },
-    });
+    const catRes = await standardCategoryResponse(request);
     const category = await catRes.json();
     const medRes = await request.post(`${API}/medicines`, {
       headers: { Authorization: `Bearer ${doctor.token}` },
@@ -111,9 +110,7 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
       extra: { medicalRegNo: `PW-RX-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4 },
     });
 
-    const catRes = await request.post(`${API}/category`, {
-      headers: { Authorization: `Bearer ${doctor.token}` }, data: { name: `PW Rx Cat ${unique}`, code: `PWRC${unique}` },
-    });
+    const catRes = await standardCategoryResponse(request);
     const category = await catRes.json();
     const medRes = await request.post(`${API}/medicines`, {
       headers: { Authorization: `Bearer ${doctor.token}` },

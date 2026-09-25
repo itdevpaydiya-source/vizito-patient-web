@@ -7,7 +7,7 @@ import { createTestDoctorWithAvailability, type TestDoctor } from './helpers/tes
 // date. Tomorrow is selected in this gate (matching the test doctor's real availability window,
 // created for tomorrow), then "Show Available Doctors" fetches the real, date-filtered list.
 async function goToTomorrowAndSelectDoctor(page: Page, doctorName: string, slotTime: string): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'Find a Doctor' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Find a (Verified )?Doctor/ })).toBeVisible();
 
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const tomorrowLabel = tomorrow.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });

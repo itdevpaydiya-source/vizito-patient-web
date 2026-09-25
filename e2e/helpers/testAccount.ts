@@ -73,5 +73,7 @@ export async function loginAsTestPatient(page: Page, patient: TestPatient): Prom
     }));
     localStorage.setItem('vizito_token', p.token);
   }, patient);
-  await page.goto('/dashboard');
+  // The app may redirect on its own at the same moment (aborting this goto); wait for the result.
+  await page.goto('/dashboard').catch(() => undefined);
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 }

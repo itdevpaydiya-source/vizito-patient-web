@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createTestPatient } from './helpers/testAccount';
+import { standardCategoryResponse } from './helpers/catalog';
 
 // Backend-only (no UI driving) — these prove the Order payment/refund LIFECYCLE itself
 // (P-01: REFUND_PENDING actually reaching REFUNDED; P-02: pay()/processRefund() not
@@ -36,9 +37,7 @@ async function registerDoctor(request: APIRequestContext, unique: number) {
 }
 
 async function makeMedicine(request: APIRequestContext, doctorToken: string, pharmacyToken: string, unique: number, mrp: number) {
-  const catRes = await request.post(`${API}/category`, {
-    headers: { Authorization: `Bearer ${doctorToken}` }, data: { name: `PW Refund Cat ${unique}`, code: `PWRF${unique}` },
-  });
+  const catRes = await standardCategoryResponse(request);
   if (!catRes.ok()) throw new Error(`create category failed: ${catRes.status()} ${await catRes.text()}`);
   const category = await catRes.json();
   const medRes = await request.post(`${API}/medicines`, {
