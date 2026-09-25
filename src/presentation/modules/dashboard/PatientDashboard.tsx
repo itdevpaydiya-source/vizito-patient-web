@@ -198,7 +198,7 @@ export default function PatientDashboard() {
             return (
               <div
                 key={service.id}
-                onClick={() => navigate('/healthcare-services')}
+                onClick={() => navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`)}
                 className="bg-white rounded-2xl border border-slate-200 p-5 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
               >
                 <div>

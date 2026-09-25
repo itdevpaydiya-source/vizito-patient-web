@@ -16,6 +16,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { registerPatientApi, registerSendOtpApi, registerVerifyOtpApi } from '../../../services/authHelper';
+import { ageFromDob, ageLabelFromDob } from '../../../services/familyHelper';
 
 interface RegistrationModuleProps {
   onBackToLogin?: () => void;
@@ -45,6 +46,8 @@ export default function RegistrationModule({
 
   // Step 2: Personal Information State
   const [fullName, setFullName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -68,6 +71,16 @@ export default function RegistrationModule({
   // Validation functions
   const validateMobile = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
   const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
+  const derivedAgeLabel = ageLabelFromDob(dateOfBirth || null);
+  // Indian mobile numbers only start with 6-9 — drop any leading digits that don't qualify
+  // instead of accepting an arbitrary digit series that would only fail later at submit time.
+  const sanitizeMobile = (raw: string) => {
+    let digits = raw.replace(/\D/g, '').slice(0, 10);
+    while (digits.length > 0 && !/[6-9]/.test(digits[0])) {
+      digits = digits.slice(1);
+    }
+    return digits;
+  };
 
   // --- STEP 1: SEND & VERIFY OTP ---
   const handleSendRegistrationOtp = async (e: React.FormEvent) => {
@@ -87,10 +100,14 @@ export default function RegistrationModule({
     setIsSubmitting(true);
     try {
       const target = verificationType === 'mobile' ? mobileNumber : emailAddress;
-      await registerSendOtpApi(target, verificationType);
+      const res = await registerSendOtpApi(target, verificationType);
+      // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
+      // pre-fill it instead of making the user read it off the API response and retype it.
+      const devOtp = res?.dev_otp || res?.otp || '';
+      if (devOtp) setOtpCode(String(devOtp));
       setIsOtpSent(true);
       setOtpTimer(300);
-      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + mobileNumber : emailAddress}.`);
+      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + mobileNumber : emailAddress}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
     } catch (err: any) {
       // 409 = the phone/email already belongs to a patient — steer the user to login.
       const status = err?.response?.status;
@@ -137,6 +154,11 @@ export default function RegistrationModule({
 
     if (!fullName.trim() || fullName.trim().length < 2) {
       setErrorMessage('Full Name is required (minimum 2 characters)');
+      return;
+    }
+
+    if (dateOfBirth && ageFromDob(dateOfBirth) === null) {
+      setErrorMessage('Please enter a valid date of birth');
       return;
     }
 
@@ -342,6 +364,8 @@ export default function RegistrationModule({
         password,
         // Backend-authoritative proof that the phone/email was OTP-verified (Step 1).
         registration_token: registrationToken,
+        date_of_birth: dateOfBirth || undefined,
+        gender: gender || undefined,
         address: {
           street,
           city,
@@ -520,7 +544,7 @@ export default function RegistrationModule({
                           type="tel"
                           maxLength={10}
                           value={mobileNumber}
-                          onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))}
+                          onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
                           placeholder="10-digit mobile number"
                           className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 outline-none"
                           required
@@ -635,16 +659,54 @@ export default function RegistrationModule({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="w-full px-3 py-3 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Age</label>
+                  <div className="w-full px-3 py-3 text-xs font-semibold text-slate-500 border border-slate-200 rounded-xl bg-slate-50">
+                    {derivedAgeLabel || 'Auto-calculated from date of birth'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Gender</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-3 py-3 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none bg-white"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number *</label>
-                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                  <div className={`flex items-center border border-slate-200 rounded-xl overflow-hidden ${
+                    verificationType === 'mobile' && isOtpVerified ? 'bg-slate-50' : 'bg-white'
+                  }`}>
                     <span className="px-3 py-3 border-r border-slate-200 text-slate-600 font-bold text-xs">+91</span>
                     <input
                       type="tel"
                       maxLength={10}
                       value={mobileNumber}
-                      onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))}
+                      onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
                       placeholder="10-digit mobile"
-                      className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
+                      // A mobile number verified via OTP in Step 1 must not be silently swappable
+                      // here for a different, unverified one while still showing "Verified via OTP".
+                      disabled={verificationType === 'mobile' && isOtpVerified}
+                      className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none disabled:cursor-not-allowed disabled:text-slate-500"
                       required
                     />
                   </div>
@@ -664,7 +726,14 @@ export default function RegistrationModule({
                     value={emailAddress}
                     onChange={(e) => setEmailAddress(e.target.value)}
                     placeholder="sarah@example.com"
-                    className="w-full px-3 py-3 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
+                    // Same reasoning as the mobile field above — an OTP-verified email must not be
+                    // editable here while the "Verified via OTP" badge still shows underneath it.
+                    disabled={verificationType === 'email' && isOtpVerified}
+                    className={`w-full px-3 py-3 text-xs font-semibold border rounded-xl outline-none disabled:cursor-not-allowed ${
+                      verificationType === 'email' && isOtpVerified
+                        ? 'bg-slate-50 border-slate-200 text-slate-500'
+                        : 'bg-white border-slate-200 text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10'
+                    }`}
                     required={verificationType === 'email'}
                   />
                   {verificationType === 'email' && isOtpVerified && (
@@ -883,6 +952,20 @@ export default function RegistrationModule({
                   <span className="text-slate-500 font-semibold">Mobile</span>
                   <span className="font-extrabold text-slate-800">+91 {mobileNumber}</span>
                 </div>
+                {dateOfBirth && (
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-500 font-semibold">Date of Birth</span>
+                    <span className="font-extrabold text-slate-800">
+                      {dateOfBirth}{derivedAgeLabel ? ` (${derivedAgeLabel})` : ''}
+                    </span>
+                  </div>
+                )}
+                {gender && (
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-500 font-semibold">Gender</span>
+                    <span className="font-extrabold text-slate-800">{gender}</span>
+                  </div>
+                )}
                 {emailAddress && (
                   <div className="flex justify-between border-b border-slate-200 pb-2">
                     <span className="text-slate-500 font-semibold">Email</span>
