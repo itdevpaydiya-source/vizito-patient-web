@@ -2,21 +2,18 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { activatePartner } from './helpers/testDoctor';
 import { standardCategoryResponse } from './helpers/catalog';
+import { registerProviderAccount, lettersFor } from './helpers/providerAccount';
 
 const API = 'http://localhost:3000';
 
 async function registerProvider(request: APIRequestContext, opts: {
   full_name: string; phone: string; email: string; provider_type_id: number; extra?: Record<string, unknown>;
 }) {
-  const res = await request.post(`${API}/auth/register`, {
-    data: {
-      full_name: opts.full_name, phone: opts.phone, email: opts.email,
-      date_of_birth: '1990-01-01', gender: 'male', provider_type_id: opts.provider_type_id,
-      password: 'PlaywrightTest123!', ...opts.extra,
-    },
+  const json = await registerProviderAccount(request, API, {
+    full_name: opts.full_name, phone: opts.phone, email: opts.email,
+    date_of_birth: '1990-01-01', gender: 'male', provider_type_id: opts.provider_type_id,
+    password: 'PlaywrightTest123!', ...opts.extra,
   });
-  if (!res.ok()) throw new Error(`register(${opts.email}) failed: ${res.status()} ${await res.text()}`);
-  const json = await res.json();
   return { token: json.access_token as string, partnerId: json.current_account.partner_id as string };
 }
 
@@ -25,12 +22,12 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     const unique = Date.now() + Math.floor(Math.random() * 1000);
 
     const pharmacy = await registerProvider(request, {
-      full_name: `PW Pharmacy OTC ${unique}`, phone: `8${String(unique).slice(-9)}`,
+      full_name: `PW Pharmacy OTC ${lettersFor(unique)}`, phone: `8${String(unique).slice(-9)}`,
       email: `pw-pharm-otc-${unique}@vizito.test`, provider_type_id: 6,
       extra: { pharmacyName: `PW Pharmacy OTC ${unique}` },
     });
     const doctor = await registerProvider(request, {
-      full_name: `PW Doctor OTC ${unique}`, phone: `7${String(unique).slice(-9)}`,
+      full_name: `PW Doctor OTC ${lettersFor(unique)}`, phone: `7${String(unique).slice(-9)}`,
       email: `pw-doc-otc-${unique}@vizito.test`, provider_type_id: 5,
       extra: { medicalRegNo: `PW-OTC-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4 },
     });
@@ -50,6 +47,12 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
       data: { medicine_id: medicine.id, batch_number: `PWOTC${unique}`, expiry_date: '2028-01-01', quantity_received: 50 },
     });
     expect(stockRes.ok()).toBeTruthy();
+    // A live pharmacy with its shop address (what a patient collects from).
+    await activatePartner(pharmacy.partnerId);
+    await request.post(`${API}/partners/${pharmacy.partnerId}/addresses`, {
+      headers: { Authorization: `Bearer ${pharmacy.token}` },
+      data: { address_type: 'SHOP', address1: 'Shop 2, Lake View Road', address2: 'Madhapur, Hyderabad', zipcode: '500081', is_primary: true },
+    });
 
     const patient = await createTestPatient(request);
     await loginAsTestPatient(page, patient);
@@ -81,6 +84,12 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     await expect(page.getByText('Awaiting confirmation', { exact: false })).toBeVisible();
     await expect(page.getByText(medicine.medicine_name, { exact: false })).toBeVisible();
     await expect(page.getByText('Pay at pickup', { exact: false })).toBeVisible();
+    // Progress and where to collect it.
+    await expect(page.getByRole('list', { name: 'Order progress' })).toContainText('Ready to collect');
+    await expect(page.locator('[aria-current="step"]')).toContainText('Placed');
+    const shop = page.getByLabel('Pharmacy');
+    await expect(shop).toContainText('Shop 2, Lake View Road, Madhapur, Hyderabad, 500081');
+    await expect(shop.getByRole('link', { name: 'Directions' })).toHaveAttribute('href', /google\.com\/maps/);
 
     // Confirm against the real backend, not just the UI's own claim.
     const verifyRes = await request.get(`${API}/orders/${order.id}/mine`, { headers: { Authorization: `Bearer ${patient.token}` } });
@@ -94,7 +103,7 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     const unique = Date.now() + Math.floor(Math.random() * 1000);
 
     const pharmacy = await registerProvider(request, {
-      full_name: `PW Pharmacy Rx ${unique}`, phone: `9${String(unique).slice(-9)}`,
+      full_name: `PW Pharmacy Rx ${lettersFor(unique)}`, phone: `9${String(unique).slice(-9)}`,
       email: `pw-pharm-rx-${unique}@vizito.test`, provider_type_id: 6,
       extra: { pharmacyName: `PW Pharmacy Rx ${unique}` },
     });
@@ -105,7 +114,7 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     // would look like.
     await activatePartner(pharmacy.partnerId);
     const doctor = await registerProvider(request, {
-      full_name: `PW Doctor Rx ${unique}`, phone: `6${String(unique).slice(-9)}`,
+      full_name: `PW Doctor Rx ${lettersFor(unique)}`, phone: `6${String(unique).slice(-9)}`,
       email: `pw-doc-rx-${unique}@vizito.test`, provider_type_id: 5,
       extra: { medicalRegNo: `PW-RX-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4 },
     });

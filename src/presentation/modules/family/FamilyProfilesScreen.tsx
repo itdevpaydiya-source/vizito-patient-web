@@ -76,6 +76,14 @@ const FamilyProfilesScreen = () => {
       setFormError('Please enter the full name.');
       return;
     }
+    if (!memberDob) {
+      setFormError('Add the date of birth — doctors need the age to prescribe safely.');
+      return;
+    }
+    if (memberDob > new Date().toLocaleDateString('en-CA')) {
+      setFormError('Date of birth can’t be in the future.');
+      return;
+    }
     if (userId == null) {
       setFormError('Your account could not be resolved. Please refresh.');
       return;
@@ -251,7 +259,7 @@ const FamilyProfilesScreen = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
+            <form onSubmit={handleAddSubmit} noValidate className="p-6 space-y-4 overflow-y-auto max-h-[75vh]">
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-bold text-rose-700">
                   <AlertCircle className="w-4 h-4 shrink-0" /> <span>{formError}</span>
@@ -259,9 +267,9 @@ const FamilyProfilesScreen = () => {
               )}
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Full Name</label>
+                <label htmlFor="fm-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Full Name</label>
                 <input
-                  type="text" required placeholder="e.g. Ramesh Patel"
+                  id="fm-name" type="text" required placeholder="e.g. Ramesh Patel"
                   value={memberName} onChange={(e) => setMemberName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-semibold text-slate-700"
                 />
@@ -269,8 +277,9 @@ const FamilyProfilesScreen = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Relationship</label>
+                  <label htmlFor="fm-rel" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Relationship</label>
                   <select
+                    id="fm-rel"
                     value={memberRelationship}
                     onChange={(e) => setMemberRelationship(e.target.value as FamilyRelationship)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-bold text-slate-700"
@@ -279,8 +288,9 @@ const FamilyProfilesScreen = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Gender</label>
+                  <label htmlFor="fm-gender" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Gender</label>
                   <select
+                    id="fm-gender"
                     value={memberGender} onChange={(e) => setMemberGender(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-bold text-slate-700"
                   >
@@ -292,11 +302,12 @@ const FamilyProfilesScreen = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Date of Birth (optional)</label>
+                <label htmlFor="fm-dob" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Date of Birth</label>
                 <input
-                  type="date" value={memberDob} onChange={(e) => setMemberDob(e.target.value)}
+                  id="fm-dob" type="date" required max={new Date().toLocaleDateString('en-CA')} aria-describedby="fm-dob-hint" value={memberDob} onChange={(e) => setMemberDob(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-semibold text-slate-700"
                 />
+                <p id="fm-dob-hint" className="text-[11px] text-slate-500">Doctors need the exact age to prescribe the right dose, especially for children.</p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

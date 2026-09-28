@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { registerPatientApi, registerSendOtpApi, registerVerifyOtpApi } from '../../../services/authHelper';
 import { ageFromDob, ageLabelFromDob } from '../../../services/familyHelper';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 interface RegistrationModuleProps {
   onBackToLogin?: () => void;
@@ -157,8 +158,14 @@ export default function RegistrationModule({
       return;
     }
 
-    if (dateOfBirth && ageFromDob(dateOfBirth) === null) {
-      setErrorMessage('Please enter a valid date of birth');
+    if (!/^[A-Za-z][A-Za-z .'-]*$/.test(fullName.trim())) {
+      setErrorMessage("Full Name can only contain letters, spaces and . ' -");
+      return;
+    }
+
+    const age = dateOfBirth ? ageFromDob(dateOfBirth) : null;
+    if (dateOfBirth && (age === null || age > 120)) {
+      setErrorMessage('Please enter a valid date of birth (not in the future)');
       return;
     }
 
@@ -172,8 +179,8 @@ export default function RegistrationModule({
       return;
     }
 
-    if (!password || password.length < 8) {
-      setErrorMessage('Password is mandatory and must be at least 8 characters');
+    if (!isStrongPassword(password)) {
+      setErrorMessage(PASSWORD_POLICY_MESSAGE);
       return;
     }
 

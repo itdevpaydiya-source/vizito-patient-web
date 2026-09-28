@@ -186,7 +186,7 @@ export default function OrderBuilderScreen() {
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl">
+      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 text-white shadow-xl">
         <h2 className="text-xl font-black">{isRxMode ? 'Confirm Your Prescription Order' : 'Order Medicines'}</h2>
         <p className="text-teal-100/80 text-xs mt-1">{isRxMode ? 'Match each prescribed medicine and confirm quantities.' : 'Search and add medicines to your cart.'}</p>
       </div>

@@ -10,11 +10,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Send,
-  UserPlus
+  UserPlus, Stethoscope, Pill, Users, ShieldCheck
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
 import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
 import { validateIndianMobile } from '../../../utils/phoneValidation';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 interface AuthModuleProps {
   onLoginSuccess: (user: any) => void;
@@ -432,8 +433,8 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     e.preventDefault();
     setErrorMessage('');
 
-    if (!newPassword || newPassword.length < 8) {
-      setErrorMessage('New Password is required and must be at least 8 characters');
+    if (!isStrongPassword(newPassword)) {
+      setErrorMessage(PASSWORD_POLICY_MESSAGE);
       return;
     }
 
@@ -447,11 +448,55 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center min-h-screen bg-slate-50/80 p-4 md:p-6 font-sans">
+    <div className="min-h-screen flex font-sans bg-[#FAF7F4]">
+      {/* Brand panel (desktop): what the patient can do, in Paydiya espresso-to-copper. */}
+      <aside className="hidden lg:flex lg:w-[46%] xl:w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-[#2B1A11] via-[#6B4530] to-[#B45F28]">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-500/25 blur-3xl" aria-hidden="true" />
+        <div className="absolute -bottom-32 -left-20 w-[28rem] h-[28rem] rounded-full bg-black/20 blur-3xl" aria-hidden="true" />
+        <div className="relative flex items-center gap-3">
+          <div className="h-11 w-11 rounded-2xl bg-white/95 flex items-center justify-center shadow-lg">
+            <img src={logoImg} alt="" className="h-8 w-auto object-contain" />
+          </div>
+          <div>
+            <span className="block text-xl font-extrabold tracking-tight">vizito</span>
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200">Your Health. Connected.</span>
+          </div>
+        </div>
+        <div className="relative max-w-md">
+          <h2 className="text-4xl font-black leading-[1.1] tracking-tight" style={{ textWrap: 'balance' }}>
+            Care for your whole family, in one place.
+          </h2>
+          <p className="mt-4 text-sm text-brand-100/85 leading-relaxed">
+            Book doctors, get your prescriptions and order medicines from nearby pharmacies, without chasing paperwork.
+          </p>
+          <ul className="mt-8 space-y-4">
+            {[
+              { icon: Stethoscope, title: 'Book verified doctors', text: 'In-clinic and video consultations' },
+              { icon: Pill, title: 'Order medicines', text: 'Straight from your prescription, pickup or delivery' },
+              { icon: Users, title: 'Family profiles', text: 'Manage appointments and records for everyone' },
+            ].map(({ icon: Icon, title, text }) => (
+              <li key={title} className="flex items-start gap-3">
+                <span className="mt-0.5 h-9 w-9 shrink-0 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center">
+                  <Icon className="w-[18px] h-[18px] text-brand-200" />
+                </span>
+                <span>
+                  <span className="block text-sm font-bold">{title}</span>
+                  <span className="block text-xs text-brand-100/75">{text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative flex items-center gap-2 text-[11px] text-brand-100/70">
+          <ShieldCheck className="w-4 h-4" /> Your health records are private to you and your care team.
+        </p>
+      </aside>
+
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6">
       <div className="w-full max-w-[460px] mx-auto my-auto">
         
         {/* Main Card Container */}
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-6 md:p-8 relative overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-[0_24px_60px_-20px_rgba(107,69,48,0.25)] border border-[#EFE6DE] p-6 md:p-8 relative overflow-hidden">
           
           {/* Top Brand Header */}
           <div className="flex flex-col items-center text-center mb-6">
@@ -911,6 +956,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
         </div>
 
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, RotateCcw, CheckCircle2, XCircle, Store, Truck, CreditCard, Smartphone, Building, Wallet, Stethoscope } from 'lucide-react';
+import { ArrowLeft, AlertCircle, RotateCcw, CheckCircle2, XCircle, Store, Truck, CreditCard, Smartphone, Building, Wallet, Stethoscope, MapPin, Phone, Circle } from 'lucide-react';
+import { getProviderDetailApi, type ProviderDetail } from '../../../services/bookingHelper';
 import { getMyOrderApi, cancelOrderApi, payOrderApi, getPharmacyRequestsApi } from '../../../services/pharmacyOrderHelper';
 import { getPrescriptionsApi, type PatientPrescription, type PrescriptionMedicine } from '../../../services/patientHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
@@ -39,12 +40,24 @@ const statusMeta: Record<string, { label: string; className: string }> = {
 
 const CANCELLABLE = ['CREATED', 'AWAITING_PAYMENT', 'PAID'];
 
+// Where the order is in its life, as the patient thinks of it.
+const STEP_ORDER = ['CREATED', 'PAID', 'PROCESSING', 'READY', 'COMPLETED'];
+const stepIndex = (status: string) => {
+  if (status === 'CREATED' || status === 'AWAITING_PAYMENT') return 0;
+  if (status === 'PAID') return 1;
+  if (status === 'PROCESSING') return 2;
+  if (status === 'READY_FOR_PICKUP' || status === 'OUT_FOR_DELIVERY') return 3;
+  if (status === 'COMPLETED') return 4;
+  return -1;
+};
+
 export default function OrderDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [order, setOrder] = useState<PatientOrder | null>(null);
   const [prescription, setPrescription] = useState<PatientPrescription | null>(null);
+  const [pharmacy, setPharmacy] = useState<ProviderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -63,6 +76,7 @@ export default function OrderDetailScreen() {
     try {
       const o = await getMyOrderApi(id);
       setOrder(o);
+      getProviderDetailApi(o.pharmacy_partner_id).then(setPharmacy).catch(() => setPharmacy(null));
       setPrescription(null);
       if (o.pharmacy_request_id) {
         try {
@@ -145,11 +159,52 @@ export default function OrderDetailScreen() {
             </div>
             <div>
               <p className="font-bold text-slate-800 text-sm">{order.fulfillment_type === 'DELIVERY' ? 'Delivery' : 'Pickup'}</p>
-              <p className="text-[11px] text-slate-400">{new Date(order.created_at).toLocaleString()}</p>
+              <p className="text-[11px] text-slate-400">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })} · #{String(order.id).slice(0, 8).toUpperCase()}</p>
             </div>
           </div>
           <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg ${meta.className}`}>{meta.label}</span>
         </div>
+
+        {/* Progress */}
+        {stepIndex(order.status) >= 0 && (
+          <ol className="grid grid-cols-5 gap-1" aria-label="Order progress">
+            {[
+              'Placed',
+              order.payment_method === 'CASH' ? 'Confirmed' : 'Paid',
+              'Being packed',
+              order.fulfillment_type === 'DELIVERY' ? 'On the way' : 'Ready to collect',
+              order.fulfillment_type === 'DELIVERY' ? 'Delivered' : 'Collected',
+            ].map((label, i) => {
+              const done = i <= stepIndex(order.status);
+              return (
+                <li key={label} aria-current={i === stepIndex(order.status) ? 'step' : undefined} className="flex flex-col items-center text-center gap-1">
+                  {done ? <CheckCircle2 className="w-5 h-5 text-teal-600" /> : <Circle className="w-5 h-5 text-slate-300" />}
+                  <span className={`text-[10px] font-bold leading-tight ${done ? 'text-slate-800' : 'text-slate-400'}`}>{label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        {/* Where to collect from / who is sending it */}
+        {pharmacy && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 text-xs space-y-1" aria-label="Pharmacy">
+            <p className="font-bold text-slate-800 flex items-center gap-1.5"><Store className="w-3.5 h-3.5" /> {pharmacy.business_name}</p>
+            {pharmacy.pharmacy?.address && (
+              <p className="text-slate-600 flex items-start gap-1.5"><MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{pharmacy.pharmacy.address}{' '}
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pharmacy.business_name}, ${pharmacy.pharmacy.address}`)}`} target="_blank" rel="noreferrer" className="font-bold text-teal-700 hover:underline">Directions</a>
+                </span>
+              </p>
+            )}
+            {pharmacy.pharmacy?.phone && (
+              <a href={`tel:${pharmacy.pharmacy.phone}`} className="text-teal-700 font-bold flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {pharmacy.pharmacy.phone}</a>
+            )}
+            {order.status === 'READY_FOR_PICKUP' && (
+              <p className="text-emerald-800 font-semibold pt-1">Ready — bring this order number{prescription ? ' and your prescription' : ''} to the counter.</p>
+            )}
+          </div>
+        )}
 
         {prescription && (
           <div className="flex items-start gap-2.5 bg-purple-50/60 border border-purple-100 rounded-xl px-3.5 py-3">

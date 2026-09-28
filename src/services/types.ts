@@ -11,6 +11,17 @@ export interface ProviderItem {
   name: string;            // business_name
   subtitle?: string;       // partner_type
   specialtyOrType?: string; // partner_type
+  // Public profile details (doctors) and rating — only present when the backend has them.
+  qualification?: string | null;
+  experienceYears?: number | null;
+  languages?: string | null;
+  city?: string | null;
+  inClinicFee?: number | null;
+  videoFee?: number | null;
+  registrationVerified?: boolean;
+  logo?: string | null;
+  address?: string | null;     // pharmacies: store address for pickup
+  rating?: { average: number; count: number } | null;
 }
 
 // Pharmacy ordering — mirrors vizito-catalogue's Order/OrderItem and vizito-booking's

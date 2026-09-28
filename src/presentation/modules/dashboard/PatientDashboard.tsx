@@ -17,13 +17,18 @@ import {
   Activity,
   ArrowRight,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  MapPin,
+  Clock
 } from 'lucide-react';
 import { SERVICE_TILES } from '../../../config/serviceTypes';
 import { getPatientProfileApi } from '../../../services/patientHelper';
 import { getFavoritesApi, type PatientFavoriteItem } from '../../../services/patientHelper';
 import { getDashboardApi, type DashboardBooking } from '../../../services/dashboardHelper';
+import { getHealthProfileApi } from '../../../services/healthProfileHelper';
 import { getMyUserId, getFamilyMembersApi, type PatientFamilyMember } from '../../../services/familyHelper';
+import { formatDayDate, formatTime } from '../../../utils/dateFormat';
+import { formatDoctorName } from '../../../utils/doctorLabel';
 
 const ICON_MAP: Record<string, React.ElementType> = {
   Stethoscope, Building2, Home, Truck, Pill, TestTube, Package
@@ -44,7 +49,6 @@ export default function PatientDashboard() {
   const navigate = useNavigate();
 
   const [userName, setUserName] = useState<string>('');
-  const [selectedFamilyId, setSelectedFamilyId] = useState('self');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [family, setFamily] = useState<PatientFamilyMember[]>([]);
@@ -86,6 +90,12 @@ export default function PatientDashboard() {
     }
   }, []);
 
+  // Nudge until the patient has told us their blood group / allergies once.
+  const [healthProfileEmpty, setHealthProfileEmpty] = useState(false);
+  useEffect(() => {
+    getHealthProfileApi().then((h) => setHealthProfileEmpty(h.is_empty)).catch(() => setHealthProfileEmpty(false));
+  }, []);
+
   useEffect(() => {
     // Fast paint of the name from the session, then authoritative profile via loadAll().
     try {
@@ -110,7 +120,7 @@ export default function PatientDashboard() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 w-full">
       {/* Top Banner & Greeting */}
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -144,44 +154,42 @@ export default function PatientDashboard() {
         </form>
       </div>
 
-      {/* Family Member Profile Selector Bar (real family members) */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-teal-600 shrink-0" />
-          <div>
-            <span className="font-extrabold text-slate-900 text-sm block">Healthcare For:</span>
-            <span className="text-[11px] text-slate-500 font-medium">Switch patient profile for this session</span>
-          </div>
-        </div>
+      {/* Your next visit — the first thing a patient looks for */}
+      {(() => {
+        const next = [...activeBookings, ...upcomingBookings][0];
+        if (isLoading || !next) return null;
+        return (
+          <section aria-label="Your next visit" className="bg-white rounded-2xl border border-teal-200 p-5 shadow-xs flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><Calendar className="w-6 h-6" /></div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-wider text-teal-700">Your next visit</p>
+              <p className="font-extrabold text-slate-900 text-base truncate">{formatDoctorName(next.doctorName) || appointmentTypeLabel(next.appointmentType)}{next.department ? <span className="font-semibold text-slate-500"> · {next.department}</span> : null}</p>
+              <p className="text-sm font-semibold text-slate-700 flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+                <span className="inline-flex items-center gap-1"><Clock className="w-4 h-4 text-slate-400" />{formatDayDate(next.appointmentDate || next.bookingDate)}{next.timeSlot ? `, ${formatTime(next.timeSlot)}` : ''}</span>
+                {(next.branchName || next.location) && <span className="inline-flex items-center gap-1 min-w-0"><MapPin className="w-4 h-4 text-slate-400 shrink-0" /><span className="truncate">{next.branchName || next.location}</span></span>}
+              </p>
+              {next.patientName && next.patientName !== userName && <p className="text-xs text-slate-500 mt-0.5">For {next.patientName}</p>}
+            </div>
+            <div className="flex gap-2 shrink-0">
+              {next.location && (
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(next.location)}`} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">Directions</a>
+              )}
+              <button onClick={() => navigate('/my-consultations')} className="px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold">Manage</button>
+            </div>
+          </section>
+        );
+      })()}
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          <button
-            onClick={() => setSelectedFamilyId('self')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-              selectedFamilyId === 'self' ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Myself{userName ? ` (${userName})` : ''}
-          </button>
-          {family.map((member) => (
-            <button
-              key={member.associationId}
-              onClick={() => setSelectedFamilyId(member.associationId)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                selectedFamilyId === member.associationId ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {member.name} ({member.relationship})
-            </button>
-          ))}
-          <button
-            onClick={() => navigate('/family-profiles')}
-            className="px-3 py-2 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50 font-bold text-xs shrink-0 flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Member
+      {healthProfileEmpty && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-teal-200 bg-teal-50/60 px-5 py-4">
+          <p className="flex-1 text-sm font-semibold text-slate-800">
+            Add your blood group, allergies and regular medicines once — every doctor you book will see them.
+          </p>
+          <button onClick={() => navigate('/profile?section=health')} className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold">
+            Complete health profile
           </button>
         </div>
-      </div>
+      )}
 
       {/* Quick Healthcare Services Grid (static navigation config) */}
       <div className="space-y-4">
@@ -210,8 +218,8 @@ export default function PatientDashboard() {
                   <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-teal-700 transition-colors">{service.name}</h3>
                   <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">{service.shortDesc}</p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-teal-600">
-                  <span>Book Now</span>
+                <div className={`mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold ${service.available ? 'text-teal-600' : 'text-slate-400'}`}>
+                  <span>{service.available ? (service.id === 'pharmacy' ? 'Order Now' : 'Book Now') : 'Coming soon'}</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -253,12 +261,12 @@ export default function PatientDashboard() {
                     <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100">
                       {appointmentTypeLabel(b.appointmentType)}
                     </span>
-                    <h3 className="font-extrabold text-slate-900 text-sm mt-1">{b.location || 'Location to be confirmed'}</h3>
+                    <h3 className="font-extrabold text-slate-900 text-sm mt-1">{formatDoctorName(b.doctorName) || b.branchName || b.location || 'Location to be confirmed'}</h3>
                   </div>
                   <span className="text-xs font-extrabold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-xl">{b.status}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span>{b.appointmentDate || b.bookingDate || '—'}{b.timeSlot ? ` • ${b.timeSlot}` : ''}</span>
+                  <span>{formatDayDate(b.appointmentDate || b.bookingDate)}{b.timeSlot ? ` • ${formatTime(b.timeSlot)}` : ''}</span>
                   {b.bookingNumber && <span className="text-slate-400">Ref: {b.bookingNumber}</span>}
                 </div>
               </div>
@@ -292,13 +300,13 @@ export default function PatientDashboard() {
                       <Calendar className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">{appointmentTypeLabel(up.appointmentType)}</h4>
-                      <p className="text-xs text-slate-500 font-semibold">{up.location || 'Location to be confirmed'}</p>
+                      <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm">{formatDoctorName(up.doctorName) || appointmentTypeLabel(up.appointmentType)}</h4>
+                      <p className="text-xs text-slate-500 font-semibold">{up.branchName || up.location || 'Location to be confirmed'}{up.patientName && up.patientName !== userName ? ` · for ${up.patientName}` : ''}</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="text-xs font-extrabold text-slate-800 block">{up.appointmentDate || up.bookingDate || '—'}</span>
-                    <span className="text-[11px] text-teal-700 font-bold">{up.timeSlot || ''}</span>
+                    <span className="text-xs font-extrabold text-slate-800 block">{formatDayDate(up.appointmentDate || up.bookingDate)}</span>
+                    <span className="text-[11px] text-teal-700 font-bold">{up.timeSlot ? formatTime(up.timeSlot) : ''}</span>
                   </div>
                 </div>
               ))}

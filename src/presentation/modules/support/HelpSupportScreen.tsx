@@ -1,201 +1,133 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  LifeBuoy,
-  Search,
-  MessageSquare,
-  Mail,
-  Phone,
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  Send,
-  Upload,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  Paperclip,
-  X,
-  ArrowRight,
-  ShieldCheck,
-  Headphones
+  Search, MessageSquare, AlertTriangle, ChevronDown, ChevronUp, FileText, Send, AlertCircle, Clock, X,
+  ArrowRight, Headphones, Siren, Paperclip, CheckCircle2, RotateCcw, Inbox, Lock,
 } from 'lucide-react';
+import {
+  SUPPORT_CATEGORIES, createTicketApi, getMyTicketsApi, getTicketApi, replyTicketApi, closeTicketApi, readFileAsDataUrl,
+  type SupportTicket, type TicketKind, type TicketStatus,
+} from '../../../services/supportHelper';
+import { getDashboardApi, type DashboardBooking } from '../../../services/dashboardHelper';
+import { formatDate } from '../../../utils/dateFormat';
+import { formatDoctorName } from '../../../utils/doctorLabel';
 
 export interface FAQItem {
   question: string;
   answer: string;
-  category: 'Booking' | 'Records' | 'Family' | 'Tracking' | 'Payments';
+  category: 'Booking' | 'Records' | 'Family' | 'Pharmacy' | 'Payments';
+  link?: { label: string; to: string };
 }
 
+// Every answer describes a flow that exists in this app today.
 export const PATIENT_FAQS: FAQItem[] = [
   {
-    question: 'How do I book a healthcare service or doctor appointment?',
-    answer:
-      'Navigate to Healthcare Services or click "Book Service" in the sidebar. Select your desired service (Doctor, Hospital, Home Care, Ambulance, Pharmacy, Diagnostic Lab, or Equipment Rental), choose your provider, select date/time, and complete payment.',
-    category: 'Booking'
+    question: 'How do I book a doctor or hospital appointment?',
+    answer: 'Open Healthcare Services and choose Doctor Consultation or Hospital. Pick the doctor (for a hospital: the branch and department first), then a date and a free time slot. Pay online by UPI, card, net banking or wallet, or choose Pay at Clinic. The booking appears under Bookings with its reference number.',
+    category: 'Booking',
+    link: { label: 'Book an appointment', to: '/healthcare-services' },
   },
   {
-    question: 'How do I cancel a booking and receive a refund?',
-    answer:
-      'Go to the Bookings module in the sidebar, select your active or upcoming booking card, click "Cancel Booking", select your reason for cancellation, and confirm. Eligible refunds are processed back to your payment method automatically.',
-    category: 'Booking'
+    question: 'How do I cancel a booking? Will I get a refund?',
+    answer: 'Open Bookings, tap the upcoming booking and choose Cancel booking. You can cancel any time before the appointment starts. If you paid online, the full amount is refunded to the same payment method (banks usually take 5–7 working days). Pay-at-clinic bookings have nothing to refund.',
+    category: 'Payments',
+    link: { label: 'Go to Bookings', to: '/my-consultations' },
   },
   {
-    question: 'How do I upload and manage medical records for my family?',
-    answer:
-      'Open the Medical Records module. Use the patient profile dropdown at the top to select yourself or a family member, click "+ Upload Record", select the file (PDF, JPG, PNG), enter a name, and save. Records can also be shared directly during Pharmacy or Lab test bookings.',
-    category: 'Records'
+    question: 'Where are my prescriptions? Can I download them?',
+    answer: 'Medical Records lists every prescription your doctor finalised after a visit — medicines with how to take them, tests advised, allergies, vitals and the follow-up date. Tap View, then Print / Download (choose "Save as PDF" to keep a copy).',
+    category: 'Records',
+    link: { label: 'Open Medical Records', to: '/my-records' },
   },
   {
-    question: 'How do I add a new family member for bookings?',
-    answer:
-      'Navigate to Profile & Account > Family Members and click "+ Add Family Member". Enter their full name, date of birth, gender, and relationship (Father, Mother, Spouse, Child, etc.). Their profile will now be selectable during any healthcare booking.',
-    category: 'Family'
+    question: 'How do I get my prescribed medicines from a pharmacy?',
+    answer: 'In Medical Records tap Send to Pharmacy on a prescription and choose a pharmacy, or start a new order from Pharmacy Orders. Choose pickup or delivery. If the pharmacy cannot fulfil the order, any online payment is refunded automatically and the order shows as failed.',
+    category: 'Pharmacy',
+    link: { label: 'Pharmacy Orders', to: '/pharmacy-orders' },
   },
   {
-    question: 'How does live queue token tracking and GPS dispatch work?',
-    answer:
-      'For Doctor, Hospital, and Lab bookings, your live Queue Token number, patients ahead, and estimated wait time update automatically on your Booking Details card. For Home Care, Ambulance, Pharmacy, and Equipment rentals, real-time GPS tracking displays live dispatch progress.',
-    category: 'Tracking'
+    question: 'Can I book for my parents, spouse or children?',
+    answer: 'Yes. Add them once under Family Profiles (name, date of birth, gender and relationship). They can then be chosen as the patient while booking.',
+    category: 'Family',
+    link: { label: 'Family Profiles', to: '/family-profiles' },
   },
   {
-    question: 'What payment methods are supported on Vizito?',
-    answer:
-      'Vizito supports UPI (Google Pay, PhonePe, Paytm), Credit & Debit Cards, Net Banking, and Wallet payments. Digital tax invoices and receipts are issued immediately after booking.',
-    category: 'Payments'
-  }
+    question: 'How do I rate my doctor after a visit?',
+    answer: 'Open Bookings → Completed, tap the visit and write a review with a star rating. You can see your reviews and any reply from the doctor under Ratings & Reviews.',
+    category: 'Booking',
+    link: { label: 'Ratings & Reviews', to: '/reviews' },
+  },
 ];
 
+const STATUS_UI: Record<TicketStatus, { label: string; cls: string }> = {
+  OPEN: { label: 'Open', cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+  IN_PROGRESS: { label: 'In progress', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+  AWAITING_YOU: { label: 'Support replied', cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+  RESOLVED: { label: 'Resolved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  CLOSED: { label: 'Closed', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+};
+
+const MAX_FILE = 2 * 1024 * 1024;
+const inputCls = 'w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20';
+
 export default function HelpSupportScreen() {
-  // Search & Filter state
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
-  // Modals & Toast State
-  const [contactModalOpen, setContactModalOpen] = useState(false);
-  const [reportModalOpen, setReportModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [ticketsError, setTicketsError] = useState<string | null>(null);
+  const [formKind, setFormKind] = useState<TicketKind | null>(null);
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
 
-  // Form State - Contact Support
-  const [contactSubject, setContactSubject] = useState('');
-  const [contactCategory, setContactCategory] = useState('Booking Issue');
-  const [contactMessage, setContactMessage] = useState('');
-  const [contactError, setContactError] = useState<string | null>(null);
+  const loadTickets = useCallback(async () => {
+    setTicketsLoading(true); setTicketsError(null);
+    try { setTickets(await getMyTicketsApi()); }
+    catch { setTicketsError('Could not load your requests.'); }
+    finally { setTicketsLoading(false); }
+  }, []);
+  useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  // Form State - Report an Issue
-  const [reportTitle, setReportTitle] = useState('');
-  const [reportCategory, setReportCategory] = useState('Booking');
-  const [reportDesc, setReportDesc] = useState('');
-  const [reportFile, setReportFile] = useState<File | null>(null);
-  const [reportError, setReportError] = useState<string | null>(null);
+  // Deep links: /help?booking=BK-... opens the form about that booking; /help?ticket=<id> (from a
+  // notification) opens that ticket.
+  useEffect(() => {
+    if (params.get('booking')) setFormKind('ISSUE');
+    if (params.get('ticket')) setOpenTicketId(params.get('ticket'));
+  }, [params]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
+  const filteredFaqs = PATIENT_FAQS.filter((f) => {
+    const q = searchTerm.trim().toLowerCase();
+    return !q || f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q);
+  });
 
-  // Filter FAQs based on search
-  const filteredFaqs = PATIENT_FAQS.filter(
-    (faq) =>
-      !searchTerm ||
-      faq.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Contact Form Submit
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setContactError(null);
-
-    if (!contactSubject.trim()) {
-      setContactError('Subject is required.');
-      return;
-    }
-    if (!contactCategory) {
-      setContactError('Please select a category.');
-      return;
-    }
-    if (!contactMessage.trim()) {
-      setContactError('Message cannot be empty.');
-      return;
-    }
-
-    setContactModalOpen(false);
-    setContactSubject('');
-    setContactMessage('');
-    showToast('Your support request has been submitted successfully. Our support team will contact you shortly.');
-  };
-
-  // Report Issue Form Submit
-  const handleReportSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setReportError(null);
-
-    if (!reportTitle.trim()) {
-      setReportError('Issue Title is required.');
-      return;
-    }
-    if (!reportDesc.trim()) {
-      setReportError('Please provide an issue description.');
-      return;
-    }
-
-    // Validate attachment format if provided
-    if (reportFile) {
-      const ext = reportFile.name.split('.').pop()?.toLowerCase();
-      if (!['png', 'jpg', 'jpeg', 'pdf'].includes(ext || '')) {
-        setReportError('Unsupported file format. Please attach PNG, JPG, JPEG, or PDF.');
-        return;
-      }
-    }
-
-    const ticketId = `TKT-${Math.floor(1000 + Math.random() * 9000)}`;
-    setReportModalOpen(false);
-    setReportTitle('');
-    setReportDesc('');
-    setReportFile(null);
-    showToast(`Issue report submitted successfully. Ticket reference #${ticketId} generated.`);
-  };
+  const openCount = tickets.filter((t) => t.status !== 'CLOSED' && t.status !== 'RESOLVED').length;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 w-full">
-      {/* Toast Feedback Banner */}
-      {toastMessage && (
-        <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-top-3 max-w-md">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-bold leading-relaxed">{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Hero Header */}
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Hero */}
+      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10 max-w-3xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-bold text-teal-200">
-            <Headphones className="w-3.5 h-3.5 text-teal-300" />
-            Patient Help & Customer Care
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-bold">
+            <Headphones className="w-3.5 h-3.5" /> Help & Support
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Help & Support</h1>
-          <p className="text-teal-100/80 text-sm sm:text-base font-medium leading-relaxed">
-            How can we help you today? Contact customer care, report an application issue, or search our knowledge base.
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">How can we help?</h1>
+          <p className="text-white/80 text-sm sm:text-base font-medium leading-relaxed">
+            Search the answers below, or send a request to the Vizito support team and follow it here.
           </p>
-
-          {/* Search Box */}
           <div className="mt-6 relative max-w-2xl">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
+              aria-label="Search help"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search help topics, FAQs, booking guides, or refund rules..."
-              className="w-full pl-12 pr-4 py-3.5 bg-white text-slate-900 rounded-2xl font-semibold text-sm placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-400/30 shadow-lg"
+              placeholder="Search: cancel, refund, prescription, pharmacy…"
+              className="w-full pl-12 pr-10 py-3.5 bg-white text-slate-900 rounded-2xl font-semibold text-sm placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-white/30 shadow-lg"
             />
             {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
-              >
+              <button onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -203,146 +135,64 @@ export default function HelpSupportScreen() {
         </div>
       </div>
 
-      {/* Support Options Cards Grid */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-          <span>🛠️</span> Support Options
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Option 1: Contact Support */}
-          <div
-            onClick={() => {
-              setContactError(null);
-              setContactModalOpen(true);
-            }}
-            className="bg-white rounded-2xl border border-slate-200 p-5 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 mb-3 group-hover:scale-110 transition-transform">
-                <MessageSquare className="w-6 h-6" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-base group-hover:text-teal-700 transition-colors">
-                Contact Support
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Talk to our customer care team about bookings or payments.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-bold text-teal-600 flex items-center justify-between">
-              <span>Open Form</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* Option 2: Report an Issue */}
-          <div
-            onClick={() => {
-              setReportError(null);
-              setReportModalOpen(true);
-            }}
-            className="bg-white rounded-2xl border border-slate-200 p-5 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mb-3 group-hover:scale-110 transition-transform">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-base group-hover:text-rose-700 transition-colors">
-                Report an Issue
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Report a technical error or attach payment screenshots.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-bold text-rose-600 flex items-center justify-between">
-              <span>Submit Ticket</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* Option 3: Call Support */}
-          <a
-            href="tel:+919876543210"
-            className="bg-white rounded-2xl border border-slate-200 p-5 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-3 group-hover:scale-110 transition-transform">
-                <Phone className="w-6 h-6" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-base group-hover:text-emerald-700 transition-colors">
-                Call Support
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Speak directly with support specialists on phone.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-bold text-emerald-600 flex items-center justify-between">
-              <span>+91 98765 43210</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </a>
-
-          {/* Option 4: Email Support */}
-          <a
-            href="mailto:support@vizito.com?subject=Patient%20Support%20Request"
-            className="bg-white rounded-2xl border border-slate-200 p-5 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between"
-          >
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 mb-3 group-hover:scale-110 transition-transform">
-                <Mail className="w-6 h-6" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-base group-hover:text-sky-700 transition-colors">
-                Email Support
-              </h3>
-              <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
-                Send an email inquiry for non-urgent assistance.
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-slate-100 text-xs font-bold text-sky-600 flex items-center justify-between">
-              <span>support@vizito.com</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </a>
+      {/* Emergency — support tickets are not for emergencies */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4">
+        <Siren className="w-6 h-6 text-rose-600 shrink-0" />
+        <p className="text-sm font-semibold text-rose-900 flex-1">
+          Medical emergency? Don’t wait for a support reply — call an ambulance now.
+        </p>
+        <div className="flex gap-2">
+          <a href="tel:108" className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black">Call 108</a>
+          <a href="tel:112" className="px-4 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-100 text-xs font-black">Call 112</a>
         </div>
       </div>
 
-      {/* Main Content Layout: FAQs + Contact Info Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        
-        {/* Left Column: FAQ Section */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-teal-600" /> Frequently Asked Questions
-            </h2>
-            <span className="text-xs font-bold text-slate-400">
-              {filteredFaqs.length} Articles Available
-            </span>
+      {/* Two ways in */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <button onClick={() => setFormKind('QUESTION')} className="text-left bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-lg hover:border-teal-200 transition-all group">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 shrink-0"><MessageSquare className="w-6 h-6" /></div>
+            <div className="flex-1">
+              <h3 className="font-extrabold text-slate-800 text-base">Ask a question</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">Bookings, payments, prescriptions or your account.</p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-1 transition-all mt-1" />
           </div>
+        </button>
+        <button onClick={() => setFormKind('ISSUE')} className="text-left bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-lg hover:border-rose-200 transition-all group">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0"><AlertTriangle className="w-6 h-6" /></div>
+            <div className="flex-1">
+              <h3 className="font-extrabold text-slate-800 text-base">Report a problem</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">Payment deducted, booking missing, app error — attach a screenshot.</p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-rose-600 group-hover:translate-x-1 transition-all mt-1" />
+          </div>
+        </button>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        {/* FAQs */}
+        <div className="lg:col-span-2 space-y-4">
+          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2"><FileText className="w-5 h-5 text-teal-600" /> Common questions</h2>
           {filteredFaqs.length > 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
               {filteredFaqs.map((faq, idx) => {
                 const isOpen = openFaq === idx;
                 return (
-                  <div key={idx} className="transition-colors">
-                    <button
-                      onClick={() => setOpenFaq(isOpen ? null : idx)}
-                      className="w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer"
-                    >
-                      <span className={`text-xs sm:text-sm font-bold pr-4 ${isOpen ? 'text-teal-700' : 'text-slate-800'}`}>
-                        {faq.question}
-                      </span>
-                      {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-teal-600 shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                      )}
+                  <div key={faq.question}>
+                    <button onClick={() => setOpenFaq(isOpen ? null : idx)} aria-expanded={isOpen} className="w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-50">
+                      <span className={`text-xs sm:text-sm font-bold pr-4 ${isOpen ? 'text-teal-700' : 'text-slate-800'}`}>{faq.question}</span>
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-teal-600 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
                     </button>
-
                     {isOpen && (
-                      <div className="px-5 pb-5 pt-1 text-xs text-slate-600 font-medium leading-relaxed bg-slate-50/50 border-t border-slate-100">
-                        {faq.answer}
+                      <div className="px-5 pb-5 pt-1 text-xs text-slate-600 font-medium leading-relaxed bg-slate-50/50 border-t border-slate-100 space-y-3">
+                        <p>{faq.answer}</p>
+                        {faq.link && (
+                          <button onClick={() => navigate(faq.link!.to)} className="inline-flex items-center gap-1 text-teal-700 font-bold hover:underline">
+                            {faq.link.label} <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -350,259 +200,309 @@ export default function HelpSupportScreen() {
               })}
             </div>
           ) : (
-            /* Empty State when Search produces no FAQs */
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                <Search className="w-6 h-6" />
-              </div>
-              <h3 className="font-extrabold text-slate-800 text-sm">No help articles available.</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No FAQs matched your search term. Please contact customer support directly.
-              </p>
-              <button
-                onClick={() => setContactModalOpen(true)}
-                className="mt-2 inline-flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md"
-              >
-                <MessageSquare className="w-4 h-4" /> Contact Customer Support
+              <Search className="w-8 h-8 text-slate-300 mx-auto" />
+              <h3 className="font-extrabold text-slate-800 text-sm">No answer matches “{searchTerm}”.</h3>
+              <button onClick={() => setFormKind('QUESTION')} className="inline-flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-xl font-bold text-xs">
+                <MessageSquare className="w-4 h-4" /> Ask the support team
               </button>
             </div>
           )}
         </div>
 
-        {/* Right Column: Support Contact Information Card */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
-          <div className="border-b border-slate-100 pb-3">
-            <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-teal-600" /> Customer Support Info
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">Reach out via official channels.</p>
+        {/* Your requests */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-5 space-y-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2"><Inbox className="w-5 h-5 text-teal-600" /> Your requests</h3>
+            {openCount > 0 && <span className="text-[10px] font-bold text-slate-500">{openCount} open</span>}
           </div>
-
-          <div className="space-y-4 text-xs font-semibold">
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-3">
-              <Phone className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Phone Number</span>
-                <span className="font-black text-slate-800 text-sm">+91 98765 43210</span>
-              </div>
+          {ticketsLoading ? (
+            <p className="text-xs text-slate-400 py-6 text-center">Loading…</p>
+          ) : ticketsError ? (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-xs font-semibold text-rose-600">{ticketsError}</p>
+              <button onClick={loadTickets} className="inline-flex items-center gap-1 text-xs font-bold text-slate-700"><RotateCcw className="w-3.5 h-3.5" /> Retry</button>
             </div>
-
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-3">
-              <Mail className="w-4 h-4 text-sky-600 mt-0.5 shrink-0" />
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Email Address</span>
-                <span className="font-black text-slate-800 text-sm">support@vizito.com</span>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-3">
-              <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-              <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Working Hours</span>
-                <span className="font-bold text-slate-800">9:00 AM – 6:00 PM (Mon - Sat)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Need Immediate Help Box */}
-          <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-center space-y-2">
-            <h4 className="font-extrabold text-teal-900 text-xs">Need Immediate Help?</h4>
-            <p className="text-[11px] text-teal-700">Submit a support request and our team will get back to you shortly.</p>
-            <button
-              onClick={() => {
-                setContactError(null);
-                setContactModalOpen(true);
-              }}
-              className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-98"
-            >
-              Contact Us Now
-            </button>
+          ) : tickets.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4">No requests yet. Anything you send to support is tracked here, with every reply.</p>
+          ) : (
+            <ul className="space-y-2" aria-label="Your support requests">
+              {tickets.map((t) => (
+                <li key={t.id}>
+                  <button onClick={() => setOpenTicketId(t.id)} className="w-full text-left p-3 rounded-2xl border border-slate-100 hover:border-slate-300 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-800 line-clamp-2">{t.subject}</span>
+                      <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_UI[t.status]?.cls}`}>{STATUS_UI[t.status]?.label || t.status}</span>
+                    </div>
+                    <span className="block text-[11px] text-slate-400 font-semibold mt-1">{t.ticket_number} · {formatDate(t.created_at)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-[11px] text-slate-600 font-medium space-y-1">
+            <p className="flex items-center gap-1.5 font-bold text-slate-700"><Clock className="w-3.5 h-3.5" /> Reply times</p>
+            <p>Payment &amp; refund: within 24 hours. Everything else: within 48 hours. Replies also arrive in your notifications.</p>
           </div>
         </div>
-
       </div>
 
-      {/* Contact Support Modal */}
-      {contactModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 text-xs">
-            
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2 text-teal-700">
-                <MessageSquare className="w-5 h-5 text-teal-600" /> Contact Support Form
-              </h3>
-              <button onClick={() => setContactModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {contactError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-bold text-rose-700">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{contactError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleContactSubmit} className="space-y-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Subject</label>
-                <input
-                  type="text"
-                  value={contactSubject}
-                  onChange={(e) => setContactSubject(e.target.value)}
-                  placeholder="e.g. Unable to book appointment"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-teal-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Category</label>
-                <select
-                  value={contactCategory}
-                  onChange={(e) => setContactCategory(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-teal-500"
-                >
-                  <option value="Booking Issue">Booking Issue</option>
-                  <option value="Payment Issue">Payment Issue</option>
-                  <option value="Pharmacy">Pharmacy</option>
-                  <option value="Laboratory">Laboratory</option>
-                  <option value="Home Care">Home Care</option>
-                  <option value="Ambulance">Ambulance</option>
-                  <option value="Equipment Rental">Equipment Rental</option>
-                  <option value="Medical Records">Medical Records</option>
-                  <option value="Account">Account</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Message</label>
-                <textarea
-                  rows={4}
-                  value={contactMessage}
-                  onChange={(e) => setContactMessage(e.target.value)}
-                  placeholder="Describe your issue or request in detail..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-teal-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setContactModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-md flex items-center gap-1.5"
-                >
-                  <Send className="w-4 h-4" /> Submit Request
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {formKind && (
+        <TicketFormModal
+          kind={formKind}
+          presetBooking={params.get('booking') || ''}
+          onClose={() => {
+            setFormKind(null);
+            if (params.get('booking')) { params.delete('booking'); setParams(params, { replace: true }); }
+          }}
+          onCreated={(t) => { setTickets((prev) => [t, ...prev]); }}
+        />
       )}
-
-      {/* Report an Issue Modal */}
-      {reportModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 text-xs">
-            
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2 text-rose-600">
-                <AlertTriangle className="w-5 h-5 text-rose-600" /> Report an Application Issue
-              </h3>
-              <button onClick={() => setReportModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {reportError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs font-bold text-rose-700">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{reportError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleReportSubmit} className="space-y-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Issue Title</label>
-                <input
-                  type="text"
-                  value={reportTitle}
-                  onChange={(e) => setReportTitle(e.target.value)}
-                  placeholder="e.g. Payment Failed, Screen Freezing"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-teal-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Category</label>
-                <select
-                  value={reportCategory}
-                  onChange={(e) => setReportCategory(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-teal-500"
-                >
-                  <option value="Booking">Booking</option>
-                  <option value="Payment">Payment</option>
-                  <option value="Account">Account</option>
-                  <option value="Notification">Notification</option>
-                  <option value="Medical Records">Medical Records</option>
-                  <option value="Technical Issue">Technical Issue</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Description</label>
-                <textarea
-                  rows={4}
-                  value={reportDesc}
-                  onChange={(e) => setReportDesc(e.target.value)}
-                  placeholder="Explain what happened and steps to reproduce..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-teal-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Attach Screenshot (Optional - PNG, JPG, PDF)</label>
-                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between">
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => setReportFile(e.target.files?.[0] || null)}
-                    className="text-xs text-slate-600"
-                  />
-                  {reportFile && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                      ✓ Attached
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setReportModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md flex items-center gap-1.5"
-                >
-                  <Send className="w-4 h-4" /> Submit Report
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {openTicketId && (
+        <TicketDetailModal
+          id={openTicketId}
+          onClose={() => {
+            setOpenTicketId(null);
+            if (params.get('ticket')) { params.delete('ticket'); setParams(params, { replace: true }); }
+          }}
+          onChanged={(t) => setTickets((prev) => prev.map((x) => (x.id === t.id ? { ...x, ...t } : x)))}
+        />
       )}
     </div>
   );
 }
+
+// ── New request ──
+const TicketFormModal: React.FC<{
+  kind: TicketKind;
+  presetBooking: string;
+  onClose: () => void;
+  onCreated: (t: SupportTicket) => void;
+}> = ({ kind: initialKind, presetBooking, onClose, onCreated }) => {
+  const [kind, setKind] = useState<TicketKind>(initialKind);
+  const [category, setCategory] = useState<string>(presetBooking ? 'Booking & appointments' : '');
+  const [bookingRef, setBookingRef] = useState(presetBooking);
+  const [subject, setSubject] = useState('');
+  const [description, setDescription] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [created, setCreated] = useState<SupportTicket | null>(null);
+  const [bookings, setBookings] = useState<DashboardBooking[]>([]);
+
+  // The patient's own bookings, so a problem can be tied to the exact visit (support sees the ref).
+  useEffect(() => {
+    getDashboardApi()
+      .then((d) => setBookings([...d.active, ...d.upcoming, ...d.history].filter((b) => b.bookingNumber)))
+      .catch(() => setBookings([]));
+  }, []);
+
+  const bookingLabel = (b: DashboardBooking) =>
+    [b.bookingNumber, formatDoctorName(b.doctorName), formatDate(b.appointmentDate || b.bookingDate, '')].filter(Boolean).join(' · ');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!category) return setError('Choose what your request is about.');
+    if (subject.trim().length < 5) return setError('Add a short subject (at least 5 characters).');
+    if (description.trim().length < 15) return setError('Describe the problem in a little more detail (at least 15 characters).');
+    if (category === 'Payment & refund' && !bookingRef) return setError('Choose the booking this payment is for, so we can trace it.');
+    let attachment_data: string | undefined;
+    if (file) {
+      if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) return setError('Attach a PNG, JPG or PDF file.');
+      if (file.size > MAX_FILE) return setError('The attachment must be 2 MB or smaller.');
+      attachment_data = await readFileAsDataUrl(file);
+    }
+    setSending(true);
+    try {
+      const t = await createTicketApi({
+        kind, category, subject: subject.trim(), description: description.trim(),
+        booking_reference: bookingRef || undefined,
+        attachment_name: file?.name, attachment_data,
+      });
+      setCreated(t);
+      onCreated(t);
+    } catch (err: any) {
+      setError(err?.message || 'Could not send your request.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={kind === 'ISSUE' ? 'Report a problem' : 'Ask a question'}>
+      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-6 space-y-4 shadow-2xl border border-slate-100 text-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 className="font-extrabold text-slate-900 text-base">{created ? 'Request sent' : kind === 'ISSUE' ? 'Report a problem' : 'Ask a question'}</h3>
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {created ? (
+          <div className="text-center space-y-3 py-4" role="status">
+            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+            <p className="text-sm font-bold text-slate-800">Your request number is {created.ticket_number}</p>
+            <p className="text-slate-500 font-medium">
+              The support team will reply by {new Date(created.respond_by).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}.
+              You’ll get a notification, and the reply shows under Your requests.
+            </p>
+            <button onClick={onClose} className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold">Done</button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="space-y-3" noValidate>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Request type">
+              {(['QUESTION', 'ISSUE'] as TicketKind[]).map((k) => (
+                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}
+                  className={`py-2 rounded-xl border font-bold ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                  {k === 'QUESTION' ? 'Question' : 'Problem'}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label htmlFor="t-cat" className="block font-bold text-slate-700 mb-1">What is it about? *</label>
+              <select id="t-cat" value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+                <option value="">Choose…</option>
+                {SUPPORT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="t-book" className="block font-bold text-slate-700 mb-1">Related booking {category === 'Payment & refund' ? '*' : '(optional)'}</label>
+              <select id="t-book" value={bookingRef} onChange={(e) => setBookingRef(e.target.value)} className={inputCls}>
+                <option value="">Not about a specific booking</option>
+                {presetBooking && !bookings.some((b) => b.bookingNumber === presetBooking) && <option value={presetBooking}>{presetBooking}</option>}
+                {bookings.map((b) => <option key={b.id} value={b.bookingNumber!}>{bookingLabel(b)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="t-sub" className="block font-bold text-slate-700 mb-1">Subject *</label>
+              <input id="t-sub" value={subject} maxLength={150} onChange={(e) => setSubject(e.target.value)}
+                placeholder={kind === 'ISSUE' ? 'e.g. Money deducted but booking not confirmed' : 'e.g. Can I change my appointment time?'} className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="t-desc" className="block font-bold text-slate-700 mb-1">Details *</label>
+              <textarea id="t-desc" rows={5} value={description} maxLength={4000} onChange={(e) => setDescription(e.target.value)}
+                placeholder={kind === 'ISSUE' ? 'What happened, when, and what you expected. For payments: amount and UPI/bank reference.' : 'Tell us what you need help with.'}
+                className={`${inputCls} font-medium`} />
+              <span className="block text-right text-[10px] text-slate-400 mt-0.5">{description.length}/4000</span>
+            </div>
+            <div>
+              <label htmlFor="t-file" className="block font-bold text-slate-700 mb-1">Screenshot or receipt (optional · PNG, JPG or PDF, up to 2 MB)</label>
+              <input id="t-file" type="file" accept="image/png,image/jpeg,application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-xs text-slate-600" />
+            </div>
+            <p className="flex items-start gap-1.5 text-[11px] text-slate-500"><Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Don’t include card numbers, CVV, OTPs or passwords — Vizito will never ask for them.</p>
+            {error && (
+              <div role="alert" className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 font-bold text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={sending} className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold flex items-center gap-1.5">
+                <Send className="w-4 h-4" /> {sending ? 'Sending…' : 'Send to support'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── One request, with the conversation ──
+const TicketDetailModal: React.FC<{ id: string; onClose: () => void; onChanged: (t: SupportTicket) => void }> = ({ id, onClose, onChanged }) => {
+  const [ticket, setTicket] = useState<SupportTicket | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reply, setReply] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getTicketApi(id).then(setTicket).catch(() => setError('Could not open this request.'));
+  }, [id]);
+
+  const update = (t: SupportTicket) => { setTicket(t); onChanged(t); };
+
+  const sendReply = async () => {
+    if (reply.trim().length < 2) return;
+    setBusy(true); setError(null);
+    try { update(await replyTicketApi(id, reply.trim())); setReply(''); }
+    catch (e: any) { setError(e?.message || 'Could not send your reply.'); }
+    finally { setBusy(false); }
+  };
+
+  const close = async () => {
+    setBusy(true);
+    try { update(await closeTicketApi(id)); } catch { setError('Could not close this request.'); } finally { setBusy(false); }
+  };
+
+  const attachmentHref = useMemo(() => ticket?.attachment_data || null, [ticket]);
+  const closed = ticket?.status === 'CLOSED';
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Support request">
+      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 text-xs">
+        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="min-w-0">
+            <h3 className="font-extrabold text-slate-900 text-sm">{ticket?.subject || 'Support request'}</h3>
+            {ticket && <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{ticket.ticket_number} · {ticket.category}{ticket.booking_reference ? ` · ${ticket.booking_reference}` : ''}</p>}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {ticket && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_UI[ticket.status]?.cls}`}>{STATUS_UI[ticket.status]?.label}</span>}
+            <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto px-6 py-4 space-y-3 flex-1">
+          {!ticket && !error && <p className="text-slate-400 py-6 text-center">Loading…</p>}
+          {ticket && (
+            <>
+              <Bubble mine name="You" when={ticket.created_at} body={ticket.description} />
+              {attachmentHref && (
+                <a href={attachmentHref} download={ticket.attachment_name || 'attachment'} className="ml-auto flex w-fit items-center gap-1.5 text-[11px] font-bold text-teal-700 hover:underline">
+                  <Paperclip className="w-3.5 h-3.5" /> {ticket.attachment_name}
+                </a>
+              )}
+              {(ticket.messages || []).map((m) => (
+                <Bubble key={m.id} mine={m.author_type === 'requester'} name={m.author_type === 'support' ? (m.author_name || 'Vizito Support') : 'You'} when={m.created_at} body={m.body} />
+              ))}
+              {!(ticket.messages || []).some((m) => m.author_type === 'support') && !closed && (
+                <p className="text-center text-[11px] text-slate-400 font-semibold py-2">
+                  Waiting for the support team · reply expected by {new Date(ticket.respond_by).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                </p>
+              )}
+            </>
+          )}
+          {error && <p role="alert" className="text-rose-600 font-bold">{error}</p>}
+        </div>
+
+        {ticket && (
+          <div className="border-t border-slate-100 px-6 py-4 space-y-2">
+            {closed ? (
+              <p className="text-slate-500 font-semibold">This request is closed. If you still need help, send a new request.</p>
+            ) : (
+              <>
+                <label htmlFor="t-reply" className="sr-only">Your reply</label>
+                <textarea id="t-reply" rows={2} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Write a reply…" className={`${inputCls} font-medium`} />
+                <div className="flex items-center justify-between gap-2">
+                  <button onClick={close} disabled={busy} className="text-[11px] font-bold text-slate-500 hover:text-slate-800">
+                    {ticket.status === 'RESOLVED' ? 'Close request' : 'My problem is solved — close'}
+                  </button>
+                  <button onClick={sendReply} disabled={busy || reply.trim().length < 2} className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5" /> Send reply
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Bubble: React.FC<{ mine: boolean; name: string; when: string; body: string }> = ({ mine, name, when, body }) => (
+  <div className={`max-w-[85%] ${mine ? 'ml-auto' : ''}`}>
+    <div className={`rounded-2xl px-4 py-3 whitespace-pre-line font-medium ${mine ? 'bg-teal-50 border border-teal-100 text-slate-800' : 'bg-slate-100 text-slate-800'}`}>{body}</div>
+    <p className={`text-[10px] text-slate-400 font-semibold mt-1 ${mine ? 'text-right' : ''}`}>
+      {name} · {new Date(when).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}
+    </p>
+  </div>
+);

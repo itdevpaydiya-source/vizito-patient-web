@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createTestPatient } from './helpers/testAccount';
 import { standardCategoryResponse } from './helpers/catalog';
+import { registerProviderAccount, lettersFor } from './helpers/providerAccount';
 
 // Backend-only (no UI driving) — these prove the Order payment/refund LIFECYCLE itself
 // (P-01: REFUND_PENDING actually reaching REFUNDED; P-02: pay()/processRefund() not
@@ -10,29 +11,21 @@ import { standardCategoryResponse } from './helpers/catalog';
 const API = 'http://localhost:3000';
 
 async function registerPharmacy(request: APIRequestContext, unique: number) {
-  const res = await request.post(`${API}/auth/register`, {
-    data: {
-      full_name: `PW Refund Pharmacy ${unique}`, phone: `8${String(unique).slice(-9)}`,
-      email: `pw-refund-pharm-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
-      provider_type_id: 6, password: 'PlaywrightTest123!', pharmacyName: `PW Refund Pharmacy ${unique}`,
-    },
+  const json = await registerProviderAccount(request, API, {
+    full_name: 'PW Refund Pharmacist', phone: `8${String(unique).slice(-9)}`,
+    email: `pw-refund-pharm-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
+    provider_type_id: 6, password: 'PlaywrightTest123!', pharmacyName: `PW Refund Pharmacy ${unique}`,
   });
-  if (!res.ok()) throw new Error(`registerPharmacy failed: ${res.status()} ${await res.text()}`);
-  const json = await res.json();
   return { token: json.access_token as string, partnerId: json.current_account.partner_id as string };
 }
 
 async function registerDoctor(request: APIRequestContext, unique: number) {
-  const res = await request.post(`${API}/auth/register`, {
-    data: {
-      full_name: `PW Refund Doctor ${unique}`, phone: `7${String(unique).slice(-9)}`,
-      email: `pw-refund-doc-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
-      provider_type_id: 5, password: 'PlaywrightTest123!',
-      medicalRegNo: `PW-REFUND-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4,
-    },
+  const json = await registerProviderAccount(request, API, {
+    full_name: `PW Refund Doctor ${lettersFor(unique)}`, phone: `7${String(unique).slice(-9)}`,
+    email: `pw-refund-doc-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
+    provider_type_id: 5, password: 'PlaywrightTest123!',
+    medicalRegNo: `PW-REFUND-${unique}`, qualification: 'MBBS', specialization: 'General Medicine', experience: 4,
   });
-  if (!res.ok()) throw new Error(`registerDoctor failed: ${res.status()} ${await res.text()}`);
-  const json = await res.json();
   return { token: json.access_token as string };
 }
 

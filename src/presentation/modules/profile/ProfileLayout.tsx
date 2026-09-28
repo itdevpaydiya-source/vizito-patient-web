@@ -21,8 +21,10 @@ import {
   ShieldCheck,
   KeyRound,
   Check,
-  Calendar
+  Calendar,
+  HeartPulse
 } from 'lucide-react';
+import HealthProfileSection from './HealthProfileSection';
 import {
   getPatientProfileApi,
   updateProfileApi,
@@ -41,14 +43,15 @@ import {
   type PatientFamilyMember,
   type FamilyRelationship,
 } from '../../../services/familyHelper';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 export default function ProfileLayout() {
   const navigate = useNavigate();
 
   // Active Tab / Section
   const [activeSection, setActiveSection] = useState<
-    'personal' | 'contact' | 'addresses' | 'family' | 'notifications' | 'password' | 'settings'
-  >('personal');
+    'personal' | 'health' | 'contact' | 'addresses' | 'family' | 'password' | 'settings'
+  >(() => (new URLSearchParams(window.location.search).get('section') === 'health' ? 'health' : 'personal'));
 
   // Toasts Feedback State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -95,13 +98,6 @@ export default function ProfileLayout() {
     dob: '',
     relationship: 'Father',
     gender: 'Male'
-  });
-
-  // 5. Notification Preferences State
-  const [notifications, setNotifications] = useState({
-    appointments: true,
-    orders: true,
-    promotional: false
   });
 
   // 6. Change Password State
@@ -322,15 +318,6 @@ export default function ProfileLayout() {
     }
   };
 
-  // 5. Notification Preference Toggle
-  const toggleNotification = (key: keyof typeof notifications) => {
-    setNotifications((prev) => {
-      const updated = { ...prev, [key]: !prev[key] };
-      showToast('Notification preferences updated.');
-      return updated;
-    });
-  };
-
   // 6. Change Password Submit — real backend operation (verifies the current password server-side).
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,8 +327,8 @@ export default function ProfileLayout() {
       setPasswordError('Current Password is required.');
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordError('New Password must be at least 6 characters.');
+    if (!isStrongPassword(newPassword)) {
+      setPasswordError(PASSWORD_POLICY_MESSAGE);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -391,7 +378,7 @@ export default function ProfileLayout() {
       </div>
 
       {/* Profile Summary Card */}
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
         <div className="flex items-center gap-5 z-10">
           <div className="relative group">
             {profilePhoto ? (
@@ -492,15 +479,15 @@ export default function ProfileLayout() {
           </button>
 
           <button
-            onClick={() => setActiveSection('notifications')}
+            onClick={() => setActiveSection('health')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
-              activeSection === 'notifications'
+              activeSection === 'health'
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
-            <Bell className="w-4 h-4 shrink-0" />
-            <span>Notification Preferences</span>
+            <HeartPulse className="w-4 h-4 shrink-0" />
+            <span>Health Profile</span>
           </button>
 
           <button
@@ -825,64 +812,8 @@ export default function ProfileLayout() {
             </div>
           )}
 
-          {/* SECTION 5: Notification Preferences */}
-          {activeSection === 'notifications' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
-              <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-teal-600" /> Notification Preferences
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Control which notifications you receive for future updates.</p>
-              </div>
-
-              <div className="space-y-4 text-xs font-extrabold">
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50">
-                  <div>
-                    <span className="text-slate-800 block text-sm">Appointment Notifications</span>
-                    <span className="text-slate-400 font-normal">Reminders for upcoming consultations & queue updates</span>
-                  </div>
-                  <button
-                    onClick={() => toggleNotification('appointments')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.appointments ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.appointments ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50">
-                  <div>
-                    <span className="text-slate-800 block text-sm">Order & Dispatch Notifications</span>
-                    <span className="text-slate-400 font-normal">Live GPS status & pharmacy delivery updates</span>
-                  </div>
-                  <button
-                    onClick={() => toggleNotification('orders')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.orders ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.orders ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50">
-                  <div>
-                    <span className="text-slate-800 block text-sm">Promotional Notifications</span>
-                    <span className="text-slate-400 font-normal">Offers, health checkup packages & wellness newsletters</span>
-                  </div>
-                  <button
-                    onClick={() => toggleNotification('promotional')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.promotional ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.promotional ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* SECTION 5: Health Profile */}
+          {activeSection === 'health' && <HealthProfileSection />}
 
           {/* SECTION 6: Change Password */}
           {activeSection === 'password' && (

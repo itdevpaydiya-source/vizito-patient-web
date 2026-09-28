@@ -1,6 +1,7 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { activatePartner } from './helpers/testDoctor';
+import { registerProviderAccount } from './helpers/providerAccount';
 
 const API = process.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -10,15 +11,12 @@ test.describe.configure({ timeout: 120000 });
 
 async function registerPharmacy(request: APIRequestContext, name: string) {
   const unique = Date.now();
-  const reg = await request.post(`${API}/auth/register`, {
-    data: {
-      full_name: name, pharmacyName: name, phone: `8${String(unique).slice(-9)}`,
-      email: `header-search-pharm-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
-      provider_type_id: 6, password: 'PlaywrightTest123!',
-    },
+  const reg = await registerProviderAccount(request, API, {
+    full_name: 'Header Search Pharmacist', pharmacyName: name, phone: `8${String(unique).slice(-9)}`,
+    email: `header-search-pharm-${unique}@vizito.test`, date_of_birth: '1990-01-01', gender: 'male',
+    provider_type_id: 6, password: 'PlaywrightTest123!',
   });
-  expect(reg.ok()).toBeTruthy();
-  return (await reg.json()).current_account.partner_id as string;
+  return reg.current_account.partner_id as string;
 }
 
 test('the "Pharmacy" service in header search opens medicine ordering', async ({ page, request }) => {

@@ -90,7 +90,9 @@ const SelectPharmacyModal: React.FC<{
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-800 text-sm truncate">{p.name}</p>
-                    {p.subtitle && <p className="text-[11px] text-slate-400 font-medium">{p.subtitle}</p>}
+                    {p.address
+                      ? <p className="text-[11px] text-slate-500 font-medium line-clamp-2">{p.address}</p>
+                      : p.subtitle && <p className="text-[11px] text-slate-400 font-medium">{p.subtitle}</p>}
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
                 </button>
