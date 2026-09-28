@@ -19,6 +19,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useLanguage, type Language } from '../../../store/language/LanguageContext';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 export const SUPPORTED_LANGUAGES: { id: Language | string; label: string; native: string }[] = [
   { id: 'en', label: 'English', native: 'English' },
@@ -38,13 +39,6 @@ export default function SettingsScreen() {
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 1. Notification Preferences State
-  const [notifications, setNotifications] = useState({
-    appointments: true,
-    orders: true,
-    promotional: false
-  });
-
   // 2. Language State
   const [selectedLanguage, setSelectedLanguage] = useState<string>('English');
 
@@ -61,9 +55,6 @@ export default function SettingsScreen() {
   // Load stored settings on mount
   useEffect(() => {
     try {
-      const storedNotifs = localStorage.getItem('vizito_patient_settings_notifs');
-      if (storedNotifs) setNotifications(JSON.parse(storedNotifs));
-
       const storedLang = localStorage.getItem('vizito_patient_language');
       if (storedLang) setSelectedLanguage(storedLang);
     } catch (e) {
@@ -74,20 +65,6 @@ export default function SettingsScreen() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Toggle Notification handler
-  const handleToggleNotification = (key: keyof typeof notifications) => {
-    setNotifications((prev) => {
-      const updated = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem('vizito_patient_settings_notifs', JSON.stringify(updated));
-      } catch (err) {
-        console.error(err);
-      }
-      showToast('Notification preferences updated.');
-      return updated;
-    });
   };
 
   // Language Change handler
@@ -114,8 +91,8 @@ export default function SettingsScreen() {
       setPasswordError('Current Password is required.');
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordError('New Password must be at least 6 characters.');
+    if (!isStrongPassword(newPassword)) {
+      setPasswordError(PASSWORD_POLICY_MESSAGE);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -201,69 +178,29 @@ export default function SettingsScreen() {
                     <Bell className="w-5 h-5 text-teal-600" /> Notification Preferences
                   </h2>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Configure alert preferences. Changes apply to future notifications.
+                    What Vizito tells you, and why these can’t be switched off.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-4 text-xs font-extrabold">
-                {/* Appointment Notifications */}
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  <div>
-                    <span className="text-slate-800 block text-sm font-extrabold">Appointment Notifications</span>
-                    <span className="text-slate-400 font-normal">
-                      Receive alerts for booking confirmations, appointment reminders, and cancellations.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleNotification('appointments')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.appointments ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.appointments ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-
-                {/* Order Notifications */}
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  <div>
-                    <span className="text-slate-800 block text-sm font-extrabold">Order & Dispatch Notifications</span>
-                    <span className="text-slate-400 font-normal">
-                      Receive live updates for Pharmacy, Home Care, Ambulance, Lab, and Equipment rentals.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleNotification('orders')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.orders ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.orders ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-
-                {/* Promotional Notifications */}
-                <div className="p-4 rounded-2xl border border-slate-200 flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                  <div>
-                    <span className="text-slate-800 block text-sm font-extrabold">Promotional Notifications</span>
-                    <span className="text-slate-400 font-normal">
-                      Receive special offers, discount coupons, and wellness checkup campaign updates.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleNotification('promotional')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                      notifications.promotional ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
-                    }`}
-                  >
-                    {notifications.promotional ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-              </div>
+              {/* Every in-app message today is about the patient's own care; there are no promotions to opt out of. */}
+              <ul className="space-y-3 text-xs">
+                {[
+                  ['Appointments', 'Booking confirmed, cancelled or changed, and when your doctor completes the visit.'],
+                  ['Prescriptions & pharmacy', 'A new prescription in your records, and updates on medicines you ordered.'],
+                  ['Payments & refunds', 'Payment received and refunds started.'],
+                  ['Help & Support', 'Replies to the requests you raise.'],
+                ].map(([title, desc]) => (
+                  <li key={title} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
+                    <span className="text-slate-800 block text-sm font-extrabold">{title}</span>
+                    <span className="text-slate-500 font-medium">{desc}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500 font-medium">
+                These are about your own care, so they are always on. Vizito does not send promotional messages.{' '}
+                <button type="button" onClick={() => navigate('/notifications')} className="font-bold text-teal-700 hover:underline">Open notifications</button>
+              </p>
             </div>
           )}
 
@@ -275,24 +212,23 @@ export default function SettingsScreen() {
                   <Globe className="w-5 h-5 text-teal-600" /> Language Preference
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Select your preferred language for the application interface.
+                  The language Vizito uses on your screens.
                 </p>
               </div>
 
-              <div className="max-w-md space-y-3 text-xs font-bold">
-                <label className="block text-slate-700">Supported Application Languages</label>
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => handleLanguageChange(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:outline-none focus:border-teal-500"
-                >
-                  {SUPPORTED_LANGUAGES.map((lang) => (
-                    <option key={lang.id} value={lang.label}>
-                      {lang.label} ({lang.native})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* English only for now: a half-translated health app (Hindi menus, English dosage
+                  instructions) is worse than none. Other languages come as a complete, reviewed set. */}
+              <ul className="max-w-md space-y-2 text-sm" aria-label="Languages">
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <li key={lang.id} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${lang.id === 'en' ? 'border-teal-300 bg-teal-50/50' : 'border-slate-200 bg-slate-50/50'}`}>
+                    <span className="font-bold text-slate-800">{lang.label} <span className="font-medium text-slate-500">({lang.native})</span></span>
+                    {lang.id === 'en'
+                      ? <span className="text-[11px] font-bold text-teal-700">In use</span>
+                      : <span className="text-[11px] font-bold text-slate-500">Coming soon</span>}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500">Vizito is available in English today. Other Indian languages will arrive fully translated, including medicine instructions, so nothing important is lost in translation.</p>
             </div>
           )}
 

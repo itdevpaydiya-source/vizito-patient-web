@@ -15,6 +15,8 @@ export interface DashboardBooking {
   appointmentType: string | null; // VIDEO_CALL / IN_CLINIC / HOME_VISIT
   location: string | null;        // facility address captured at booking time
   providerId: string | null;      // partner_id (no name is stored on the booking)
+  facilityId: number | null;      // the branch/clinic the visit is at (reschedule stays there)
+  hospitalPartnerId: string | null; // hospital bookings: the hospital (booking.branch_id)
   patientName: string | null;     // appointment.patient_name
   totalAmount: number | null;
   paymentStatus: string | null;
@@ -61,6 +63,8 @@ function mapBooking(b: any): DashboardBooking {
     appointmentType: appt?.appointment_type ?? null,
     location: appt?.location || null,
     providerId: b?.partner_id ?? null,
+    facilityId: appt?.facility_id != null ? Number(appt.facility_id) : null,
+    hospitalPartnerId: b?.branch_id && b.branch_id !== b.partner_id ? String(b.branch_id) : null,
     // appointment.patient_name is the real flat column the backend actually returns; patient_details
     // is a nested snapshot object used elsewhere (e.g. booking creation payloads) that this endpoint's
     // response doesn't carry — kept as a fallback in case a future response shape does nest it.
@@ -94,4 +98,32 @@ export const getDashboardApi = async (): Promise<DashboardData> => {
     upcoming: arr(d.upcoming).map(mapBooking),
     history: arr(d.history).map(mapBooking),
   };
+};
+
+export interface CancelResult {
+  booking_number: string | null;
+  status: 'CANCELLED';
+  refund: { status: 'REFUNDED' | 'NOT_APPLICABLE' | 'NEEDS_SUPPORT'; amount: number };
+}
+
+// The signed-in patient cancels their own booking (booking service checks ownership by user id).
+export const cancelBookingApi = async (bookingId: string, reason: string): Promise<CancelResult> => {
+  try {
+    return (await apiClient.post(`/bookings/patient/${bookingId}/cancel`, { reason })).data;
+  } catch (e: any) {
+    const m = e?.response?.data?.message;
+    throw new Error(Array.isArray(m) ? m.join(' ') : m || 'Could not cancel this booking. Please try again.');
+  }
+};
+
+export interface RescheduleResult { booking_number: string; appointment_date: string; time_slot: string; reschedules_left: number }
+
+// Move the visit to another free slot of the same doctor at the same place (server enforces both).
+export const rescheduleBookingApi = async (bookingId: string, timeSlotId: number | string): Promise<RescheduleResult> => {
+  try {
+    return (await apiClient.post(`/bookings/patient/${bookingId}/reschedule`, { time_slot_id: timeSlotId })).data;
+  } catch (e: any) {
+    const m = e?.response?.data?.message;
+    throw new Error(Array.isArray(m) ? m.join(' ') : m || 'Could not reschedule this booking. Please try again.');
+  }
 };

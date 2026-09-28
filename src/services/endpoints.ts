@@ -32,6 +32,14 @@ export const ENDPOINTS = {
         BRANCH_DEPARTMENTS: (partnerId: string, facilityId: number | string) => `/patients/providers/${partnerId}/branches/${facilityId}/departments`,
         BRANCH_DOCTORS: (facilityId: number | string) => `/patients/branches/${facilityId}/doctors`,
         PROVIDER_SLOTS: (partnerId: string) => `/patients/providers/${partnerId}/slots`,
+        // Pharmacy ordering — proxied via gateway -> vizito-auth -> vizito-booking. Only the
+        // Rx-backed path goes through this proxy (CREATE_RX_ORDER): a direct/OTC order has
+        // nothing vizito-auth needs to validate, so it calls vizito-catalogue's ORDERS.*
+        // directly through the gateway instead (same precedent as ORDERS.PAY below).
+        PHARMACY_REQUESTS: '/patients/pharmacy-requests',
+        CREATE_PHARMACY_REQUEST: (prescriptionId: string) => `/patients/prescriptions/${prescriptionId}/pharmacy-requests`,
+        CANCEL_PHARMACY_REQUEST: (id: string) => `/patients/pharmacy-requests/${id}/cancel`,
+        CREATE_RX_ORDER: '/patients/orders',
     },
     // Called directly through the gateway to vizito-booking (not proxied via vizito-auth like
     // PATIENTS.* above) — the gateway forwards the patient's own JWT identity as x-user either way,
@@ -39,6 +47,24 @@ export const ENDPOINTS = {
     // just as safe and avoids adding a pass-through wrapper for a single endpoint.
     BOOKINGS: {
         PAYMENT: (bookingId: string) => `/bookings/${bookingId}/payment`,
+    },
+    // Called directly through the gateway to vizito-catalogue (not proxied via vizito-auth
+    // like PATIENTS.* above) — same reasoning as BOOKINGS.PAYMENT: the gateway forwards the
+    // patient's own JWT identity as x-user either way, and OrdersController/PaymentsController
+    // enforce ownership server-side from that, so a direct call is just as safe.
+    ORDERS: {
+        CREATE: '/orders',
+        // Patient's own orders — deliberately NOT plain GET /orders, which is the PHARMACY's
+        // own queue (scoped by StaffPermissionsGuard + the pharmacy's own identity). A patient
+        // JWT has no partner_id, so it would hit the wrong scoping entirely if called there.
+        MINE: '/orders/mine',
+        ONE_MINE: (id: string) => `/orders/${id}/mine`,
+        CANCEL: (id: string) => `/orders/${id}/cancel`,
+        PAY: (id: string) => `/orders/${id}/payment`,
+    },
+    MEDICINES: {
+        SEARCH: '/medicines',
+        AUTOCOMPLETE: '/medicines/autocomplete',
     },
     // In-app notifications (proxied via gateway -> vizito-booking). Recipient is derived from the
     // JWT server-side (the patient's users.id); the frontend never sends a recipient id.

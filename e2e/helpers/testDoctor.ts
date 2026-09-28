@@ -1,4 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
+import { registerProviderAccount, lettersFor } from './providerAccount';
 
 export interface TestDoctor {
   fullName: string;
@@ -13,8 +14,14 @@ export interface TestDoctor {
 // gate, which is unrelated to what's under test here (the booking/payment flow, not the approval
 // workflow). This mirrors the identical DB shortcut already used throughout this project's
 // scratchpad live-test scripts this session, not a new pattern.
-async function activatePartner(partnerId: string): Promise<void> {
-  const mysql = await import('file:///c:/Users/battu/Downloads/Vizito-latest3/Vizito-latest3/vizito-replica-backend/vizito-auth/node_modules/mysql2/promise.js');
+//
+// Needed because GET /patients/providers (patient-facing discovery) filters to
+// status IN ('Active','Approved') — unlike the doctor-facing GET /partners/search, which a
+// freshly-registered account already passes. A brand-new partner otherwise defaults to
+// 'Draft' and is simply invisible to any patient-facing discovery screen until this happens
+// (in production, presumably via a real admin-approval step this dev environment has no UI for).
+export async function activatePartner(partnerId: string): Promise<void> {
+  const mysql = await import('../../../vizito-replica-backend/vizito-auth/node_modules/mysql2/promise.js');
   const conn = await mysql.createConnection({ host: 'localhost', port: 3306, user: 'root', password: 'root', database: 'vizito_auth' });
   await conn.execute("UPDATE partners SET status = 'Active' WHERE id = ?", [partnerId]);
   await conn.end();
@@ -26,26 +33,22 @@ async function activatePartner(partnerId: string): Promise<void> {
 // add availability), just wrapped for reuse from a Playwright spec via the `request` fixture.
 export async function createTestDoctorWithAvailability(request: APIRequestContext): Promise<TestDoctor> {
   const unique = Date.now() + Math.floor(Math.random() * 1000);
-  const fullName = `PW Booking Test Doctor ${unique}`;
+  const fullName = `PW Booking Test Doctor ${lettersFor(unique)}`;
   const consultationFee = 650;
 
-  const regRes = await request.post('http://localhost:3000/auth/register', {
-    data: {
-      full_name: fullName,
-      phone: `9${String(unique).slice(-9)}`,
-      email: `pw-booking-doc-${unique}@vizito.test`,
-      date_of_birth: '1990-01-01',
-      gender: 'male',
-      provider_type_id: 5, // doctor
-      password: 'PlaywrightTest123!',
-      medicalRegNo: `PW-BOOK-${unique}`,
-      qualification: 'MBBS',
-      specialization: 'General Medicine',
-      experience: 6,
-    },
+  const reg = await registerProviderAccount(request, 'http://localhost:3000', {
+    full_name: fullName,
+    phone: `9${String(unique).slice(-9)}`,
+    email: `pw-booking-doc-${unique}@vizito.test`,
+    date_of_birth: '1990-01-01',
+    gender: 'male',
+    provider_type_id: 5, // doctor
+    password: 'PlaywrightTest123!',
+    medicalRegNo: `PW-BOOK-${unique}`,
+    qualification: 'MBBS',
+    specialization: 'General Medicine',
+    experience: 6,
   });
-  if (!regRes.ok()) throw new Error(`doctor register failed: ${regRes.status()} ${await regRes.text()}`);
-  const reg = await regRes.json();
   const token = reg.access_token;
   const partnerId = reg.current_account.partner_id;
   const numericId = reg.user.id;

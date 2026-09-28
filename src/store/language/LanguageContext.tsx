@@ -185,7 +185,9 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('vizito_language') as Language) || 'en';
+    // English only until the full, reviewed translations ship (see Settings > Language).
+    try { localStorage.removeItem('vizito_language'); } catch { /* ignore */ }
+    return 'en';
   });
 
   const setLanguage = (lang: Language) => {

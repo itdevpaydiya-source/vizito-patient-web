@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Star, MessageSquare, AlertCircle, RotateCcw, CheckCircle2, Calendar } from 'lucide-react';
+import { formatDate } from '../../../utils/dateFormat';
+import { formatDoctorName } from '../../../utils/doctorLabel';
 import { getDashboardApi, type DashboardBooking } from '../../../services/dashboardHelper';
 import { createReviewApi, getMyReviewsApi, type PatientReview } from '../../../services/reviewHelper';
 
@@ -105,8 +107,8 @@ export default function ReviewsScreen() {
                   <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-extrabold text-slate-800 text-sm">{appointmentTypeLabel(b.appointmentType)}</h3>
-                        <p className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{b.appointmentDate || b.bookingDate || '—'}{b.bookingNumber ? ` · ${b.bookingNumber}` : ''}</p>
+                        <h3 className="font-extrabold text-slate-800 text-sm">{formatDoctorName(b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
+                        <p className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{[appointmentTypeLabel(b.appointmentType), b.branchName, formatDate(b.appointmentDate || b.bookingDate)].filter(Boolean).join(' · ')}{b.patientName ? ` · for ${b.patientName}` : ''}</p>
                       </div>
                       <StarRow value={d.rating} onChange={(n) => setDraft(b.id, { rating: n })} size="lg" />
                     </div>
@@ -139,8 +141,8 @@ export default function ReviewsScreen() {
                   <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-extrabold text-slate-800 text-sm">{rv.doctor_name || appointmentTypeLabel(b.appointmentType)}</h3>
-                        <p className="text-[11px] text-slate-400 font-semibold">{b.appointmentDate || b.bookingDate || ''}{b.bookingNumber ? ` · ${b.bookingNumber}` : ''}</p>
+                        <h3 className="font-extrabold text-slate-800 text-sm">{formatDoctorName(rv.doctor_name || b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
+                        <p className="text-[11px] text-slate-400 font-semibold">{[b.branchName, formatDate(b.appointmentDate || b.bookingDate)].filter(Boolean).join(' · ')}</p>
                       </div>
                       <StarRow value={rv.rating} />
                     </div>

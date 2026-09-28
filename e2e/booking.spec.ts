@@ -2,26 +2,19 @@ import { test, expect, type Page } from '@playwright/test';
 import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { createTestDoctorWithAvailability, type TestDoctor } from './helpers/testDoctor';
 
-// #22 redesign: the patient must pick a date (department/specialization left as "All") BEFORE any
-// doctor is shown — the doctor list itself only contains doctors with a real bookable slot on that
-// date. Tomorrow is selected in this gate (matching the test doctor's real availability window,
-// created for tomorrow), then "Show Available Doctors" fetches the real, date-filtered list.
+// Current flow: find the doctor in the list and choose Book Appointment, then pick tomorrow's date
+// (the test doctor's real availability) and a real generated slot.
 async function goToTomorrowAndSelectDoctor(page: Page, doctorName: string, slotTime: string): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'Find a Doctor' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Find a (Verified )?Doctor/ })).toBeVisible();
+  await page.getByPlaceholder(/Search doctors by name or specialty/).fill(doctorName);
+  const card = page.locator('div.rounded-2xl', { hasText: doctorName }).filter({ has: page.getByRole('button', { name: /Book Appointment/ }) }).first();
+  await card.getByRole('button', { name: /Book Appointment/ }).click();
 
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const tomorrowLabel = tomorrow.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-  await page.getByText(tomorrowLabel, { exact: true }).click();
-
-  const availableDoctorsResponse = page.waitForResponse((res) => res.url().includes('/available-doctors') && res.request().method() === 'GET');
-  await page.getByRole('button', { name: 'Show Available Doctors' }).click();
-  await availableDoctorsResponse;
-
-  await expect(page.getByRole('heading', { name: 'Select a Doctor' })).toBeVisible();
   const slotsResponse = page.waitForResponse((res) => res.url().includes('/slots') && res.request().method() === 'GET');
-  await page.getByText(doctorName, { exact: true }).click({ timeout: 30000 });
+  await page.getByText(tomorrowLabel, { exact: true }).first().click();
   await slotsResponse;
-
   await page.getByRole('button', { name: slotTime }).click();
 }
 

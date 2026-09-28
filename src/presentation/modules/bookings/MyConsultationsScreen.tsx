@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Calendar, Clock, MapPin, X, Sparkles, RotateCcw, AlertCircle, FileText, CheckCircle2, Star, MessageSquare,
-  Stethoscope, Building2, Receipt, CreditCard, Users, Phone, Copy, Check, Hourglass
+  Stethoscope, Building2, Receipt, CreditCard, Users, Phone, Copy, Check, Hourglass, Ban, LifeBuoy, CalendarClock
 } from 'lucide-react';
-import { getDashboardApi, type DashboardBooking } from '../../../services/dashboardHelper';
+import { getDashboardApi, cancelBookingApi, type DashboardBooking } from '../../../services/dashboardHelper';
+import ReschedulePanel from './ReschedulePanel';
 import { createReviewApi, getMyReviewsApi, type PatientReview } from '../../../services/reviewHelper';
-import { formatSlotTime } from '../../../services/bookingHelper';
+import { formatDoctorName } from '../../../utils/doctorLabel';
+import { formatDayDate, formatTime } from '../../../utils/dateFormat';
 
 type TabKey = 'active' | 'upcoming' | 'completed' | 'cancelled';
 
@@ -23,6 +25,12 @@ function appointmentTypeLabel(t: string | null): string {
     case 'HOME_VISIT': return 'Home Visit';
     default: return 'Appointment';
   }
+}
+
+// "NO_SHOW" -> "No show"; the badge is uppercase via CSS, this keeps screen readers sane.
+function statusLabel(status: string): string {
+  const s = String(status || '').replace(/_/g, ' ').toLowerCase();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending';
 }
 
 function statusBadgeClass(status: string): string {
@@ -79,7 +87,7 @@ function formatFriendlyDateTime(iso: string | null): string | null {
   const datePart = formatFriendlyDate(iso);
   const timeMatch = iso.match(/T(\d{2}):(\d{2})/);
   if (!datePart || !timeMatch) return datePart;
-  return `${datePart}, ${formatSlotTime(`${timeMatch[1]}:${timeMatch[2]}`)}`;
+  return `${datePart}, ${formatTime(`${timeMatch[1]}:${timeMatch[2]}`)}`;
 }
 
 // Small presentational building blocks for the detail modal only — a section header (icon + label
@@ -107,16 +115,56 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
   );
 }
 
+const CANCEL_REASONS = ['Feeling better now', "Can't make it at this time", 'Booked by mistake', 'Chose another doctor', 'Other'];
+
+// When the visit starts, from its date + slot ("2026-09-29" + "09:00:00" or "06:00 AM").
+function startsAt(b: DisplayBooking): Date | null {
+  const date = (b.appointmentDate || b.bookingDate || '').split('T')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const m = String(b.timeSlot || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i);
+  const [y, mo, d] = date.split('-').map(Number);
+  if (!m) return new Date(y, mo - 1, d, 23, 59);
+  let h = Number(m[1]);
+  if (m[3]) { const pm = m[3].toUpperCase() === 'PM'; if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; }
+  return new Date(y, mo - 1, d, h, Number(m[2]));
+}
+
+// Mirrors the server rule: before the visit starts, and nobody has checked the patient in yet.
+function canCancel(b: DisplayBooking): boolean {
+  if (b.tab !== 'active' && b.tab !== 'upcoming') return false;
+  const s = String(b.appointmentStatus || b.status || '').toUpperCase();
+  if (!['SCHEDULED', 'CONFIRMED', 'PENDING'].includes(s)) return false;
+  const at = startsAt(b);
+  return !at || at.getTime() > Date.now();
+}
+
+const paidOnline = (b: DisplayBooking) =>
+  String(b.paymentStatus || '').toUpperCase() === 'PAID' && !/clinic|cash/i.test(String(b.paymentMode || ''));
+
 export default function MyConsultationsScreen() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>('active');
+  // Open on the first tab that has something in it (a patient with one upcoming visit shouldn't land
+  // on an empty "Active" list) — only once, so a tab the patient picks is never switched under them.
+  const tabChosen = useRef(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [bookings, setBookings] = useState<DisplayBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<DisplayBooking | null>(null);
   const [refCopied, setRefCopied] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ tone: 'ok' | 'warn'; text: string; bookingRef?: string } | null>(null);
+
+  const openBooking = (b: DisplayBooking | null) => {
+    setSelectedBooking(b);
+    setCancelOpen(false); setCancelReason(''); setCancelError(null); setRescheduleOpen(false);
+  };
 
   const copyBookingRef = (ref: string) => {
     navigator.clipboard?.writeText(ref).then(() => {
@@ -147,6 +195,11 @@ export default function MyConsultationsScreen() {
         }),
       ];
       setBookings(combined);
+      if (!tabChosen.current) {
+        tabChosen.current = true;
+        const first = (['active', 'upcoming', 'completed', 'cancelled'] as TabKey[]).find((t) => combined.some((b) => b.tab === t));
+        if (first) setActiveTab(first);
+      }
       try { setReviews(await getMyReviewsApi()); } catch { setReviews({}); }
     } catch {
       setLoadError('Unable to load your bookings. Please try again.');
@@ -157,6 +210,31 @@ export default function MyConsultationsScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const confirmCancel = async () => {
+    if (!selectedBooking) return;
+    if (!cancelReason) { setCancelError('Choose a reason.'); return; }
+    setCancelBusy(true); setCancelError(null);
+    try {
+      const r = await cancelBookingApi(selectedBooking.id, cancelReason);
+      const ref = r.booking_number || selectedBooking.bookingNumber || 'Your booking';
+      if (r.refund.status === 'REFUNDED') {
+        setBanner({ tone: 'ok', text: `${ref} is cancelled. ₹${r.refund.amount} is being refunded to your original payment method — banks usually take 5–7 working days.` });
+      } else if (r.refund.status === 'NEEDS_SUPPORT') {
+        setBanner({ tone: 'warn', text: `${ref} is cancelled. Your ₹${r.refund.amount} refund needs our support team — raise a request and we'll sort it out.`, bookingRef: r.booking_number || undefined });
+      } else {
+        setBanner({ tone: 'ok', text: `${ref} is cancelled. Nothing was charged, so there is nothing to refund.` });
+      }
+      openBooking(null);
+      tabChosen.current = true;
+      setActiveTab('cancelled');
+      await load();
+    } catch (e: any) {
+      setCancelError(e?.message || 'Could not cancel this booking.');
+    } finally {
+      setCancelBusy(false);
+    }
+  };
 
   const submitReview = async (bookingId: string) => {
     setReviewSubmitting(true);
@@ -238,7 +316,7 @@ export default function MyConsultationsScreen() {
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => { tabChosen.current = true; setActiveTab(tab.key); }}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 ${
               activeTab === tab.key ? 'bg-slate-900 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
@@ -250,6 +328,17 @@ export default function MyConsultationsScreen() {
           </button>
         ))}
       </div>
+
+      {banner && (
+        <div role="status" className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${banner.tone === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+          <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+          <span className="flex-1">{banner.text}</span>
+          {banner.bookingRef && (
+            <button onClick={() => navigate(`/help?booking=${encodeURIComponent(banner.bookingRef!)}`)} className="shrink-0 text-xs font-bold underline">Get help</button>
+          )}
+          <button onClick={() => setBanner(null)} aria-label="Dismiss" className="shrink-0 opacity-60 hover:opacity-100"><X className="w-4 h-4" /></button>
+        </div>
+      )}
 
       {/* Content states */}
       {isLoading ? (
@@ -270,29 +359,40 @@ export default function MyConsultationsScreen() {
           {filteredBookings.map((b) => (
             <div
               key={b.id}
-              onClick={() => setSelectedBooking(b)}
+              onClick={() => openBooking(b)}
               className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 cursor-pointer transition-all space-y-3"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-sm">{appointmentTypeLabel(b.appointmentType)}</h3>
-                  {b.bookingNumber && <span className="text-[11px] text-slate-400 font-semibold">Ref: {b.bookingNumber}</span>}
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-slate-900 text-sm truncate">{formatDoctorName(b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
+                  <p className="text-[11px] text-slate-500 font-semibold truncate">
+                    {[b.doctorName ? appointmentTypeLabel(b.appointmentType) : null, b.department].filter(Boolean).join(' · ') || (b.bookingNumber ? `Ref: ${b.bookingNumber}` : '')}
+                  </p>
                 </div>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${statusBadgeClass(b.status)}`}>
-                  {b.status}
+                <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${statusBadgeClass(b.status)}`}>
+                  {statusLabel(b.status)}
                 </span>
               </div>
               <div className="space-y-1.5 text-xs text-slate-600 font-medium">
-                {b.location && (
-                  <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate">{b.location}</span></div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="font-bold text-slate-800">{formatDayDate(b.appointmentDate || b.bookingDate)}</span>
+                  {b.timeSlot && <><Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" /><span className="font-bold text-slate-800">{formatTime(b.timeSlot)}</span></>}
+                </div>
+                {(b.branchName || b.location) && (
+                  <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate">{b.branchName || b.location}</span></div>
                 )}
-                <div className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span>{b.appointmentDate || b.bookingDate || '—'}</span></div>
-                {b.timeSlot && <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span>{b.timeSlot}</span></div>}
+                {b.doctorName && b.bookingNumber && <p className="text-[11px] text-slate-400 font-semibold">Ref: {b.bookingNumber}</p>}
               </div>
               {b.totalAmount != null && (
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount</span>
-                  <span className="font-black text-slate-800 text-sm">₹{b.totalAmount}</span>
+                  <span className="font-black text-slate-800 text-sm flex items-center gap-2">
+                    {String(b.paymentStatus || '').toUpperCase() === 'REFUNDED' && (
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-200">Refunded</span>
+                    )}
+                    ₹{b.totalAmount}
+                  </span>
                 </div>
               )}
             </div>
@@ -327,9 +427,9 @@ export default function MyConsultationsScreen() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border whitespace-nowrap ${statusBadgeClass(selectedBooking.status)}`}>
-                  {selectedBooking.status}
+                  {statusLabel(selectedBooking.status)}
                 </span>
-                <button onClick={() => setSelectedBooking(null)} className="p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full">
+                <button onClick={() => openBooking(null)} className="p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -341,7 +441,7 @@ export default function MyConsultationsScreen() {
               {(selectedBooking.doctorName || selectedBooking.branchName || selectedBooking.location) && (
                 <DetailSection icon={Stethoscope} title="Doctor & Clinic">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                    <DetailField label="Doctor" value={selectedBooking.doctorName ? `Dr. ${selectedBooking.doctorName}` : null} />
+                    <DetailField label="Doctor" value={formatDoctorName(selectedBooking.doctorName)} />
                     <DetailField label="Department" value={selectedBooking.department} />
                     <DetailField label="Clinic" value={selectedBooking.branchName} />
                     <DetailField label="Location" value={selectedBooking.location} />
@@ -364,7 +464,7 @@ export default function MyConsultationsScreen() {
                       <Clock className="w-4 h-4 text-teal-600 shrink-0" />
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Time</p>
-                        <p className="text-sm font-black text-slate-900">{formatSlotTime(selectedBooking.timeSlot)}</p>
+                        <p className="text-sm font-black text-slate-900">{formatTime(selectedBooking.timeSlot)}</p>
                       </div>
                     </div>
                   )}
@@ -435,6 +535,45 @@ export default function MyConsultationsScreen() {
                 </DetailSection>
               )}
 
+            {rescheduleOpen && canCancel(selectedBooking) && (
+              <ReschedulePanel
+                booking={selectedBooking}
+                onCancel={() => setRescheduleOpen(false)}
+                onDone={async (r) => {
+                  setBanner({ tone: 'ok', text: `${r.booking_number} moved to ${formatDayDate(r.appointment_date)}, ${formatTime(r.time_slot)}. ${r.reschedules_left > 0 ? `You can reschedule ${r.reschedules_left} more time.` : 'This was the last reschedule for this visit.'}` });
+                  openBooking(null);
+                  await load();
+                }}
+              />
+            )}
+
+            {cancelOpen && canCancel(selectedBooking) && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4 space-y-3" role="group" aria-label="Cancel this booking">
+                <p className="text-sm font-extrabold text-rose-900">Cancel this booking?</p>
+                <p className="text-xs font-semibold text-slate-700">
+                  {paidOnline(selectedBooking)
+                    ? `You paid ₹${selectedBooking.totalAmount ?? ''} online. The full amount is refunded to the same payment method (usually 5–7 working days).`
+                    : 'You have not been charged, so there is nothing to refund.'}
+                  {' '}The time slot is released for other patients and the doctor is informed.
+                </p>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Reason for cancelling">
+                  {CANCEL_REASONS.map((r) => (
+                    <button key={r} type="button" role="radio" aria-checked={cancelReason === r} onClick={() => setCancelReason(r)}
+                      className={`px-3 py-1.5 rounded-full border text-xs font-bold ${cancelReason === r ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                {cancelError && <p role="alert" className="text-xs font-bold text-rose-700">{cancelError}</p>}
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setCancelOpen(false)} className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs">Keep booking</button>
+                  <button onClick={confirmCancel} disabled={cancelBusy} className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white font-bold text-xs">
+                    {cancelBusy ? 'Cancelling…' : 'Yes, cancel booking'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Reviews — only for completed consultations */}
             {selectedBooking.tab === 'completed' && (
               <div className="pt-4 border-t border-slate-100">
@@ -494,7 +633,31 @@ export default function MyConsultationsScreen() {
             </div>
 
             {/* Footer — stays fixed while the body above scrolls */}
-            <div className="border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-2 shrink-0">
+            <div className="border-t border-slate-100 px-6 py-4 flex flex-wrap items-center justify-end gap-2 shrink-0">
+              {selectedBooking.bookingNumber && (
+                <button
+                  onClick={() => navigate(`/help?booking=${encodeURIComponent(selectedBooking.bookingNumber!)}`)}
+                  className="mr-auto px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs flex items-center gap-1.5"
+                >
+                  <LifeBuoy className="w-4 h-4" /> Get help with this booking
+                </button>
+              )}
+              {canCancel(selectedBooking) && !cancelOpen && !rescheduleOpen && selectedBooking.providerId && (
+                <button
+                  onClick={() => { setRescheduleOpen(true); setCancelOpen(false); }}
+                  className="px-4 py-2.5 rounded-xl border border-sky-200 text-sky-800 hover:bg-sky-50 font-bold text-xs flex items-center gap-1.5"
+                >
+                  <CalendarClock className="w-4 h-4" /> Reschedule
+                </button>
+              )}
+              {canCancel(selectedBooking) && !cancelOpen && !rescheduleOpen && (
+                <button
+                  onClick={() => { setCancelOpen(true); setCancelError(null); }}
+                  className="px-4 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold text-xs flex items-center gap-1.5"
+                >
+                  <Ban className="w-4 h-4" /> Cancel booking
+                </button>
+              )}
               {(selectedBooking.tab === 'completed' || selectedBooking.tab === 'cancelled') && selectedBooking.appointmentType && (
                 <button
                   onClick={() => navigate('/booking?service=doctor')}
@@ -503,7 +666,7 @@ export default function MyConsultationsScreen() {
                   <RotateCcw className="w-4 h-4" /> Book Again
                 </button>
               )}
-              <button onClick={() => setSelectedBooking(null)} className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center gap-1.5">
+              <button onClick={() => openBooking(null)} className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" /> Done
               </button>
             </div>

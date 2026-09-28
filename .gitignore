@@ -33,3 +33,6 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Never commit a stray/renamed git folder
+.git_disabled/

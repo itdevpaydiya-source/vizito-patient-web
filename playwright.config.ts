@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+  // Real flows (register, activate, book, pay) routinely exceed Playwright's 30s default.
+  timeout: 120000,
   testDir: './e2e',
   fullyParallel: true,
   retries: 0,

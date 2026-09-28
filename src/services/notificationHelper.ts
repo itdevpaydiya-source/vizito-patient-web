@@ -42,7 +42,7 @@ export const getNotificationsApi = async (): Promise<PatientNotification[]> => {
 
 // Marks every patient notification read (server-side, scoped by JWT identity). Bell → 0.
 export const markAllNotificationsReadApi = async (): Promise<void> => {
-  await apiClient.patch(ENDPOINTS.NOTIFICATIONS.READ_ALL, null, { params: PATIENT_PARAMS });
+  await apiClient.patch(ENDPOINTS.NOTIFICATIONS.READ_ALL, {}, { params: PATIENT_PARAMS });
 };
 
 export const markNotificationReadApi = async (id: string): Promise<void> => {

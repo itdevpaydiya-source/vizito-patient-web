@@ -3,8 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../presentation/components/Sidebar';
 import {
   Bell, Search, Menu, ChevronDown, User, Settings, LogOut, ArrowLeft, Home,
-  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight
-} from 'lucide-react';
+  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill } from 'lucide-react';
 import { useRole } from '../store/role/RoleContext';
 import { useLanguage } from '../store/language/LanguageContext';
 import { useNotifications } from '../store/notifications/NotificationsContext';
@@ -219,7 +218,7 @@ const MainLayout = () => {
                               key={svc.id}
                               onClick={() => {
                                 setIsSearchOpen(false);
-                                navigate(`/booking?service=${svc.id}`);
+                                navigate(svc.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${svc.id}`);
                               }}
                               className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center justify-between group transition-colors"
                             >
@@ -243,19 +242,24 @@ const MainLayout = () => {
                             Doctors & Healthcare Providers ({searchResults.length})
                           </p>
                           {searchResults.map((p) => {
-                            const isDoctor = p.serviceId === 'doctor' || (p.specialtyOrType || '').toLowerCase().includes('physician') || (p.specialtyOrType || '').toLowerCase().includes('doctor') || !(p.specialtyOrType || '').toLowerCase().includes('hospital');
+                            // serviceId is the search scope (empty here); the provider's own type is specialtyOrType.
+                            const isPharmacy = p.serviceId === 'pharmacy' || (p.specialtyOrType || p.subtitle || '').toLowerCase() === 'pharmacy';
+                            const isDoctor = !isPharmacy && (p.serviceId === 'doctor' || (p.specialtyOrType || '').toLowerCase().includes('physician') || (p.specialtyOrType || '').toLowerCase().includes('doctor') || !(p.specialtyOrType || '').toLowerCase().includes('hospital'));
                             return (
                               <button
                                 key={p.id}
                                 onClick={() => {
                                   setIsSearchOpen(false);
-                                  navigate(`/booking?service=${isDoctor ? 'doctor' : 'hospital'}`);
+                                  // A pharmacy is ordered from, not booked.
+                                  navigate(isPharmacy
+                                    ? `/pharmacy-orders/new?pharmacy=${p.id}`
+                                    : `/booking?service=${isDoctor ? 'doctor' : 'hospital'}`);
                                 }}
                                 className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center justify-between group transition-colors"
                               >
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 font-black text-xs">
-                                    {isDoctor ? <Stethoscope className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                    {isPharmacy ? <Pill className="w-4 h-4" /> : isDoctor ? <Stethoscope className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                                   </div>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold text-slate-800 group-hover:text-teal-700 truncate">{p.name}</p>

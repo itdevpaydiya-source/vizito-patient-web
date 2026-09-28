@@ -57,9 +57,9 @@ export const changePasswordApi = async (currentPassword: string, newPassword: st
   await apiClient.post(ENDPOINTS.PATIENTS.CHANGE_PASSWORD, { currentPassword, newPassword });
 };
 
-// Real approved providers from the backend (auth partners, active/approved only). The backend
-// currently returns only { id, business_name, partner_type, status } — rating/fee/image/specialty
-// are NOT available, so they are mapped to honest empty values (rendered as "unavailable"), never faked.
+// Real approved providers from the backend (auth partners, active/approved only), with the public
+// doctor profile (qualification, experience, city, fees) and star rating when they exist — a field
+// the provider hasn't filled is simply absent, never invented.
 export const getProvidersApi = async (serviceId?: string, search?: string): Promise<ProviderItem[]> => {
   const params: Record<string, string> = {};
   if (serviceId) params.service = serviceId;
@@ -75,6 +75,16 @@ export const getProvidersApi = async (serviceId?: string, search?: string): Prom
     // hospital profile; fall back to the raw partner_type only when no nicer label exists.
     subtitle: p.display_type || p.partner_type || undefined,
     specialtyOrType: p.display_type || p.partner_type || undefined,
+    qualification: p.doctor?.qualification ?? null,
+    experienceYears: p.doctor?.years_of_experience ?? null,
+    languages: p.doctor?.languages ?? null,
+    city: p.doctor?.city ?? null,
+    inClinicFee: p.doctor?.in_clinic_fee ?? null,
+    videoFee: p.doctor?.video_fee ?? null,
+    registrationVerified: Boolean(p.doctor?.registration_verified),
+    logo: p.logo ?? null,
+    address: p.address ?? null,
+    rating: p.rating && Number(p.rating.count) > 0 ? { average: Number(p.rating.average), count: Number(p.rating.count) } : null,
   }));
 };
 
@@ -220,10 +230,22 @@ export interface PatientPrescription {
   notes: string | null;
   followup_required: boolean;
   followup_date: string | null;
+  followup_after_days: number | null;
+  consultation_mode: string | null;
+  tests: { name: string; urgency: string | null; fasting_required: boolean; notes: string | null }[];
+  allergies: { allergen: string; reaction: string | null; severity: string | null }[];
+  no_known_allergies: boolean;
   pdf_url: string | null;
   signature_url: string | null;
   status: string | null;
   patient_name: string | null;
+  patient_age: number | null;
+  patient_sex: string | null;
+  // Doctor-routed pharmacy status ('Sent'|'Processing'|'Dispensed') — set once EITHER the
+  // doctor sends this prescription directly to a pharmacy, or the patient's own pharmacy
+  // request is accepted and fulfilled (see pharmacyOrderHelper.ts). null = never routed.
+  pharmacy_status: string | null;
+  pharmacy_partner_id: string | null;
   doctor: PrescriptionDoctor | null;
   vitals?: {
     bp?: string | null;
@@ -252,10 +274,21 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     notes: p.notes ?? null,
     followup_required: Boolean(p.followup_required),
     followup_date: p.followup_date ? String(p.followup_date).split('T')[0] : null,
+    followup_after_days: p.followup_after_days ?? null,
+    consultation_mode: p.consultation_mode ?? null,
+    tests: Array.isArray(p.tests) ? p.tests.map((t: any) => ({
+      name: String(t.name ?? t), urgency: t.urgency ?? null, fasting_required: Boolean(t.fasting_required), notes: t.notes ?? null,
+    })) : [],
+    allergies: Array.isArray(p.allergies) ? p.allergies : [],
+    no_known_allergies: Boolean(p.no_known_allergies),
     pdf_url: p.pdf_url ?? null,
     signature_url: p.signature_url ?? null,
     status: p.status ?? null,
     patient_name: p.patient_name ?? null,
+    patient_age: p.patient_age != null ? Number(p.patient_age) : null,
+    patient_sex: p.patient_sex ?? null,
+    pharmacy_status: p.pharmacy_status ?? null,
+    pharmacy_partner_id: p.pharmacy_partner_id ?? null,
     doctor: p.doctor ? {
       name: p.doctor.name ?? null,
       qualification: p.doctor.qualification ?? null,

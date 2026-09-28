@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { Bell, Calendar, FileText, Star, Trash2, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Calendar, FileText, Star, Trash2, AlertCircle, LifeBuoy, ChevronRight } from 'lucide-react';
 import { useNotifications } from '../../../store/notifications/NotificationsContext';
 
 // Real patient notifications from the backend feed (vizito-booking). Opening this page marks
@@ -10,10 +11,23 @@ const categoryIcon = (category: string) => {
   if (c.includes('appoint')) return <Calendar className="w-4.5 h-4.5" />;
   if (c.includes('record') || c.includes('prescription')) return <FileText className="w-4.5 h-4.5" />;
   if (c.includes('review') || c.includes('rating') || c.includes('announce')) return <Star className="w-4.5 h-4.5" />;
+  if (c.includes('support')) return <LifeBuoy className="w-4.5 h-4.5" />;
   return <Bell className="w-4.5 h-4.5" />;
 };
 
+// Where a notification takes the patient — every one leads to the screen it is about.
+const destination = (category: string, targetId?: string): string | null => {
+  const c = (category || '').toLowerCase();
+  if (c.includes('support')) return targetId ? `/help?ticket=${encodeURIComponent(targetId)}` : '/help';
+  if (c.includes('record') || c.includes('prescription')) return '/my-records';
+  if (c.includes('pharmacy') || c.includes('order')) return '/pharmacy-orders';
+  if (c.includes('review') || c.includes('rating')) return '/reviews';
+  if (c.includes('appoint') || c.includes('booking')) return '/my-consultations';
+  return null;
+};
+
 export default function NotificationsScreen() {
+  const navigate = useNavigate();
   const { items, loading, error, markAllRead, remove, refresh } = useNotifications();
 
   // On open: mark all read so the bell badge clears. markAllRead() itself fetches the real
@@ -73,12 +87,21 @@ export default function NotificationsScreen() {
         </div>
       ) : (
         <div className="space-y-2.5">
-          {items.map((n) => (
+          {items.map((n) => {
+            const to = destination(n.category, n.targetId);
+            return (
             <div
               key={n.id}
               className={`bg-white rounded-2xl border p-4 flex gap-3 items-start transition-all ${n.unread ? 'border-teal-200 ring-1 ring-teal-100' : 'border-slate-200'
-                }`}
+                } ${to ? 'hover:border-slate-300' : ''}`}
             >
+              <button
+                type="button"
+                disabled={!to}
+                onClick={() => to && navigate(to)}
+                className="flex-1 min-w-0 flex gap-3 items-start text-left disabled:cursor-default"
+                aria-label={to ? `${n.title}. Open` : n.title}
+              >
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${n.unread ? 'bg-teal-50 text-teal-600' : 'bg-slate-100 text-slate-400'
                 }`}>
                 {categoryIcon(n.category)}
@@ -93,6 +116,8 @@ export default function NotificationsScreen() {
                   {[n.date, n.time].filter(Boolean).join(' • ') || 'Recently'}
                 </p>
               </div>
+              {to && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 self-center" />}
+              </button>
               <button
                 onClick={() => remove(n.id)}
                 className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
@@ -101,7 +126,8 @@ export default function NotificationsScreen() {
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

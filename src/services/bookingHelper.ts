@@ -1,3 +1,4 @@
+import { formatTime } from '../utils/dateFormat';
 import { ENDPOINTS } from "./endpoints";
 import apiClient from "./index";
 
@@ -24,6 +25,7 @@ export interface ProviderDetail {
   partner_type: string;
   status: string;
   doctor: DoctorDetail | null;
+  pharmacy?: { address: string | null; phone: string | null } | null;
 }
 
 export interface Branch {
@@ -31,6 +33,11 @@ export interface Branch {
   name: string;
   facility_type: string | null;
   address_line_1: string | null;
+  area?: string | null;
+  city?: string | null;
+  state?: string | null;
+  phone?: string | null;
+  emergency_contact?: string | null;
   pincode: string | null;
   fee: number | null;
 }
@@ -159,9 +166,12 @@ export const getProviderSlotsApi = async (
   doctorPartnerId: string,
   date: string,
   facilityId?: number,
+  // Hospital flow: the hospital that credentialed this doctor at the branch.
+  hospitalPartnerId?: string,
 ): Promise<AvailableSlot[]> => {
   const params: Record<string, string> = { date };
   if (facilityId) params.facility_id = String(facilityId);
+  if (hospitalPartnerId) params.hospital_partner_id = hospitalPartnerId;
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_SLOTS(doctorPartnerId), { params });
   const list = unwrap<AvailableSlot[]>(res);
   const rawList = Array.isArray(list) ? list : [];
@@ -238,12 +248,5 @@ export const getPaymentStatusApi = async (bookingId: string): Promise<PaymentSta
 };
 
 // Formats a HH:mm:ss backend time to a friendly 10:00 AM label.
-export const formatSlotTime = (t: string): string => {
-  if (!t) return '';
-  const [hStr, mStr] = t.split(':');
-  let h = parseInt(hStr, 10);
-  const m = mStr ?? '00';
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  return `${h}:${m} ${ampm}`;
-};
+// Walk-in slots are stored as "06:00 AM", online ones as "06:00:00" — both come out as "6:00 AM".
+export const formatSlotTime = (t: string): string => formatTime(t);

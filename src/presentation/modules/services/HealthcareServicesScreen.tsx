@@ -107,7 +107,7 @@ export default function HealthcareServicesScreen() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
       {/* Header */}
-      <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 max-w-3xl space-y-3">
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Healthcare Services</h1>
@@ -168,18 +168,25 @@ export default function HealthcareServicesScreen() {
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/50 border border-slate-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
                       {service.emoji}
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/booking?service=${service.id}`); }}
-                      className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
-                    >
-                      Book Now &rarr;
-                    </button>
+                    {service.available ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`);
+                        }}
+                        className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
+                      >
+                        {service.id === 'pharmacy' ? 'Order Now' : 'Book Now'} &rarr;
+                      </button>
+                    ) : (
+                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">Coming soon</span>
+                    )}
                   </div>
                   <h3 className="font-extrabold text-slate-800 text-base group-hover:text-teal-700 transition-colors">{service.name}</h3>
                   <p className="text-xs text-slate-500 font-medium mt-1.5 leading-relaxed line-clamp-2">{service.shortDesc}</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-400 group-hover:text-teal-600">
-                  <span>View Providers</span>
+                  <span>{service.available ? 'View Providers' : 'Not bookable yet'}</span>
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
@@ -267,10 +274,13 @@ export default function HealthcareServicesScreen() {
                   </div>
 
                   <button
-                    onClick={() => navigate(`/booking?service=${provider.serviceId || activeCategory}`)}
+                    onClick={() => {
+                      const svc = provider.serviceId || activeCategory;
+                      navigate(svc === 'pharmacy' ? `/pharmacy-orders/new?pharmacy=${provider.id}` : `/booking?service=${svc}`);
+                    }}
                     className="w-full mt-5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all shadow-xs"
                   >
-                    Book Now
+                    {(provider.serviceId || activeCategory) === 'pharmacy' ? 'Order Now' : 'Book Now'}
                   </button>
                 </div>
               );

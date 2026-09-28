@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
   AlertCircle, RotateCcw, ChevronRight, CalendarClock, Check, Star, MessageSquare,
@@ -60,7 +60,11 @@ export default function UniversalBookingScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const serviceId = (searchParams.get('service') || 'doctor').toLowerCase();
+  const { pathname } = useLocation();
+  const ROUTE_SERVICE: Record<string, string> = {
+    '/lab-tests': 'diagnostic', '/homecare-services': 'homecare', '/ambulance-dispatch': 'ambulance', '/equipment-rentals': 'equipment',
+  };
+  const serviceId = (searchParams.get('service') || ROUTE_SERVICE[pathname] || 'doctor').toLowerCase();
   const service = SERVICE_TILES.find((s) => s.id === serviceId);
   const isHospital = serviceId === 'hospital' || serviceId === 'clinic';
   const appointmentEnabled = serviceId === 'doctor' || isHospital;
@@ -157,8 +161,9 @@ export default function UniversalBookingScreen() {
   // pricing source the backend itself reads from); once the booking is created, `createdBooking
   // .total_amount` is what will actually be charged (backend-resolved, see PatientBookingService)
   // and takes over as the amount shown — no client-side discount is ever applied to it.
-  const rawConsultationFee = selectedSlot?.fee ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? 500;
-  const payableTotal = createdBooking ? Number(createdBooking.total_amount) : rawConsultationFee;
+  // Never an invented fee: unknown until the provider's own fee is known (the backend sets the real amount).
+  const rawConsultationFee: number | null = selectedSlot?.fee ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? null;
+  const payableTotal = createdBooking ? Number(createdBooking.total_amount) : Number(rawConsultationFee ?? 0);
 
   // Derived (never stored) so the Clinic/Branch display and the slots grid can never disagree or go
   // stale — both read straight from the current `slots`/`selectedSlot` state on every render.
@@ -269,11 +274,11 @@ export default function UniversalBookingScreen() {
   const loadSlots = useCallback(async (partnerId: string, date: string, facilityId?: number) => {
     setSlotsLoading(true); setSelectedSlot(null);
     try {
-      setSlots(await getProviderSlotsApi(partnerId, date, facilityId));
+      setSlots(await getProviderSlotsApi(partnerId, date, facilityId, isHospital ? selectedProvider?.id : undefined));
     } catch {
       setSlots([]);
     } finally { setSlotsLoading(false); }
-  }, []);
+  }, [isHospital, selectedProvider?.id]);
 
   // Load a branch's departments (resets any downstream department/doctor/slot picks). Doctors
   // themselves are deferred until a date is confirmed (see confirmHospitalDate) — #22 requires date
@@ -521,7 +526,7 @@ export default function UniversalBookingScreen() {
         {page === 'provider' && (
           <div className="space-y-6">
             {/* Hero Header */}
-            <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
+            <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
               <div className="relative z-10 space-y-2">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-bold border border-teal-400/20">
@@ -541,7 +546,7 @@ export default function UniversalBookingScreen() {
                     type="text"
                     value={providerSearch}
                     onChange={(e) => setProviderSearch(e.target.value)}
-                    placeholder={isHospital ? "Search hospitals by name, city, or specialty..." : "Search doctors by name, specialty (e.g. Battu Raviteja, Cardiology)..."}
+                    placeholder={isHospital ? "Search hospitals by name, city, or specialty..." : "Search doctors by name or specialty (e.g. Cardiology)..."}
                     className="w-full pl-10 pr-10 py-3 bg-white text-slate-900 rounded-xl font-semibold text-xs placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-400/30 shadow-md"
                   />
                   {providerSearch && (
@@ -664,8 +669,34 @@ export default function UniversalBookingScreen() {
                           {p.subtitle && p.subtitle !== p.specialtyOrType && (
                             <p className="text-xs text-slate-400 font-medium truncate mt-0.5">{p.subtitle}</p>
                           )}
+                          {p.qualification && <p className="text-xs text-slate-500 font-semibold truncate mt-0.5">{p.qualification}</p>}
                         </div>
                       </div>
+
+                      {/* What a patient compares before choosing: experience, rating, place, fee. */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-semibold text-slate-600">
+                        {p.rating ? (
+                          <span className="inline-flex items-center gap-1" aria-label={`Rated ${p.rating.average} out of 5 from ${p.rating.count} reviews`}>
+                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                            <span className="font-black text-slate-800">{p.rating.average.toFixed(1)}</span>
+                            <span className="text-slate-400">({p.rating.count})</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">No reviews yet</span>
+                        )}
+                        {p.experienceYears != null && p.experienceYears > 0 && <span>{p.experienceYears} yrs experience</span>}
+                        {p.city && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{p.city}</span>}
+                        {p.registrationVerified && (
+                          <span className="inline-flex items-center gap-1 text-emerald-700"><ShieldCheck className="w-3.5 h-3.5" />Registration verified</span>
+                        )}
+                      </div>
+                      {(p.inClinicFee || p.videoFee || p.languages) && (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 font-medium border-t border-slate-100 pt-3">
+                          {p.inClinicFee ? <span>Clinic visit <b className="text-slate-800">₹{p.inClinicFee}</b></span> : null}
+                          {p.videoFee ? <span>Video <b className="text-slate-800">₹{p.videoFee}</b></span> : null}
+                          {p.languages && <span className="truncate">Speaks {p.languages}</span>}
+                        </div>
+                      )}
                     </div>
 
                     <button
@@ -728,10 +759,9 @@ export default function UniversalBookingScreen() {
                             <span className="font-extrabold text-slate-800 text-sm">{b.name}</span>
                             {sel && <Check className="w-4 h-4 text-teal-600 shrink-0" />}
                           </div>
-                          {b.address_line_1 && <p className="text-xs text-slate-500 truncate">{b.address_line_1}</p>}
-                          {b.fee != null && (
-                            <p className="text-[11px] font-bold text-teal-700 mt-1">Consultation: ₹{b.fee}</p>
-                          )}
+                          {(b.address_line_1 || b.area || b.city) && <p className="text-xs text-slate-500">{[b.address_line_1, b.area, b.city, b.pincode].filter(Boolean).join(', ')}</p>}
+                          {b.emergency_contact && <p className="text-[11px] font-bold text-rose-700 mt-1">Emergency: {b.emergency_contact}</p>}
+                          {/* Fees depend on the department; they are shown when you pick one. */}
                         </button>
                       );
                     })}
@@ -772,7 +802,7 @@ export default function UniversalBookingScreen() {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     <button onClick={() => selectDepartmentChip(null)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${selectedDepartment === null ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>All</button>
                     {departments.map((d) => (
-                      <button key={d.facility_department_id} onClick={() => selectDepartmentChip(d)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${selectedDepartment?.facility_department_id === d.facility_department_id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>{d.name}</button>
+                      <button key={d.facility_department_id} onClick={() => selectDepartmentChip(d)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${selectedDepartment?.facility_department_id === d.facility_department_id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>{d.name}{d.in_person_fee != null ? ` · ₹${d.in_person_fee}` : ''}</button>
                     ))}
                   </div>
                 )}
@@ -1026,7 +1056,7 @@ export default function UniversalBookingScreen() {
             )}
 
             {/* Appointment Review Summary */}
-            <div className="bg-gradient-to-br from-teal-800 to-slate-900 rounded-3xl p-6 text-white shadow-lg space-y-4">
+            <div className="bg-gradient-to-br from-[#6B4530] to-[#2B1A11] rounded-3xl p-6 text-white shadow-lg space-y-4">
               <div className="flex items-center justify-between border-b border-teal-700/50 pb-3">
                 <span className="text-xs font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> Appointment Summary</span>
                 <span className="bg-teal-500/20 border border-teal-400/30 text-teal-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">{consultType}</span>
@@ -1287,7 +1317,7 @@ export default function UniversalBookingScreen() {
               {creatingBooking ? (
                 <><span className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> Booking...</>
               ) : (
-                <>Proceed to Payment · ₹{rawConsultationFee} <ChevronRight className="w-4 h-4" /></>
+                <>Proceed to Payment{rawConsultationFee != null ? ` · ₹${rawConsultationFee}` : ''} <ChevronRight className="w-4 h-4" /></>
               )}
             </button>
           </div>
