@@ -19,6 +19,9 @@ const categoryIcon = (category: string) => {
 const destination = (category: string, targetId?: string): string | null => {
   const c = (category || '').toLowerCase();
   if (c.includes('support')) return targetId ? `/help?ticket=${encodeURIComponent(targetId)}` : '/help';
+  // Blood Bank
+  if (c === 'bloodbank_donor') return '/donate-blood';
+  if (c === 'bloodbank_request') return targetId ? `/blood-requests?open=${encodeURIComponent(targetId)}` : '/blood-requests';
   if (c.includes('record') || c.includes('prescription')) return '/my-records';
   if (c.includes('pharmacy') || c.includes('order')) return '/pharmacy-orders';
   if (c.includes('review') || c.includes('rating')) return '/reviews';

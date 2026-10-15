@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
   AlertCircle, RotateCcw, ChevronRight, CalendarClock, Check, Star, MessageSquare,
@@ -485,6 +485,9 @@ export default function UniversalBookingScreen() {
     if (page === 'booking') { setPage('provider'); return; }
     navigate('/healthcare-services');
   };
+
+  // Blood Bank has its own screen (Find Blood).
+  if (!appointmentEnabled && serviceId === 'bloodbank') return <Navigate to="/find-blood" replace />;
 
   // ---- Honest gate for non-appointment services ----
   if (!appointmentEnabled) {

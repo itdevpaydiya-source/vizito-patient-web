@@ -13,7 +13,9 @@ import {
   Settings,
   LogOut,
   Sparkles,
-  Pill
+  Pill,
+  Droplets,
+  HeartHandshake
 } from 'lucide-react';
 import { useLanguage } from '../../store/language/LanguageContext';
 import logoImg from '../../assets/vizito_logo.png';
@@ -140,6 +142,38 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         >
           <Pill className="w-4 h-4 shrink-0" />
           <span>{t('Pharmacy Orders')}</span>
+        </NavLink>
+
+        {/* Blood requests (Blood Bank) */}
+        <NavLink
+          to="/blood-requests"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-rose-50 text-rose-700 shadow-xs ring-1 ring-rose-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Droplets className="w-4 h-4 shrink-0" />
+          <span>{t('Blood Requests')}</span>
+        </NavLink>
+
+        {/* Donate blood (Blood Bank) */}
+        <NavLink
+          to="/donate-blood"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-rose-50 text-rose-700 shadow-xs ring-1 ring-rose-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <HeartHandshake className="w-4 h-4 shrink-0" />
+          <span>{t('Donate Blood')}</span>
         </NavLink>
 
         {/* 5. Ratings & Reviews */}

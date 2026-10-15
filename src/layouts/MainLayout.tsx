@@ -218,7 +218,7 @@ const MainLayout = () => {
                               key={svc.id}
                               onClick={() => {
                                 setIsSearchOpen(false);
-                                navigate(svc.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${svc.id}`);
+                                navigate(svc.id === 'pharmacy' ? '/pharmacy-orders/new' : svc.id === 'bloodbank' ? '/find-blood' : `/booking?service=${svc.id}`);
                               }}
                               className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center justify-between group transition-colors"
                             >

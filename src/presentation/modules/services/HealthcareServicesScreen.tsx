@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, ChevronRight, Stethoscope, Building2, Home, Truck, Pill, Microscope,
-  Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X
+  Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X, Droplets
 } from 'lucide-react';
 import { SERVICE_TILES } from '../../../config/serviceTypes';
 import { getProvidersApi, getFavoritesApi, addFavoriteApi, removeFavoriteApi } from '../../../services/patientHelper';
 import type { ProviderItem } from '../../../services/types';
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Stethoscope, Building2, Home, Truck, Pill, TestTube: Microscope, Package: Accessibility, Microscope, Accessibility
+  Stethoscope, Building2, Home, Truck, Pill, TestTube: Microscope, Package: Accessibility, Microscope, Accessibility, Droplets
 };
 
 // Healthcare Services — the seven service tiles are static navigation config (SERVICE_TILES); every
@@ -172,11 +172,11 @@ export default function HealthcareServicesScreen() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`);
+                          navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : service.id === 'bloodbank' ? '/find-blood' : `/booking?service=${service.id}`);
                         }}
                         className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
                       >
-                        {service.id === 'pharmacy' ? 'Order Now' : 'Book Now'} &rarr;
+                        {service.id === 'pharmacy' ? 'Order Now' : service.id === 'bloodbank' ? 'Check availability' : 'Book Now'} &rarr;
                       </button>
                     ) : (
                       <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">Coming soon</span>
