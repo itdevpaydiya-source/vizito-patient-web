@@ -143,8 +143,20 @@ const AppNavigator = () => {
         <Route path="/booking" element={<UniversalBookingScreen />} />
         <Route path="/homecare-services" element={<UniversalBookingScreen />} />
         <Route path="/ambulance-dispatch" element={<UniversalBookingScreen />} />
-        <Route path="/lab-tests" element={<UniversalBookingScreen />} />
-        <Route path="/equipment-rentals" element={<UniversalBookingScreen />} />
+        {/* Medical Equipment Rental Module */}
+        <Route path="/equipment-rental" element={<EquipmentCatalogueScreen />} />
+        <Route path="/equipment-rentals" element={<Navigate to="/equipment-rental" replace />} />
+        <Route path="/equipment-rental/:id" element={<EquipmentDetailScreen />} />
+        <Route path="/equipment-rental/item/:id" element={<EquipmentDetailScreen />} />
+        <Route path="/equipment-rental/checkout" element={<EquipmentCheckoutScreen />} />
+        <Route path="/equipment-rental/orders" element={<MyRentalOrdersScreen />} />
+        <Route path="/equipment-rental/my-rentals" element={<MyRentalOrdersScreen />} />
+        <Route path="/equipment-rental/orders/:id" element={<EquipmentOrderDetailScreen />} />
+        <Route path="/equipment-rental/orders/:id/confirmation" element={<EquipmentOrderConfirmationScreen />} />
+        <Route path="/equipment-rental/confirmation/:id" element={<EquipmentOrderConfirmationScreen />} />
+        <Route path="/equipment-rental/orders/:id/track" element={<DeliveryTrackingScreen />} />
+        <Route path="/equipment-rental/active" element={<ActiveRentalsScreen />} />
+        <Route path="/equipment-rental/returns" element={<ReturnSchedulingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />
         <Route path="/reviews" element={<ReviewsScreen />} />
