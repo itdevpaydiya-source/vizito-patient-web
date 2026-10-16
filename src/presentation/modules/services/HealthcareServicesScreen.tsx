@@ -4,7 +4,7 @@ import {
   Search, ChevronRight, Stethoscope, Building2, Home, Truck, Pill, Microscope,
   Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X
 } from 'lucide-react';
-import { SERVICE_TILES } from '../../../config/serviceTypes';
+import { SERVICE_TILES, serviceRoute } from '../../../config/serviceTypes';
 import { getProvidersApi, getFavoritesApi, addFavoriteApi, removeFavoriteApi } from '../../../services/patientHelper';
 import type { ProviderItem } from '../../../services/types';
 
@@ -158,7 +158,14 @@ export default function HealthcareServicesScreen() {
             return (
               <div
                 key={service.id}
-                onClick={() => { setActiveCategory(service.id); setProviderSearch(''); }}
+                onClick={() => {
+                  if (service.id === 'equipment') {
+                    navigate('/equipment-rental');
+                    return;
+                  }
+                  setActiveCategory(service.id);
+                  setProviderSearch('');
+                }}
                 className={`group relative bg-white rounded-2xl border p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
                   isSelected ? 'border-teal-600 ring-2 ring-teal-600/30 shadow-lg bg-teal-50/20' : 'border-slate-200 hover:border-teal-300'
                 }`}
@@ -172,11 +179,11 @@ export default function HealthcareServicesScreen() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`);
+                          navigate(serviceRoute(service.id));
                         }}
                         className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
                       >
-                        {service.id === 'pharmacy' ? 'Order Now' : 'Book Now'} &rarr;
+                        {service.id === 'pharmacy' ? 'Order Now' : service.id === 'equipment' ? 'Rent Now' : 'Book Now'} &rarr;
                       </button>
                     ) : (
                       <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">Coming soon</span>
