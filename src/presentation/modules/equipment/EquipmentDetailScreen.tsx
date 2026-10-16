@@ -428,6 +428,9 @@ export const EquipmentDetailScreen: React.FC = () => {
                 src={activeMainImage}
                 alt={item.name}
                 className="w-full h-full object-cover transition-all duration-300"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
+                }}
               />
             </div>
 
@@ -446,6 +449,9 @@ export const EquipmentDetailScreen: React.FC = () => {
                     src={thumb}
                     alt={`${item.name} thumbnail ${idx + 1}`}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
+                    }}
                   />
                 </button>
               ))}
@@ -675,6 +681,9 @@ export const EquipmentDetailScreen: React.FC = () => {
                     src={provider.image}
                     alt={provider.name}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
+                    }}
                   />
                 </div>
 
@@ -912,6 +921,9 @@ export const EquipmentDetailScreen: React.FC = () => {
                       src={selectedProviderModal.image}
                       alt={selectedProviderModal.name}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
+                      }}
                     />
                   ) : (
                     <span>{(providerProfileData?.businessName || selectedProviderModal.name).charAt(0)}</span>

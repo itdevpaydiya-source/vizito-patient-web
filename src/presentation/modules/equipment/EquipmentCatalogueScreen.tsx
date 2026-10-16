@@ -208,6 +208,9 @@ export const EquipmentCatalogueScreen: React.FC = () => {
                     src={item.imageUrl}
                     alt={item.name}
                     className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
+                    }}
                   />
                   {/* Stock Availability Badge - only shown if Out of Stock */}
                   {isOutOfStock && (
