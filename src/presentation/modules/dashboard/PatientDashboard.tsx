@@ -219,7 +219,7 @@ export default function PatientDashboard() {
                   <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">{service.shortDesc}</p>
                 </div>
                 <div className={`mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold ${service.available ? 'text-teal-600' : 'text-slate-400'}`}>
-                  <span>{service.available ? (service.id === 'pharmacy' ? 'Order Now' : 'Book Now') : 'Coming soon'}</span>
+                  <span>{service.available ? (service.id === 'pharmacy' ? 'Order Now' : (service.id === 'equipment' ? 'Rent Now' : 'Book Now')) : 'Coming soon'}</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>

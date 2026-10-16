@@ -26,6 +26,19 @@ import OrderDetailScreen from '../presentation/modules/pharmacy/OrderDetailScree
 import FamilyProfilesScreen from '../presentation/modules/family/FamilyProfilesScreen';
 import ReviewsScreen from '../presentation/modules/reviews/ReviewsScreen';
 
+// Medical Equipment Rental Module Screens
+import {
+  EquipmentCatalogueScreen,
+  EquipmentDetailScreen,
+  EquipmentCheckoutScreen,
+  EquipmentOrderDetailScreen,
+  EquipmentOrderConfirmationScreen,
+  MyRentalOrdersScreen,
+  DeliveryTrackingScreen,
+  ActiveRentalsScreen,
+  ReturnSchedulingScreen,
+} from '../presentation/modules/equipment';
+
 import { useRole } from '../store/role/RoleContext';
 
 // Session guard

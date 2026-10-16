@@ -23,9 +23,16 @@ export interface ServiceTile {
 export const SERVICE_TILES: ServiceTile[] = [
   { id: 'doctor',    name: 'Doctor Consultation',       shortDesc: 'In-Clinic & Video Consults',      iconName: 'Stethoscope',  emoji: '🩺', tileClass: 'bg-emerald-50 text-emerald-600 border-emerald-100', available: true },
   { id: 'hospital',  name: 'Hospital & Clinic',         shortDesc: 'OPD Appointments & Admissions',    iconName: 'Building2',    emoji: '🏥', tileClass: 'bg-sky-50 text-sky-600 border-sky-100', available: true },
-  { id: 'homecare',  name: 'Home Care Services',        shortDesc: 'Nurses, Attendants & Physio',      iconName: 'Home',         emoji: '🏠', tileClass: 'bg-indigo-50 text-indigo-600 border-indigo-100', available: false },
+  { id: 'homecare',  name: 'Home Care Services',        shortDesc: 'Nurses, physiotherapy, caregivers & doctor visits', iconName: 'Home',  emoji: '🏠', tileClass: 'bg-indigo-50 text-indigo-600 border-indigo-100', available: true },
   { id: 'ambulance', name: 'Scheduled Ambulance',       shortDesc: 'BLS, ALS & Patient Transport',     iconName: 'Truck',        emoji: '🚑', tileClass: 'bg-rose-50 text-rose-600 border-rose-100', available: false },
   { id: 'pharmacy',  name: 'Pharmacy',                  shortDesc: 'Medicines & Prescription Upload',  iconName: 'Pill',         emoji: '💊', tileClass: 'bg-amber-50 text-amber-600 border-amber-100', available: true },
-  { id: 'diagnostic',name: 'Diagnostic Laboratory',     shortDesc: 'Home Sample Collection',           iconName: 'TestTube',     emoji: '🧪', tileClass: 'bg-teal-50 text-teal-600 border-teal-100', available: false },
-  { id: 'equipment', name: 'Medical Equipment Rental',  shortDesc: 'O2 Concentrators & ICU Beds',      iconName: 'Package',      emoji: '🦽', tileClass: 'bg-cyan-50 text-cyan-600 border-cyan-100', available: false },
+  { id: 'diagnostic',name: 'Lab Tests',                 shortDesc: 'Blood & urine tests at a lab near you', iconName: 'TestTube',     emoji: '🧪', tileClass: 'bg-teal-50 text-teal-600 border-teal-100', available: true },
+  { id: 'equipment', name: 'Medical Equipment Rental',  shortDesc: 'O2 Concentrators & ICU Beds',      iconName: 'Package',      emoji: '🦽', tileClass: 'bg-cyan-50 text-cyan-600 border-cyan-100', available: true },
 ];
+
+// Where each service's "Book" goes. Lab tests, pharmacy and home care have their own flows; doctor and
+// hospital use the appointment booking screen. Services not on Vizito yet have no route.
+export const serviceRoute = (id: string): string => ({
+  pharmacy: '/pharmacy-orders/new', diagnostic: '/lab-tests', homecare: '/home-care', doctor: '/booking?service=doctor', hospital: '/booking?service=hospital', equipment: '/equipment-rental',
+} as Record<string, string>)[id] || '/healthcare-services';
+

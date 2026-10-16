@@ -663,9 +663,17 @@ export default function UniversalBookingScreen() {
                           <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-600 bg-teal-50 border border-teal-100/60 px-2 py-0.5 rounded-md inline-block mb-1">
                             {p.specialtyOrType || (isHospital ? 'Hospital' : 'Verified Doctor')}
                           </span>
-                          <h3 className="font-extrabold text-slate-800 text-base truncate group-hover:text-teal-700 transition-colors">
-                            {p.name}
-                          </h3>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-extrabold text-slate-800 text-base truncate group-hover:text-teal-700 transition-colors">
+                              {p.name}
+                            </h3>
+                            {p.registrationVerified && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EAF7EE] text-[#16A34A] border border-[#16A34A]/30 text-[10.5px] font-bold shadow-2xs" title="Normal Verification Badge • Super Admin Verified">
+                                <CheckCircle2 className="w-3 h-3 stroke-[3]" />
+                                <span>Verified</span>
+                              </span>
+                            )}
+                          </div>
                           {p.subtitle && p.subtitle !== p.specialtyOrType && (
                             <p className="text-xs text-slate-400 font-medium truncate mt-0.5">{p.subtitle}</p>
                           )}
@@ -687,7 +695,10 @@ export default function UniversalBookingScreen() {
                         {p.experienceYears != null && p.experienceYears > 0 && <span>{p.experienceYears} yrs experience</span>}
                         {p.city && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{p.city}</span>}
                         {p.registrationVerified && (
-                          <span className="inline-flex items-center gap-1 text-emerald-700"><ShieldCheck className="w-3.5 h-3.5" />Registration verified</span>
+                          <span className="inline-flex items-center gap-1 text-[#16A34A] font-bold bg-[#EAF7EE] px-2 py-0.5 rounded-md border border-[#16A34A]/25 text-[11px] shadow-2xs">
+                            <ShieldCheck className="w-3.5 h-3.5 stroke-[2.2]" />
+                            <span>Normal Verification Badge</span>
+                          </span>
                         )}
                       </div>
                       {(p.inClinicFee || p.videoFee || p.languages) && (
