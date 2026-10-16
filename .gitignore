@@ -36,3 +36,10 @@ dist-ssr
 
 # Never commit a stray/renamed git folder
 .git_disabled/
+
+# Equipment static image binaries (stored locally in public/equipment/, excluded from git)
+/public/equipment/*.jpg
+/public/equipment/*.jpeg
+/public/equipment/*.png
+/public/equipment/*.webp
+!/public/equipment/uploads/README.md
