@@ -6,7 +6,7 @@ import DoctorTrustDetails from '../../components/DoctorTrustDetails';
 import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import { personNameInput } from '../../../utils/inputFilters';
-import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
@@ -692,6 +692,9 @@ export default function UniversalBookingScreen() {
     if (page === 'booking') { setPage('provider'); return; }
     navigate('/healthcare-services');
   };
+
+  // Blood Bank has its own screen (Find Blood).
+  if (!appointmentEnabled && serviceId === 'bloodbank') return <Navigate to="/find-blood" replace />;
 
   // ---- Honest gate for non-appointment services ----
   if (!appointmentEnabled) {

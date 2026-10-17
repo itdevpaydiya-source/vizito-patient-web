@@ -16,6 +16,10 @@ import LabBookingScreen from '../presentation/modules/labs/LabBookingScreen';
 import LabBookingsScreen from '../presentation/modules/labs/LabBookingsScreen';
 import VerifyReportScreen from '../presentation/modules/labs/VerifyReportScreen';
 import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
+import FindBloodScreen from '../presentation/modules/bloodbank/FindBloodScreen';
+import RequestBloodScreen from '../presentation/modules/bloodbank/RequestBloodScreen';
+import MyBloodRequestsScreen from '../presentation/modules/bloodbank/MyBloodRequestsScreen';
+import DonateBloodScreen from '../presentation/modules/bloodbank/DonateBloodScreen';
 import UniversalBookingScreen from '../presentation/modules/booking/UniversalBookingScreen';
 import BookingRedirect from '../presentation/modules/booking/BookingRedirect';
 import MyConsultationsScreen from '../presentation/modules/bookings/MyConsultationsScreen';
@@ -141,6 +145,11 @@ const AppNavigator = () => {
         <Route path="/lab-tests" element={<LabBookingScreen />} />
         <Route path="/lab-bookings" element={<LabBookingsScreen />} />
         <Route path="/home-care" element={<HomeCareScreen />} />
+        {/* Blood Bank */}
+        <Route path="/find-blood" element={<FindBloodScreen />} />
+        <Route path="/request-blood" element={<RequestBloodScreen />} />
+        <Route path="/blood-requests" element={<MyBloodRequestsScreen />} />
+        <Route path="/donate-blood" element={<DonateBloodScreen />} />
         <Route path="/equipment-rentals" element={<UniversalBookingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />

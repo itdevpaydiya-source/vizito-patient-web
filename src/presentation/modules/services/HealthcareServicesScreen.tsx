@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'motion/react';
 import {
   Search, ChevronRight, Stethoscope, Building2, Home, Truck, Pill, Microscope,
-  Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X
+  Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X, Droplets
 } from 'lucide-react';
 import { SERVICE_TILES, serviceRoute } from '../../../config/serviceTypes';
 import ServiceVisual from '../../components/illustrations/ServiceVisual';
@@ -15,7 +15,7 @@ import { getProvidersApi, getFavoritesApi, addFavoriteApi, removeFavoriteApi } f
 import type { ProviderItem } from '../../../services/types';
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Stethoscope, Building2, Home, Truck, Pill, TestTube: Microscope, Package: Accessibility, Microscope, Accessibility
+  Stethoscope, Building2, Home, Truck, Pill, TestTube: Microscope, Package: Accessibility, Microscope, Accessibility, Droplets
 };
 
 // Healthcare Services — the seven service tiles are static navigation config (SERVICE_TILES); every

@@ -24,6 +24,9 @@ const destination = (category: string, targetId?: string): string | null => {
   if (c === 'home visits') return '/home-care?tab=mine';
   if (c === 'home care') return targetId ? `/home-care?tab=mine&open=${encodeURIComponent(targetId)}` : '/home-care?tab=mine';
   if (c === 'lab tests') return targetId ? `/lab-bookings?open=${encodeURIComponent(targetId)}` : '/lab-bookings';
+  // Blood Bank
+  if (c === 'bloodbank_donor') return '/donate-blood';
+  if (c === 'bloodbank_request') return targetId ? `/blood-requests?open=${encodeURIComponent(targetId)}` : '/blood-requests';
   if (c.includes('record') || c.includes('prescription')) return '/my-records';
   if (c === 'pharmacy order') return targetId ? `/pharmacy-orders/${encodeURIComponent(targetId)}` : '/pharmacy-orders';
   if (c === 'pharmacy') return '/pharmacy-orders?tab=requests'; // a prescription request
