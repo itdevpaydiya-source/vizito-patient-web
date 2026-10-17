@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchArea, metresBetween, formatDistance } from '../../../services/location';
+import LocationBar from '../../components/location/LocationBar';
 import { X, Search, AlertCircle, RotateCcw, Building2, ChevronRight } from 'lucide-react';
 import { getProvidersApi } from '../../../services/patientHelper';
-import type { ProviderItem } from '../../../services/types';
+import { pauseText, type ProviderItem } from '../../../services/types';
 
 // Shared pharmacy picker — used both from "Send to Pharmacy" (My Records) and from the
 // direct/OTC order path (Order Builder). Reuses the same real GET /patients/providers?
@@ -15,6 +17,7 @@ const SelectPharmacyModal: React.FC<{
 }> = ({ title = 'Select a Pharmacy', onSelect, onClose }) => {
   const [search, setSearch] = useState('');
   const [pharmacies, setPharmacies] = useState<ProviderItem[]>([]);
+  const area = useSearchArea();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,11 +82,13 @@ const SelectPharmacyModal: React.FC<{
             </div>
           ) : (
             <div className="space-y-2">
-              {pharmacies.map((p) => (
+              <LocationBar compact purpose="see the nearest pharmacies first" />
+              {(area ? [...pharmacies].sort((a, b) => (a.storePin ? metresBetween(area, a.storePin) : Infinity) - (b.storePin ? metresBetween(area, b.storePin) : Infinity)) : pharmacies).map((p) => (
                 <button
                   key={p.id}
                   onClick={() => onSelect(p)}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/30 transition-all text-left"
+                  disabled={!!p.pause}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/30 transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-transparent"
                 >
                   <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-xs shrink-0">
                     {initialsOf(p.name)}
@@ -93,6 +98,8 @@ const SelectPharmacyModal: React.FC<{
                     {p.address
                       ? <p className="text-[11px] text-slate-500 font-medium line-clamp-2">{p.address}</p>
                       : p.subtitle && <p className="text-[11px] text-slate-400 font-medium">{p.subtitle}</p>}
+                    {area && p.storePin && <p className="text-[11px] font-bold text-teal-800">{formatDistance(metresBetween(area, p.storePin))} away (straight line)</p>}
+                    {p.pause && <p className="text-[11px] font-bold text-amber-700 mt-0.5">{pauseText(p.pause, 'orders')}</p>}
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
                 </button>

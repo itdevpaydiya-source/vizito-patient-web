@@ -1,18 +1,26 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchArea, nearest, formatDistance, metresBetween } from '../../../services/location';
+import LocationBar from '../../components/location/LocationBar';
+import FavoriteButton from '../../components/FavoriteButton';
+import DoctorTrustDetails from '../../components/DoctorTrustDetails';
+import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
+import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
+import { personNameInput } from '../../../utils/inputFilters';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
   AlertCircle, RotateCcw, ChevronRight, CalendarClock, Check, Star, MessageSquare,
   CreditCard, Smartphone, ShieldCheck, Lock, DollarSign, Wallet, Building, Receipt, FlaskConical, XCircle,
-  Search, X
+  Search, X, Stethoscope
 } from 'lucide-react';
 import { SERVICE_TILES } from '../../../config/serviceTypes';
 import { getProvidersApi, getAvailableDoctorsApi, getSpecializationsApi, type SpecializationOption } from '../../../services/patientHelper';
-import type { ProviderItem } from '../../../services/types';
+import { pauseText, type ProviderItem } from '../../../services/types';
 import {
   getProviderDetailApi, getBranchesApi, getBranchDepartmentsApi,
   getAvailableBranchDoctorsApi,
-  getProviderSlotsApi, createBookingApi, formatSlotTime, isSlotInPast,
+  getProviderSlotsWithPauseApi, createBookingApi, formatSlotTime, isSlotInPast,
   type Branch, type BranchDepartment, type BranchDoctor, type AvailableSlot,
   type ProviderDetail, type CreatedBooking, type PaymentResult, type PaymentStatusResult,
   type PaymentMethod as ApiPaymentMethod,
@@ -20,6 +28,8 @@ import {
 import { getMyUserId, getFamilyMembersApi, type PatientFamilyMember } from '../../../services/familyHelper';
 import { getProviderReviewsApi, type ProviderReviewSummary } from '../../../services/reviewHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
+import { canonicalSpecialty, specialtiesForQuery, specialtyHint, SYMPTOM_CHIPS } from '../../../utils/specialties';
+import { printBookingReceipt, downloadCalendarEntry, type BookingSummary } from '../../../utils/bookingReceipt';
 
 // Five-step booking flow: Provider -> Booking Details -> Payment -> Processing -> Confirmation.
 // For a CASH booking, the real booking is created the moment the patient leaves the
@@ -59,6 +69,7 @@ const SectionTitle = ({ icon: Icon, children }: { icon: any; children: React.Rea
 export default function UniversalBookingScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion() ?? false;
 
   const { pathname } = useLocation();
   const ROUTE_SERVICE: Record<string, string> = {
@@ -89,10 +100,16 @@ export default function UniversalBookingScreen() {
   const [filterSpecialization, setFilterSpecialization] = useState<string | null>(null); // null = All
   const [providerSearch, setProviderSearch] = useState('');
   const [hospitalDateConfirmed, setHospitalDateConfirmed] = useState(false);
+  // Hospital flow: location → department → date → doctor. How many doctors of the chosen department
+  // are free on each of the next 14 days (null = still checking), so empty days are greyed out.
+  const [dayCounts, setDayCounts] = useState<Record<string, number | null>>({});
+  const [anyDepartment, setAnyDepartment] = useState(false); // a hospital that lists no departments
 
   const [selectedDate, setSelectedDate] = useState<string>(upcomingDates(1)[0].value);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsPaused, setSlotsPaused] = useState<string | null>(null);
+  const [datesWithSlots, setDatesWithSlots] = useState<Record<string, boolean>>({});
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [consultType, setConsultType] = useState<'In Person' | 'Video'>('In Person');
 
@@ -123,39 +140,160 @@ export default function UniversalBookingScreen() {
   const doctorChosen = isHospital ? !!selectedDoctor : true;
 
   // Dynamic Specializations aggregated from both active doctors and catalogue master list
+  // Specialties a provider offers, in the catalogue's names: a doctor's own title, or every
+  // department a hospital/clinic runs (so "Orthopedist" and "orthopaedics" are one filter).
+  const specialtiesOf = React.useCallback((p: ProviderItem): string[] => {
+    const titles = p.org ? [...p.org.departments.map((d) => d.name), ...p.org.doctors.map((d) => d.specialization || '')] : [p.specialtyOrType || p.subtitle || ''];
+    return Array.from(new Set(titles.map((t) => canonicalSpecialty(t) || (t && !/^(doctor|hospital|clinic|verified partner)$/i.test(t) ? t.trim() : '')).filter(Boolean)));
+  }, []);
+
   const dynamicSpecializations = React.useMemo(() => {
     const counts = new Map<string, number>();
-    providers.forEach((p) => {
-      const spec = p.specialtyOrType || p.subtitle || '';
-      if (spec && spec.toLowerCase() !== 'doctor' && spec.toLowerCase() !== 'verified partner' && spec.toLowerCase() !== 'hospital') {
-        counts.set(spec, (counts.get(spec) || 0) + 1);
-      }
-    });
+    providers.forEach((p) => specialtiesOf(p).forEach((s) => counts.set(s, (counts.get(s) || 0) + 1)));
     specializations.forEach((s) => {
-      if (!counts.has(s.name)) {
-        counts.set(s.name, 0);
-      }
+      const name = canonicalSpecialty(s.name) || s.name;
+      if (!counts.has(name)) counts.set(name, 0);
     });
-    return Array.from(counts.entries()).map(([name, count]) => ({ name, count }));
-  }, [providers, specializations]);
+    return Array.from(counts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [providers, specializations, specialtiesOf]);
+
+  // What the search box means as specialties ("tooth pain" -> Dentist, "ortho" -> Orthopedic).
+  const queryMeansSpecialties = React.useMemo(() => specialtiesForQuery(providerSearch), [providerSearch]);
 
   const filteredProviders = React.useMemo(() => {
     return providers.filter((p) => {
       if (providerSearch.trim()) {
         const q = providerSearch.toLowerCase().trim();
-        const matches =
-          p.name.toLowerCase().includes(q) ||
-          (p.specialtyOrType || '').toLowerCase().includes(q) ||
-          (p.subtitle || '').toLowerCase().includes(q);
-        if (!matches) return false;
+        const text = [
+          p.name, p.specialtyOrType, p.subtitle, p.city, p.address, p.qualification, p.languages,
+          ...(p.org ? [...p.org.locations.flatMap((l) => [l.name, l.area, l.city]), ...p.org.departments.map((d) => d.name), ...p.org.doctors.flatMap((d) => [d.name, d.specialization])] : []),
+        ].filter(Boolean).join(' ').toLowerCase();
+        const bySpecialty = queryMeansSpecialties.length > 0 && specialtiesOf(p).some((s) => queryMeansSpecialties.includes(s));
+        if (!text.includes(q) && !bySpecialty) return false;
       }
-      if (filterSpecialization) {
-        const spec = (p.specialtyOrType || p.subtitle || '').toLowerCase();
-        if (!spec.includes(filterSpecialization.toLowerCase())) return false;
-      }
+      if (filterSpecialization && !specialtiesOf(p).includes(filterSpecialization)) return false;
       return true;
     });
-  }, [providers, providerSearch, filterSpecialization]);
+  }, [providers, providerSearch, filterSpecialization, queryMeansSpecialties, specialtiesOf]);
+
+  // Distance: each hospital/clinic to its nearest confirmed branch pin, from the patient's chosen area.
+  const area = useSearchArea();
+  const [nearFirst, setNearFirst] = React.useState(false);
+  const distOf = React.useCallback((p: ProviderItem) => (p.org ? nearest(area, p.org.locations) : null), [area]);
+
+  // Strongest matches first: the exact name, then names starting with / containing the search.
+  const rankedProviders = React.useMemo(() => {
+    const q = providerSearch.toLowerCase().trim();
+    if (!q) return filteredProviders;
+    const score = (p: ProviderItem) => { const n = p.name.toLowerCase(); return n === q ? 0 : n.startsWith(q) ? 1 : n.includes(q) ? 2 : 3; };
+    return [...filteredProviders].sort((a, b) => score(a) - score(b));
+  }, [filteredProviders, providerSearch]);
+
+  // Clearly-labelled alternatives below the results: others that run the same speciality as the
+  // top matches, or are in the same city. Only real listings, each with the reason it is suggested.
+  const suggestions = React.useMemo(() => {
+    if (!providerSearch.trim() || !rankedProviders.length) return [] as { p: ProviderItem; why: string }[];
+    const shown = new Set(filteredProviders.map((p) => p.id));
+    const top = rankedProviders.slice(0, 3);
+    const specs = new Set(top.flatMap(specialtiesOf));
+    const cities = new Set(top.flatMap((p) => [p.city, ...(p.org?.locations.map((l) => l.city) || [])]).filter(Boolean).map((c) => String(c).toLowerCase()));
+    const out: { p: ProviderItem; why: string }[] = [];
+    for (const p of providers) {
+      if (shown.has(p.id) || p.pause) continue;
+      const spec = specialtiesOf(p).find((s) => specs.has(s));
+      const city = [p.city, ...(p.org?.locations.map((l) => l.city) || [])].find((c) => c && cities.has(String(c).toLowerCase()));
+      const why = spec ? `Also has ${spec}` : city ? `Also in ${city}` : null;
+      if (why) out.push({ p, why });
+      if (out.length >= 6) break;
+    }
+    return out;
+  }, [providers, filteredProviders, rankedProviders, providerSearch, specialtiesOf]);
+
+  // Opened from the header search: keep the query, and go straight to the chosen hospital/doctor.
+  const startQuery = searchParams.get('q');
+  const startProvider = searchParams.get('provider');
+  const autoOpened = React.useRef(false);
+  useEffect(() => { if (startQuery) setProviderSearch(startQuery); }, [startQuery]);
+
+  const renderProviderCard = (p: ProviderItem, why?: string) => (
+                  <div
+                    key={p.id}
+                    className="group h-full min-h-[22rem] rounded-3xl border border-slate-200 bg-white p-5 shadow-sm motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none motion-safe:hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md flex flex-col"
+                  >
+                    <div className="flex items-start gap-3.5">
+                        <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-800 flex items-center justify-center shrink-0 border border-orange-100 font-bold text-base">
+                          {isHospital ? <Building2 className="w-7 h-7 text-teal-600" /> : initials(p.name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[10px] font-bold text-orange-800 bg-orange-50 border border-orange-100 px-2 py-1 rounded-full inline-flex items-center gap-1 mb-1">
+                            {isHospital ? <Building2 className="w-3.5 h-3.5" /> : <Stethoscope className="w-3.5 h-3.5" />}
+                            {p.specialtyOrType || (isHospital ? 'Hospital' : 'Doctor')}
+                          </span>
+                          <div className="flex items-start gap-2">
+                            <h3 className="min-h-[3rem] flex-1 font-bold text-slate-900 text-base leading-6 line-clamp-2 group-hover:text-orange-900 transition-colors">
+                              {p.name}
+                            </h3>
+                          </div>
+                          <div className="min-h-5 flex items-center gap-2 text-xs">
+                            {p.rating ? <span className="inline-flex items-center gap-1 text-slate-700"><Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /><b>{p.rating.average.toFixed(1)}</b><span className="text-slate-400">({p.rating.count})</span></span> : <span className="text-slate-500">New to Vizito · not rated yet</span>}
+                            {p.registrationVerified && !isHospital && <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold"><ShieldCheck className="w-3.5 h-3.5" />Verified</span>}
+                          </div>
+                        </div>
+                        <FavoriteButton partnerId={p.id} name={p.name} className="w-9 h-9" />
+                    </div>
+
+                    <div className="my-4 min-h-[7rem] flex-1 rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 space-y-2 text-xs text-slate-600">
+                      {/* What a patient compares before choosing: experience, rating, place, fee. */}
+                      {!isHospital && <DoctorTrustDetails qualification={p.qualification} specialization={p.specialization} experienceYears={p.experienceYears} medicalRegistrationNumber={p.medicalRegistrationNumber} medicalCouncilName={p.medicalCouncilName} registrationVerified={p.registrationVerified} compact />}
+                      {!p.org && p.city && <p className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0 text-slate-400" />{p.city}</p>}
+                      {p.org && (
+                        <div className="space-y-2 text-xs text-slate-600">
+                          {p.org.locations.length > 0 && (
+                            <p className="flex items-start gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              <span>{p.org.locations.slice(0, 2).map((l) => [l.area || l.name, l.city].filter(Boolean).join(', ')).join(' · ')}{p.org.locations.length > 2 ? ` +${p.org.locations.length - 2} more` : ''}</span>
+                            </p>
+                          )}
+                          {p.org.departments.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {p.org.departments.slice(0, 4).map((d) => (
+                                <span key={d.name} className="px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 font-semibold text-slate-700">{d.name}{d.from_fee != null ? ` · ₹${d.from_fee}` : ''}</span>
+                              ))}
+                              {p.org.departments.length > 4 && <span className="px-2 py-0.5 text-slate-500 font-semibold">+{p.org.departments.length - 4} more</span>}
+                            </div>
+                          )}
+                          <p>
+                            {p.org.doctor_count > 0
+                              ? <><b className="text-slate-800">{p.org.doctor_count} doctor{p.org.doctor_count === 1 ? '' : 's'}</b>: {p.org.doctors.slice(0, 3).map((d) => formatDoctorName(d.name)).join(', ')}{p.org.doctor_count > 3 ? ` +${p.org.doctor_count - 3} more` : ''}</>
+                              : <span className="text-slate-400">Doctors being added</span>}
+                          </p>
+                        </div>
+                      )}
+                      {(p.inClinicFee || p.videoFee || p.languages) && (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 font-medium border-t border-slate-200 pt-2">
+                          {p.inClinicFee ? <span>Clinic visit <b className="text-slate-800">₹{p.inClinicFee}</b></span> : null}
+                          {p.videoFee ? <span>Video <b className="text-slate-800">₹{p.videoFee}</b></span> : null}
+                          {p.languages && <span className="truncate">Speaks {p.languages}</span>}
+                        </div>
+                      )}
+                    </div>
+
+                    {p.pause ? (
+                      <div className="mt-auto space-y-2">
+                        {why && <p className="text-[11px] font-semibold text-slate-500">Suggested because {why.toLowerCase()}.</p>}
+                        <p role="status" className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">{pauseText(p.pause)}</p>
+                        <button disabled className="w-full px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-400 cursor-not-allowed">Not taking bookings</button>
+                      </div>
+                    ) : (
+                      <div className="mt-auto space-y-2">
+                        {why && <p className="text-[11px] font-semibold text-slate-500">Suggested because {why.toLowerCase()}.</p>}
+                        <button onClick={() => pickProvider(p)} className="w-full px-4 py-3 rounded-xl text-sm font-bold bg-teal-700 hover:bg-teal-800 text-white transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+                          <span>{isHospital ? 'View branches & book' : 'Book appointment'}</span>
+                          <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+  );
 
   // Fee calculation logic. Before the booking exists this is a display-only estimate (the same
   // pricing source the backend itself reads from); once the booking is created, `createdBooking
@@ -247,6 +385,12 @@ export default function UniversalBookingScreen() {
   }, [isHospital]);
 
   useEffect(() => {
+    if (autoOpened.current || !startProvider || !providers.length) return;
+    const p = providers.find((x) => x.id === startProvider);
+    if (p && !p.pause) { autoOpened.current = true; pickProvider(p); }
+  }, [providers, startProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (!appointmentEnabled) return;
     loadProviders();
     (async () => {
@@ -272,13 +416,51 @@ export default function UniversalBookingScreen() {
   }, []);
 
   const loadSlots = useCallback(async (partnerId: string, date: string, facilityId?: number) => {
-    setSlotsLoading(true); setSelectedSlot(null);
+    setSlotsLoading(true); setSelectedSlot(null); setSlotsPaused(null);
     try {
-      setSlots(await getProviderSlotsApi(partnerId, date, facilityId, isHospital ? selectedProvider?.id : undefined));
+      const r = await getProviderSlotsWithPauseApi(partnerId, date, facilityId, isHospital ? selectedProvider?.id : undefined);
+      setSlots(r.slots);
+      setDatesWithSlots((prev) => ({ ...prev, [date]: r.slots.some((s) => !s.is_booked) }));
+      if (r.paused) setSlotsPaused(`${r.paused.by === 'hospital' ? 'This hospital is' : 'This doctor is'} ${pauseText(r.paused).replace(/^Not/, 'not')}.${r.paused.reason ? ` (${r.paused.reason})` : ''}`);
     } catch {
       setSlots([]);
+      setDatesWithSlots((prev) => ({ ...prev, [date]: false }));
     } finally { setSlotsLoading(false); }
   }, [isHospital, selectedProvider?.id]);
+
+  // Pre-fetch 7-day slot availability for the date carousel indicator (BUG-4)
+  useEffect(() => {
+    if (!bookingDoctorPartnerId) {
+      setDatesWithSlots({});
+      return;
+    }
+    let cancelled = false;
+    const days = upcomingDates(7).map((d) => d.value);
+    (async () => {
+      const results: Record<string, boolean> = {};
+      await Promise.all(
+        days.map(async (d) => {
+          try {
+            const r = await getProviderSlotsWithPauseApi(
+              bookingDoctorPartnerId,
+              d,
+              isHospital ? selectedBranch?.facility_id : undefined,
+              isHospital ? selectedProvider?.id : undefined,
+            );
+            results[d] = r.slots.some((s) => !s.is_booked);
+          } catch {
+            results[d] = false;
+          }
+        }),
+      );
+      if (!cancelled) {
+        setDatesWithSlots((prev) => ({ ...prev, ...results }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingDoctorPartnerId, isHospital, selectedBranch?.facility_id, selectedProvider?.id]);
 
   // Load a branch's departments (resets any downstream department/doctor/slot picks). Doctors
   // themselves are deferred until a date is confirmed (see confirmHospitalDate) — #22 requires date
@@ -290,6 +472,7 @@ export default function UniversalBookingScreen() {
     setSlots([]); setSelectedSlot(null);
     setDoctors([]);
     setHospitalDateConfirmed(false);
+    setAnyDepartment(false); setDayCounts({});
     setDoctorsLoading(true);
     try {
       setDepartments(await getBranchDepartmentsApi(providerId, b.facility_id));
@@ -342,6 +525,30 @@ export default function UniversalBookingScreen() {
     if (!selectedBranch) return;
     setSelectedDepartment(dept);
     await loadHospitalDoctors(selectedDate, dept);
+  };
+
+  // Department chosen: check the next 14 days (4 at a time), then open the first day with a doctor.
+  const chooseDepartment = async (dept: BranchDepartment | null) => {
+    if (!selectedBranch) return;
+    setSelectedDepartment(dept); setAnyDepartment(dept === null);
+    setSelectedDoctor(null); setSlots([]); setSelectedSlot(null); setDoctors([]);
+    setHospitalDateConfirmed(false);
+    const days = upcomingDates(14).map((d) => d.value);
+    setDayCounts(Object.fromEntries(days.map((d) => [d, null])));
+    const counts: Record<string, number> = {};
+    for (let i = 0; i < days.length; i += 4) {
+      await Promise.all(days.slice(i, i + 4).map(async (d) => {
+        try { counts[d] = (await getAvailableBranchDoctorsApi(selectedBranch.facility_id, d, dept?.facility_department_id)).length; } catch { counts[d] = 0; }
+        setDayCounts((x) => ({ ...x, [d]: counts[d] }));
+      }));
+    }
+    const first = days.find((d) => counts[d] > 0);
+    if (first) pickHospitalDay(first, dept);
+  };
+  const pickHospitalDay = (date: string, dept: BranchDepartment | null = selectedDepartment) => {
+    setSelectedDate(date);
+    setHospitalDateConfirmed(true);
+    loadHospitalDoctors(date, dept);
   };
 
   const pickDoctor = async (doc: BranchDoctor) => {
@@ -500,7 +707,7 @@ export default function UniversalBookingScreen() {
             <p className="text-sm text-slate-500 max-w-md mx-auto">
               {service ? `${service.emoji} ${service.name}` : 'This service'} doesn't support online appointment booking yet. Doctor and Hospital/Clinic consultations are available now.
             </p>
-            <button onClick={() => navigate('/booking?service=doctor')} className="px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm">Book a Doctor Consultation</button>
+            <button onClick={() => navigate('/find-doctors')} className="px-5 py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm">Book a Doctor Consultation</button>
           </div>
         </div>
       </div>
@@ -510,14 +717,19 @@ export default function UniversalBookingScreen() {
   const pageNum = page === 'provider' ? 1 : page === 'booking' ? 2 : page === 'payment' ? 3 : 3;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 py-8">
-      <div className="max-w-5xl mx-auto space-y-5 pb-28">
+    <motion.div
+      className="min-h-screen bg-[#FAF7F4] py-5 sm:py-7"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-28">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={goBack} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-2 rounded-xl">
+          <button onClick={goBack} className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-2.5 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
           <div className="text-right">
-            <span className="text-teal-600 font-bold text-[11px] uppercase tracking-wider">{service?.emoji} {service?.name}</span>
+            <span className="text-orange-800 font-bold text-xs uppercase tracking-wider">{service?.emoji} {service?.name}</span>
             {page !== 'confirmation' && <p className="text-[11px] text-slate-400 font-bold">Step {pageNum} of 3</p>}
           </div>
         </div>
@@ -526,46 +738,68 @@ export default function UniversalBookingScreen() {
         {page === 'provider' && (
           <div className="space-y-6">
             {/* Hero Header */}
-            <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-7 text-white shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="relative z-10 space-y-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-bold border border-teal-400/20">
-                  <span>{isHospital ? '🏥 Hospitals & Clinics' : '🩺 Doctor Consultations'}</span>
+            <section className="rounded-3xl border border-orange-100 bg-gradient-to-r from-orange-50/90 via-white to-white p-5 sm:p-7 shadow-sm">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-orange-800">
+                  <span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden="true" />{isHospital ? 'Hospitals & clinics' : 'Doctor consultations'}
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                  {isHospital ? 'Find a Hospital or Clinic' : 'Find a Verified Doctor'}
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+                  {isHospital ? 'Find a Hospital or Clinic' : 'Find a Doctor'}
                 </h2>
-                <p className="text-teal-100/80 text-xs sm:text-sm font-medium max-w-xl">
+                <p className="text-slate-600 text-sm max-w-2xl">
                   {isHospital
                     ? 'Select an accredited hospital or clinic branch to book appointments and admissions.'
-                    : 'Search certified medical specialists, compare profiles, and book direct in-clinic or video consultations.'}
+                    : 'Search specialists, compare doctor profiles, and choose an in-clinic or video consultation.'}
                 </p>
-                <div className="mt-4 relative max-w-xl">
+                <div className="mt-4 relative max-w-3xl">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     value={providerSearch}
                     onChange={(e) => setProviderSearch(e.target.value)}
-                    placeholder={isHospital ? "Search hospitals by name, city, or specialty..." : "Search doctors by name or specialty (e.g. Cardiology)..."}
-                    className="w-full pl-10 pr-10 py-3 bg-white text-slate-900 rounded-xl font-semibold text-xs placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-400/30 shadow-md"
+                    placeholder={isHospital ? 'Search by hospital, area, department, doctor or symptom (e.g. knee pain)' : 'Search by doctor, specialty or symptom (e.g. fever, tooth pain)'}
+                    className="w-full pl-11 pr-11 py-3.5 bg-white border border-slate-200 text-slate-900 rounded-2xl font-medium text-sm placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-200/70 focus:border-orange-300 shadow-sm"
+                    aria-label={isHospital ? 'Search hospitals, areas, departments or doctors' : 'Search doctors, specialties or symptoms'}
                   />
                   {providerSearch && (
                     <button
                       onClick={() => setProviderSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded"
+                      aria-label="Clear search"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
               </div>
+            </section>
+
+            {/* Not sure whom to see? Pick what's wrong. */}
+            <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+              <div className="space-y-2">
+              <div><h3 className="text-sm font-bold text-slate-900">Start with a symptom</h3><p className="text-xs text-slate-500">Choose a common concern to see a relevant specialty.</p></div>
+              <div className="flex gap-2 overflow-x-auto pb-1 modal-scrollbar">
+                {SYMPTOM_CHIPS.map((c) => (
+                  <button key={c.label} type="button" onClick={() => { setProviderSearch(''); setFilterSpecialization(c.specialty); }}
+                    className={`shrink-0 px-3.5 py-2 rounded-full text-xs font-semibold border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${filterSpecialization === c.specialty ? 'bg-orange-50 border-orange-300 text-orange-900' : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-orange-200 hover:bg-orange-50/50'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              {(filterSpecialization && specialtyHint(filterSpecialization)) || queryMeansSpecialties.length > 0 ? (
+                <p role="status" className="text-xs text-slate-600">
+                  {filterSpecialization
+                    ? <>Showing <b>{filterSpecialization}</b>{isHospital ? ' departments' : 's'}: {specialtyHint(filterSpecialization)}.</>
+                    : <>“{providerSearch.trim()}” — you may need a <b>{queryMeansSpecialties.slice(0, 2).join(' or ')}</b>. Matching {isHospital ? 'hospitals and clinics' : 'doctors'} are shown below.</>}
+                </p>
+              ) : null}
             </div>
 
-            {/* Specialization Filter Pills (for Doctors) */}
-            {!isHospital && (
-              <div className="space-y-2">
+            {/* Specialization Filter Pills */}
+            {(
+              <div className="space-y-2 border-t border-slate-100 pt-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Filter by Specialization</span>
+                  <div><h3 className="text-sm font-bold text-slate-900">Browse specialties</h3><p className="text-xs text-slate-500 mt-0.5">{isHospital ? 'Filter hospitals by their departments.' : 'Filter doctors by their specialty.'}</p></div>
                   {filterSpecialization && (
                     <button
                       onClick={() => setFilterSpecialization(null)}
@@ -584,7 +818,7 @@ export default function UniversalBookingScreen() {
                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    All Doctors ({providers.length})
+                    {isHospital ? 'All' : 'All Doctors'} ({providers.length})
                   </button>
                   {dynamicSpecializations.map((s) => {
                     const isSelected = filterSpecialization === s.name;
@@ -610,12 +844,27 @@ export default function UniversalBookingScreen() {
                 </div>
               </div>
             )}
+            </section>
 
             {/* Provider Grid */}
+            <section aria-label="Doctor results" className="space-y-4">
+              <div className="rounded-3xl border border-slate-200 bg-white p-3 sm:p-4 shadow-sm">
+                <LocationBar compact purpose={`see how far each ${isHospital ? 'hospital' : 'doctor'} is`} />
+              </div>
+              <div className="flex flex-wrap items-end justify-between gap-3 px-1">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-orange-800">{filterSpecialization || (isHospital ? 'Hospitals & clinics' : 'Doctors near you')}</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">{providerSearch ? 'Search results' : (isHospital ? 'Choose a hospital or clinic' : 'Choose a doctor')}</h3>
+                  {!loading && !error && <p className="text-sm text-slate-500 mt-0.5">{filteredProviders.length} {filteredProviders.length === 1 ? 'result' : 'results'}{providerSearch ? ` for “${providerSearch.trim()}”` : ''}</p>}
+                </div>
+                {area && rankedProviders.some((p) => distOf(p)) && (
+                  <button type="button" aria-pressed={nearFirst} onClick={() => setNearFirst(!nearFirst)} className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${nearFirst ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:border-orange-200'}`}>{nearFirst ? 'Nearest first ✓' : 'Sort by nearest'}</button>
+                )}
+              </div>
             {loading ? (
               <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs">
                 <div className="w-7 h-7 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-slate-500 font-medium text-sm">{isHospital ? 'Loading hospitals...' : 'Loading verified doctors...'}</p>
+                <p className="text-slate-500 font-medium text-sm">{isHospital ? 'Loading hospitals...' : 'Loading doctors...'}</p>
               </div>
             ) : error ? (
               <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs space-y-3">
@@ -631,85 +880,53 @@ export default function UniversalBookingScreen() {
                   <Search className="w-6 h-6" />
                 </div>
                 <h3 className="font-bold text-slate-800">
-                  {providerSearch || filterSpecialization ? 'No matching providers found' : (isHospital ? 'No hospitals registered yet' : 'No doctors registered yet')}
+                  {filterSpecialization
+                    ? `No ${filterSpecialization}${isHospital ? ' department' : ''} on Vizito near you yet`
+                    : providerSearch ? 'Nothing matches that search' : (isHospital ? 'No hospitals registered yet' : 'No doctors registered yet')}
                 </h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  {providerSearch || filterSpecialization
-                    ? 'Try clearing your filters or searching with a different doctor or hospital name.'
-                    : 'Verified providers will appear here once approved by administrator.'}
+                  {filterSpecialization && filterSpecialization !== 'General Physician'
+                    ? 'A General Physician can see you first and refer you to the right specialist.'
+                    : providerSearch || filterSpecialization
+                      ? "Try a symptom (e.g. fever), a specialty, an area or a doctor's name."
+                      : 'Providers will appear here once they are listed.'}
                 </p>
+                {filterSpecialization && filterSpecialization !== 'General Physician' && (
+                  <button
+                    onClick={() => { setProviderSearch(''); setFilterSpecialization('General Physician'); }}
+                    className="mt-1 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold"
+                  >
+                    See General Physicians
+                  </button>
+                )}
                 {(providerSearch || filterSpecialization) && (
                   <button
                     onClick={() => { setProviderSearch(''); setFilterSpecialization(null); }}
-                    className="text-xs font-bold text-teal-600 hover:underline inline-block pt-1 cursor-pointer"
+                    className="ml-3 text-xs font-bold text-teal-600 hover:underline inline-block pt-1 cursor-pointer"
                   >
                     Reset all filters
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredProviders.map((p) => (
-                  <div
-                    key={p.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-teal-500 hover:shadow-xl transition-all duration-200 flex flex-col justify-between group"
-                  >
-                    <div className="space-y-4">
-                      <div className="flex items-start gap-3.5">
-                        <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 font-black text-base shadow-2xs group-hover:scale-105 transition-transform">
-                          {isHospital ? <Building2 className="w-7 h-7 text-teal-600" /> : initials(p.name)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-teal-600 bg-teal-50 border border-teal-100/60 px-2 py-0.5 rounded-md inline-block mb-1">
-                            {p.specialtyOrType || (isHospital ? 'Hospital' : 'Verified Doctor')}
-                          </span>
-                          <h3 className="font-extrabold text-slate-800 text-base truncate group-hover:text-teal-700 transition-colors">
-                            {p.name}
-                          </h3>
-                          {p.subtitle && p.subtitle !== p.specialtyOrType && (
-                            <p className="text-xs text-slate-400 font-medium truncate mt-0.5">{p.subtitle}</p>
-                          )}
-                          {p.qualification && <p className="text-xs text-slate-500 font-semibold truncate mt-0.5">{p.qualification}</p>}
-                        </div>
-                      </div>
-
-                      {/* What a patient compares before choosing: experience, rating, place, fee. */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-semibold text-slate-600">
-                        {p.rating ? (
-                          <span className="inline-flex items-center gap-1" aria-label={`Rated ${p.rating.average} out of 5 from ${p.rating.count} reviews`}>
-                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                            <span className="font-black text-slate-800">{p.rating.average.toFixed(1)}</span>
-                            <span className="text-slate-400">({p.rating.count})</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">No reviews yet</span>
-                        )}
-                        {p.experienceYears != null && p.experienceYears > 0 && <span>{p.experienceYears} yrs experience</span>}
-                        {p.city && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{p.city}</span>}
-                        {p.registrationVerified && (
-                          <span className="inline-flex items-center gap-1 text-emerald-700"><ShieldCheck className="w-3.5 h-3.5" />Registration verified</span>
-                        )}
-                      </div>
-                      {(p.inClinicFee || p.videoFee || p.languages) && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 font-medium border-t border-slate-100 pt-3">
-                          {p.inClinicFee ? <span>Clinic visit <b className="text-slate-800">₹{p.inClinicFee}</b></span> : null}
-                          {p.videoFee ? <span>Video <b className="text-slate-800">₹{p.videoFee}</b></span> : null}
-                          {p.languages && <span className="truncate">Speaks {p.languages}</span>}
-                        </div>
-                      )}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+                  {(nearFirst ? [...rankedProviders].sort((a, b) => (distOf(a)?.metres ?? Infinity) - (distOf(b)?.metres ?? Infinity)) : rankedProviders).map((p) => renderProviderCard(p))}
+                </div>
+                {suggestions.length > 0 && (
+                  <section aria-label="Suggested alternatives" className="pt-6 space-y-3">
+                    <div>
+                      <h3 className="text-base font-black text-slate-800">Other {isHospital ? 'hospitals' : 'doctors'} you may consider</h3>
+                      <p className="text-xs text-slate-500">Suggested because they offer the same speciality or are in the same area — not part of your search results.</p>
                     </div>
-
-                    <button
-                      onClick={() => pickProvider(p)}
-                      className="w-full mt-5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all shadow-xs flex items-center justify-center gap-1.5 group-hover:shadow-md cursor-pointer"
-                    >
-                      <span>{isHospital ? 'View Branches & Book' : 'Book Appointment'}</span>
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </div>
-                ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+                      {suggestions.map((x) => renderProviderCard(x.p, x.why))}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
+            </section>
           </div>
         )}
 
@@ -726,6 +943,13 @@ export default function UniversalBookingScreen() {
               <div className="min-w-0">
                 <h3 className="font-extrabold text-slate-800 truncate">{selectedProvider?.name}</h3>
                 {selectedProvider?.specialtyOrType && <p className="text-[11px] font-semibold text-slate-400 capitalize">{selectedProvider.specialtyOrType}</p>}
+                {isHospital && selectedProvider?.org && (
+                  <p className="text-xs text-slate-600 mt-0.5">{[
+                    `${selectedProvider.org.locations.length} location${selectedProvider.org.locations.length === 1 ? '' : 's'}`,
+                    `${selectedProvider.org.departments.length} department${selectedProvider.org.departments.length === 1 ? '' : 's'}`,
+                    `${selectedProvider.org.doctor_count} doctor${selectedProvider.org.doctor_count === 1 ? '' : 's'}`,
+                  ].join(' · ')}{selectedProvider.rating ? ` · ★ ${selectedProvider.rating.average.toFixed(1)} (${selectedProvider.rating.count})` : ''}</p>
+                )}
               </div>
               <button onClick={() => setPage('provider')} className="ml-auto text-[11px] font-bold text-teal-700 hover:underline shrink-0 cursor-pointer">Change</button>
             </div>
@@ -733,17 +957,18 @@ export default function UniversalBookingScreen() {
             {/* HOSPITAL: Branch */}
             {isHospital && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
-                <SectionTitle icon={MapPin}>Hospital Branch Location</SectionTitle>
+                <SectionTitle icon={MapPin}>Choose a location</SectionTitle>
+                {branches.length > 1 && <LocationBar compact purpose="find the nearest branch" />}
                 {loading ? (
                   <div className="py-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
                     <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
-                    Loading branches...
+                    Loading locations...
                   </div>
                 ) : branches.length === 0 ? (
-                  <p className="text-slate-500 text-sm">No branches available for this hospital.</p>
+                  <p className="text-slate-500 text-sm">No locations are open for booking yet.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {branches.map((b) => {
+                    {(area ? [...branches].sort((x, y) => (x.pin ? metresBetween(area, x.pin) : Infinity) - (y.pin ? metresBetween(area, y.pin) : Infinity)) : branches).map((b) => {
                       const sel = selectedBranch?.facility_id === b.facility_id;
                       return (
                         <button
@@ -760,6 +985,8 @@ export default function UniversalBookingScreen() {
                             {sel && <Check className="w-4 h-4 text-teal-600 shrink-0" />}
                           </div>
                           {(b.address_line_1 || b.area || b.city) && <p className="text-xs text-slate-500">{[b.address_line_1, b.area, b.city, b.pincode].filter(Boolean).join(', ')}</p>}
+                          {area && b.pin && <p className="text-[11px] font-bold text-teal-800 mt-1">{formatDistance(metresBetween(area, b.pin))} away (straight line)</p>}
+                          {!b.pin && <p className="text-[10px] text-slate-400 mt-1">Map pin not confirmed yet</p>}
                           {b.emergency_contact && <p className="text-[11px] font-bold text-rose-700 mt-1">Emergency: {b.emergency_contact}</p>}
                           {/* Fees depend on the department; they are shown when you pick one. */}
                         </button>
@@ -770,58 +997,84 @@ export default function UniversalBookingScreen() {
               </div>
             )}
 
-            {/* HOSPITAL: Date — must be chosen before any doctor at this branch is shown, matching
-                the doctor-direct flow; re-used afterward to gate the doctor list to real availability. */}
-            {isHospital && branchChosen && selectedBranch && !hospitalDateConfirmed && (
+            {/* HOSPITAL: Department — patients choose the speciality first, as at a hospital front desk. */}
+            {isHospital && branchChosen && selectedBranch && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
-                <SectionTitle icon={Calendar}>Date</SectionTitle>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {upcomingDates(14).map((d) => (
-                    <button key={d.value} onClick={() => setSelectedDate(d.value)} className={`shrink-0 w-16 py-2 rounded-xl border text-center ${selectedDate === d.value ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
-                      <span className="block text-[10px] font-bold uppercase">{d.weekday}</span>
-                      <span className="block text-xs font-black">{d.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <button onClick={confirmHospitalDate} className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm">
-                  Show Available Doctors
-                </button>
+                <SectionTitle icon={Stethoscope}>Department</SectionTitle>
+                {!selectedDepartment && !anyDepartment && <p className="text-xs text-slate-500 -mt-1">Choose the speciality you need — we’ll show the days its doctors are available, then the doctors.</p>}
+                {doctorsLoading && !departments.length ? (
+                  <div className="py-6 text-center"><div className="w-6 h-6 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" /></div>
+                ) : departments.length === 0 ? (
+                  <button onClick={() => chooseDepartment(null)} className={`w-full text-left p-4 rounded-2xl border ${anyDepartment ? 'border-teal-600 bg-teal-50/50' : 'border-slate-200 hover:border-teal-300'}`}>
+                    <span className="font-extrabold text-slate-800 text-sm">General consultation</span>
+                    <span className="block text-xs text-slate-500">This location hasn't listed departments; see every doctor available.</span>
+                  </button>
+                ) : (
+                  <div role="radiogroup" aria-label="Department" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {departments.map((d) => {
+                      const sel = selectedDepartment?.facility_department_id === d.facility_department_id;
+                      return (
+                        <button key={d.facility_department_id} role="radio" aria-checked={sel} onClick={() => chooseDepartment(d)}
+                          className={`text-left p-3.5 rounded-2xl border transition-all ${sel ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20' : 'border-slate-200 bg-white hover:border-teal-300 hover:bg-slate-50'}`}>
+                          <span className="flex items-center justify-between gap-2"><span className="flex items-center gap-2.5 min-w-0">{deptPhoto(d.name) && <img src={deptPhoto(d.name)!} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="w-10 h-10 rounded-xl object-cover shrink-0" />}<span className="font-extrabold text-slate-800 text-sm">{d.name}</span></span>{sel && <Check className="w-4 h-4 text-teal-600 shrink-0" />}</span>
+                          <span className="block text-[11px] text-slate-500 mt-0.5">
+                            {d.in_person_fee != null ? `Consultation ₹${d.in_person_fee}` : 'Fee shown at booking'}{d.online_fee != null ? ` · Video ₹${d.online_fee}` : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* HOSPITAL: Department chips + Doctor list */}
-            {isHospital && branchChosen && hospitalDateConfirmed && (
+            {/* HOSPITAL: Date — each day shows how many doctors of this department are free. */}
+            {isHospital && branchChosen && (selectedDepartment || anyDepartment) && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <SectionTitle icon={Users}>Doctor</SectionTitle>
-                  <button onClick={() => setHospitalDateConfirmed(false)} className="text-[11px] font-bold text-teal-700 hover:underline shrink-0">
-                    {upcomingDates(14).find((d) => d.value === selectedDate)?.label} · Change
-                  </button>
+                <SectionTitle icon={Calendar}>Date</SectionTitle>
+                <div role="radiogroup" aria-label="Appointment date" className="flex gap-2 overflow-x-auto pb-1">
+                  {upcomingDates(14).map((d) => {
+                    const n = dayCounts[d.value];
+                    const none = n === 0;
+                    const sel = hospitalDateConfirmed && selectedDate === d.value;
+                    return (
+                      <button key={d.value} role="radio" aria-checked={sel} disabled={none} onClick={() => pickHospitalDay(d.value)}
+                        aria-label={`${d.weekday} ${d.label}: ${n == null ? 'checking' : n ? `${n} doctor${n === 1 ? '' : 's'} available` : 'no doctors available'}`}
+                        className={`shrink-0 w-[4.5rem] py-2 rounded-xl border text-center ${sel ? 'border-teal-600 bg-teal-50 text-teal-800' : none ? 'border-slate-100 text-slate-300 bg-slate-50 cursor-not-allowed' : 'border-slate-200 text-slate-600 hover:border-teal-300'}`}>
+                        <span className="block text-[10px] font-bold uppercase">{d.weekday}</span>
+                        <span className="block text-xs font-black">{d.label}</span>
+                        <span className={`block text-[10px] font-semibold mt-0.5 ${none ? 'text-slate-300' : 'text-emerald-700'}`}>{n == null ? '…' : n ? `${n} dr` : 'None'}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                {departments.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    <button onClick={() => selectDepartmentChip(null)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${selectedDepartment === null ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>All</button>
-                    {departments.map((d) => (
-                      <button key={d.facility_department_id} onClick={() => selectDepartmentChip(d)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${selectedDepartment?.facility_department_id === d.facility_department_id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>{d.name}{d.in_person_fee != null ? ` · ₹${d.in_person_fee}` : ''}</button>
-                    ))}
-                  </div>
+                {Object.values(dayCounts).length > 0 && Object.values(dayCounts).every((n) => n === 0) && (
+                  <p className="text-sm text-slate-600">No {selectedDepartment ? selectedDepartment.name : ''} doctor has open times here in the next 14 days. Try another department or location.</p>
                 )}
+              </div>
+            )}
+
+            {/* HOSPITAL: Doctors of this department free on the chosen day. */}
+            {isHospital && branchChosen && hospitalDateConfirmed && (selectedDepartment || anyDepartment) && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+                <SectionTitle icon={Users}>{selectedDepartment ? `${selectedDepartment.name} doctors` : 'Doctors'} · {upcomingDates(14).find((d) => d.value === selectedDate)?.label}</SectionTitle>
                 {doctorsLoading ? (
                   <div className="py-6 text-center"><div className="w-6 h-6 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" /></div>
                 ) : doctors.length === 0 ? (
-                  <p className="text-slate-500 text-sm py-2">{selectedDepartment ? `No doctors in ${selectedDepartment.name} have open slots on this date.` : 'No doctors at this branch have open slots on this date.'}</p>
+                  <p className="text-slate-500 text-sm py-2">No doctor has open times on this day. Choose another date.</p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div role="radiogroup" aria-label="Doctor" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {doctors.map((doc) => {
                       const sel = selectedDoctor?.doctor_partner_id === doc.doctor_partner_id;
                       return (
-                        <button key={doc.doctor_partner_id} onClick={() => pickDoctor(doc)} className={`text-left p-3 rounded-xl border flex items-center gap-3 transition-all ${sel ? 'border-teal-600 bg-teal-50/40 ring-1 ring-teal-200' : 'border-slate-200 hover:border-teal-300'}`}>
-                          <div className="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-black text-xs shrink-0">{initials(doc.name)}</div>
+                        <button key={doc.doctor_partner_id} role="radio" aria-checked={sel} onClick={() => pickDoctor(doc)} className={`text-left p-3.5 rounded-xl border flex items-start gap-3 transition-all ${sel ? 'border-teal-600 bg-teal-50/40 ring-1 ring-teal-200' : 'border-slate-200 hover:border-teal-300'}`}>
+                          <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-xs shrink-0">{initials(doc.name)}</div>
                           <div className="min-w-0 flex-1">
                             <p className="font-bold text-slate-800 text-sm truncate">{formatDoctorName(doc.name) || doc.name}</p>
-                            {doc.specialization && <p className="text-[11px] text-slate-400 truncate">{doc.specialization}</p>}
+                            <p className="text-[11px] text-slate-500 truncate">{[doc.specialization || selectedDepartment?.name, doc.experience_years ? `${doc.experience_years} yrs experience` : null].filter(Boolean).join(' · ')}</p>
+                            <p className="text-[11px] text-slate-500">{[doc.room_number ? `Room ${doc.room_number}` : null, selectedDepartment?.in_person_fee != null ? `₹${selectedDepartment.in_person_fee}` : null].filter(Boolean).join(' · ') || ' '}</p>
                           </div>
-                          {sel && <Check className="w-4 h-4 text-teal-600 shrink-0" />}
+                          {sel ? <Check className="w-4 h-4 text-teal-600 shrink-0" /> : <span className="text-[11px] font-bold text-teal-700 shrink-0">See times</span>}
                         </button>
                       );
                     })}
@@ -847,7 +1100,7 @@ export default function UniversalBookingScreen() {
                     </p>
                   )}
                   <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-500 font-semibold">
-                    {providerDetail.doctor.experience_years != null && <span>{providerDetail.doctor.experience_years} yrs experience</span>}
+                    {Number(providerDetail.doctor.experience_years) > 0 && <span>{providerDetail.doctor.experience_years} yrs experience</span>}
                     {providerDetail.doctor.qualification && <span>{providerDetail.doctor.qualification}</span>}
                   </div>
                   {reviews && reviews.totalReviews > 0 && (
@@ -913,12 +1166,30 @@ export default function UniversalBookingScreen() {
                     ))}
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1">
-                    {upcomingDates(14).map((d) => (
-                      <button key={d.value} onClick={() => changeDate(d.value)} className={`shrink-0 w-16 py-2 rounded-xl border text-center ${selectedDate === d.value ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
-                        <span className="block text-[10px] font-bold uppercase">{d.weekday}</span>
-                        <span className="block text-xs font-black">{d.label}</span>
-                      </button>
-                    ))}
+                    {upcomingDates(14).map((d) => {
+                      const hasSlots = datesWithSlots[d.value];
+                      return (
+                        <button
+                          key={d.value}
+                          onClick={() => changeDate(d.value)}
+                          className={`relative shrink-0 w-16 py-2 rounded-xl border text-center transition-all ${
+                            selectedDate === d.value
+                              ? 'border-teal-600 bg-teal-50 text-teal-800 shadow-xs'
+                              : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          <span className="block text-[10px] font-bold uppercase">{d.weekday}</span>
+                          <span className="block text-xs font-black">{d.label}</span>
+                          {hasSlots && (
+                            <span
+                              title="Slots available"
+                              aria-label="Slots available"
+                              className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mx-auto mt-0.5"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -926,6 +1197,8 @@ export default function UniversalBookingScreen() {
                   <SectionTitle icon={Clock}>Available Slots</SectionTitle>
                   {slotsLoading ? (
                     <div className="py-6 text-center"><div className="w-6 h-6 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" /></div>
+                  ) : slotsPaused ? (
+                    <p role="status" className="text-amber-800 bg-amber-50 border border-amber-200 rounded-xl text-sm font-semibold py-3 px-3 text-center">{slotsPaused} Please choose another doctor or check back later.</p>
                   ) : activeSlots.length === 0 ? (
                     <p className="text-slate-500 text-sm font-medium py-3 text-center">No appointments available for this date.</p>
                   ) : (
@@ -1110,6 +1383,7 @@ export default function UniversalBookingScreen() {
                 })}
               </div>
 
+              {paymentMode !== 'CASH' && <TestPaymentNote />}
               {/* Dynamic details for chosen payment method */}
               {paymentMode === 'UPI' && (
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
@@ -1177,7 +1451,7 @@ export default function UniversalBookingScreen() {
                     <input
                       type="text"
                       value={cardDetails.name}
-                      onChange={(e) => setCardDetails({ ...cardDetails, name: e.target.value })}
+                      onChange={(e) => setCardDetails({ ...cardDetails, name: personNameInput(e.target.value) })}
                       placeholder="Cardholder Name"
                       className="w-full bg-white px-3 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:border-teal-500"
                     />
@@ -1250,6 +1524,9 @@ export default function UniversalBookingScreen() {
               </div>
             </div>
 
+            {/* Cancellation & Refund Policy before paying */}
+            <CancellationRefundPolicy service="doctor" />
+
             {/* Trust & SSL security badge — SSL is a true, general fact of the site being served
                 over HTTPS; no refund-guarantee claim is made since no refund flow exists. */}
             <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400 font-semibold py-2">
@@ -1264,7 +1541,7 @@ export default function UniversalBookingScreen() {
             <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mx-auto"><CheckCircle2 className="w-9 h-9" /></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900">Appointment Confirmed!</h2>
-              <p className="text-xs text-slate-500 font-medium mt-1">Your booking receipt &amp; token have been generated.</p>
+              <p className="text-xs text-slate-500 font-medium mt-1">Show the booking reference below at the reception. You can print the receipt or add the visit to your calendar.</p>
             </div>
             <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 text-left space-y-2 text-xs max-w-md mx-auto">
               <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="text-slate-500">Booking Reference</span><span className="font-mono font-black text-teal-700">{createdBooking.booking_number}</span></div>
@@ -1283,13 +1560,34 @@ export default function UniversalBookingScreen() {
                   <div className="flex justify-between">
                     <span className="text-slate-500">Payment Status</span>
                     <span className={`font-bold ${paymentMode === 'CASH' || createdBooking.payment_status === 'PENDING' || paymentResult.payment_status === 'PENDING' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                      {paymentMode === 'CASH' || createdBooking.payment_status === 'PENDING' || paymentResult.payment_status === 'PENDING' ? 'Pending (Pay at Clinic)' : 'Paid'}
+                      {paymentMode === 'CASH' || createdBooking.payment_status === 'PENDING' || paymentResult.payment_status === 'PENDING' ? 'Pending (Pay at Clinic)' : paidLabel()}
                     </span>
                   </div>
                 </>
               )}
               <div className="flex justify-between"><span className="text-slate-500">Booking Status</span><span className="font-bold text-teal-700">{createdBooking.booking_status || 'CONFIRMED'}</span></div>
             </div>
+            {(() => {
+              const paidOnline = paymentMode !== 'CASH' && createdBooking.payment_status !== 'PENDING' && paymentResult?.payment_status !== 'PENDING';
+              const summary: BookingSummary = {
+                reference: createdBooking.booking_number,
+                doctor: bookingDoctorName || 'Doctor',
+                place: (isHospital && selectedBranch?.name) || selectedSlot?.facility_name || null,
+                address: (isHospital && selectedBranch ? [selectedBranch.address_line_1, selectedBranch.area, selectedBranch.city, selectedBranch.pincode].filter(Boolean).join(', ') : selectedSlot?.facility_address) || null,
+                date: createdBooking.booking_date?.split('T')[0] || selectedDate,
+                time: selectedSlot?.start_time || null,
+                patient: selectedFamily ? selectedFamily.name : 'Myself',
+                paymentMode: paymentMode === 'CASH' ? 'Pay at clinic' : `Online (${paymentMode === 'NETBANKING' ? 'Net Banking' : paymentMode})`,
+                amount: Number(createdBooking.total_amount || 0),
+                paid: paidOnline,
+              };
+              return (
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <button onClick={() => printBookingReceipt(summary)} className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs">Print receipt</button>
+                  <button onClick={() => downloadCalendarEntry(summary)} className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs">Add to calendar</button>
+                </div>
+              );
+            })()}
             <div className="flex flex-wrap gap-3 justify-center pt-2">
               <button onClick={() => navigate('/bookings')} className="px-6 py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">View My Consultations</button>
               <button onClick={() => navigate('/healthcare-services')} className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs">Back to Services</button>
@@ -1352,6 +1650,10 @@ export default function UniversalBookingScreen() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
+
+// Department pictures we reviewed as on-subject (others show none rather than a wrong scene).
+const DEPT_PHOTOS: [RegExp, string][] = [[/cardio|heart/i, 'cardiology'], [/dent/i, 'dentistry'], [/emergenc|casualty/i, 'emergency'], [/\bent\b|ear|nose|throat|otorhino/i, 'ent'], [/gastro/i, 'gastroenterology'], [/general medicine|internal/i, 'general-medicine'], [/gyn|obstet/i, 'gynecology'], [/nephro|kidney/i, 'nephrology'], [/onco|cancer/i, 'oncology'], [/ophthal|eye/i, 'ophthalmology'], [/ortho|bone/i, 'orthopedics'], [/pulmo|chest|respir/i, 'pulmonology']];
+const deptPhoto = (name: string): string | null => { const m = DEPT_PHOTOS.find(([r]) => r.test(name)); return m ? `/images/healthcare/departments/${m[1]}.webp` : null; };

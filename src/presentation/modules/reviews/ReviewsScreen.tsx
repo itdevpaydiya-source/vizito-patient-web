@@ -1,167 +1,207 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Star, MessageSquare, AlertCircle, RotateCcw, CheckCircle2, Calendar } from 'lucide-react';
-import { formatDate } from '../../../utils/dateFormat';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Star, MessageSquare, AlertCircle, RotateCcw, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Clock } from 'lucide-react';
 import { formatDoctorName } from '../../../utils/doctorLabel';
-import { getDashboardApi, type DashboardBooking } from '../../../services/dashboardHelper';
-import { createReviewApi, getMyReviewsApi, type PatientReview } from '../../../services/reviewHelper';
+import { getDashboardApi } from '../../../services/dashboardHelper';
+import { createReviewApi, getMyReviewListApi, type PatientReview } from '../../../services/reviewHelper';
+import { myLabOrdersApi, rateMyLabOrderApi } from '../../../services/labHelper';
+import { getMyOrdersApi, ratePharmacyOrderApi } from '../../../services/pharmacyOrderHelper';
+import { hcMineApi, hcRateApi } from '../../../services/homecareHelper';
+import { getProviderDetailApi } from '../../../services/bookingHelper';
+import RateBox from '../../components/RateBox';
+import { KIND_LABEL, type CareKind } from '../../components/reviewKinds';
 
-function appointmentTypeLabel(t: string | null): string {
-  switch (t) {
-    case 'VIDEO_CALL': return 'Video Consultation';
-    case 'IN_CLINIC': return 'In-Clinic Visit';
-    case 'HOME_VISIT': return 'Home Visit';
-    default: return 'Consultation';
-  }
+// Ratings & Reviews: every finished visit the patient can rate (doctor, hospital, lab, pharmacy,
+// home care) with what it was, where and when; and every review they wrote, with the provider's reply.
+// Only completed care appears (the server checks again). Refreshes every minute for new replies.
+
+interface ToRate {
+  key: string; kind: CareKind; provider: string; partnerId: string | null; what: string; where: string | null; when: string | null; forWhom: string | null;
+  submit: (rating: number, review: string, tags: string[]) => Promise<unknown>;
 }
 
-const StarRow = ({ value, onChange, size = 'sm' }: { value: number; onChange?: (n: number) => void; size?: 'sm' | 'lg' }) => (
-  <span className="flex items-center gap-0.5">
-    {[1, 2, 3, 4, 5].map((s) => {
-      const cls = size === 'lg' ? 'w-6 h-6' : 'w-3.5 h-3.5';
-      const star = <Star className={`${cls} ${s <= value ? 'text-amber-500 fill-amber-500' : 'text-slate-300'}`} />;
-      return onChange ? <button key={s} type="button" onClick={() => onChange(s)} className="p-0.5">{star}</button> : <span key={s}>{star}</span>;
-    })}
-  </span>
+const ICON: Record<CareKind, React.ElementType> = { doctor: Stethoscope, hospital: Building2, lab: FlaskConical, pharmacy: Pill, homecare: HeartHandshake };
+const VISIT: Record<string, string> = { VIDEO_CALL: 'Video consultation', IN_CLINIC: 'In-clinic visit', HOME_VISIT: 'Doctor home visit' };
+const dateText = (d?: string | null) => { if (!d) return null; const x = new Date(d); return Number.isNaN(x.getTime()) ? null : x.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); };
+const ago = (d?: string | null) => {
+  if (!d) return ''; const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 30 ? `${days} days ago` : dateText(d) || '';
+};
+const kindOfReview = (r: PatientReview): CareKind => {
+  const t = String(r.consultation_type || '');
+  return /^Lab tests/i.test(t) ? 'lab' : /^Pharmacy order/i.test(t) ? 'pharmacy' : /^Home care/i.test(t) ? 'homecare' : 'doctor';
+};
+const Stars = ({ n }: { n: number }) => (
+  <span className="inline-flex" aria-label={`${n} out of 5 stars`}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} className={`w-4 h-4 ${i <= n ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />)}</span>
 );
 
-// Dedicated Reviews page — patients rate completed consultations and read the doctors' responses.
-// All data is real (GET /patients/reviews + completed bookings from the dashboard). No fabrication.
 export default function ReviewsScreen() {
-  const [completed, setCompleted] = useState<DashboardBooking[]>([]);
-  const [reviews, setReviews] = useState<Record<string, PatientReview>>({});
+  const [toRate, setToRate] = useState<ToRate[]>([]);
+  const [mine, setMine] = useState<PatientReview[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'rate' | 'mine'>('rate');
+  const [kind, setKind] = useState<CareKind | 'all'>('all');
+  const [shown, setShown] = useState(10);
 
-  // Per-booking write form state.
-  const [drafts, setDrafts] = useState<Record<string, { rating: number; comment: string }>>({});
-  const [submitting, setSubmitting] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) { setLoading(true); setError(null); }
     try {
-      const [dashboard, myReviews] = await Promise.all([getDashboardApi(), getMyReviewsApi()]);
-      const done = dashboard.history.filter((b) => !(b.status || '').toUpperCase().includes('CANCEL'));
-      setCompleted(done);
-      setReviews(myReviews);
+      const [dash, reviews, labs, pharm, hc] = await Promise.all([
+        getDashboardApi().catch(() => null), getMyReviewListApi(),
+        myLabOrdersApi().catch(() => []), getMyOrdersApi().catch(() => []), hcMineApi().catch(() => []),
+      ]);
+      const reviewed = new Set(reviews.map((r) => String(r.booking_id)));
+      const items: ToRate[] = [];
+      for (const b of dash?.history || []) {
+        if (!/COMPLET/i.test(String(b.status || '')) || reviewed.has(b.id)) continue;
+        const hospital = !!b.hospitalPartnerId;
+        items.push({ key: `c:${b.id}`, kind: hospital ? 'hospital' : 'doctor', provider: formatDoctorName(b.doctorName) || '', partnerId: b.providerId,
+          what: [VISIT[String(b.appointmentType)] || 'Consultation', b.department].filter(Boolean).join(' · '), where: b.branchName || b.location, when: b.appointmentDate || b.bookingDate, forWhom: b.patientName,
+          submit: (r, t, g) => createReviewApi(b.id, r, t || undefined, g) });
+      }
+      for (const o of labs) {
+        if (o.status !== 'REPORTED' || o.my_rating) continue;
+        items.push({ key: `l:${o.id}`, kind: 'lab', provider: o.lab_name || 'Laboratory', partnerId: null, what: `Lab tests: ${(o as any).items?.map((i: any) => i.test_name).join(', ') || o.order_number}`,
+          where: o.location_name, when: o.visit_date, forWhom: o.patient_name || null, submit: (r, t, g) => rateMyLabOrderApi(o.id, r, t, g) });
+      }
+      for (const o of pharm) {
+        if (o.status !== 'COMPLETED' || reviewed.has(o.id)) continue;
+        items.push({ key: `p:${o.id}`, kind: 'pharmacy', provider: '', partnerId: o.pharmacy_partner_id, what: `Pharmacy order #${o.id.slice(0, 8)} · ${o.items?.length || 0} item${o.items?.length === 1 ? '' : 's'}`,
+          where: null, when: o.created_at, forWhom: null, submit: (r, t, g) => ratePharmacyOrderApi(o.id, r, t, g) });
+      }
+      for (const o of hc) for (const v of o.visits || []) {
+        if (v.status !== 'COMPLETED' || v.patient_rating) continue;
+        items.push({ key: `h:${v.id}`, kind: 'homecare', provider: o.agency_name || 'Home care agency', partnerId: null,
+          what: `${o.service_name} · visit ${v.seq}${v.professional ? ` by ${v.professional.name} (${v.professional.role_label})` : ''}`, where: null, when: v.completed_at || v.date, forWhom: o.patient_name,
+          submit: (r, t, g) => hcRateApi(v.id, r, t, g) });
+      }
+      items.sort((a, b) => String(b.when || '').localeCompare(String(a.when || '')));
+      setToRate(items); setMine(reviews);
+      // Names the bookings don't carry (doctor / pharmacy), looked up once each.
+      const need = Array.from(new Set([...items.filter((i) => !i.provider && i.partnerId).map((i) => String(i.partnerId)), ...reviews.filter((r) => !r.doctor_name && r.partner_id).map((r) => String(r.partner_id))]));
+      if (need.length) {
+        const got = await Promise.all(need.map((id) => getProviderDetailApi(id).then((d) => [id, formatDoctorName(d?.doctor?.full_name) || d?.business_name || ''] as const).catch(() => [id, ''] as const)));
+        setNames((n) => ({ ...n, ...Object.fromEntries(got.filter(([, v]) => v)) }));
+      }
     } catch {
-      setError('Unable to load your reviews. Please try again.');
-      setCompleted([]); setReviews({});
-    } finally { setLoading(false); }
+      if (!quiet) setError('Could not load your reviews. Please try again.');
+    } finally { if (!quiet) setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const t = setInterval(() => load(true), 60000); return () => clearInterval(t); }, [load]);
 
-  const draftFor = (id: string) => drafts[id] || { rating: 5, comment: '' };
-  const setDraft = (id: string, patch: Partial<{ rating: number; comment: string }>) =>
-    setDrafts((prev) => ({ ...prev, [id]: { ...draftFor(id), ...patch } }));
-
-  const submit = async (bookingId: string) => {
-    const d = draftFor(bookingId);
-    setSubmitting(bookingId);
-    try {
-      await createReviewApi(bookingId, d.rating, d.comment.trim() || undefined);
-      setReviews(await getMyReviewsApi());
-    } catch {
-      alert('Could not submit your review. Please try again.');
-    } finally { setSubmitting(null); }
-  };
-
-  const pending = completed.filter((b) => !reviews[b.id]);
-  const reviewed = completed.filter((b) => reviews[b.id]);
+  const replies = mine.filter((r) => r.partner_response).length;
+  const avg = mine.length ? mine.reduce((n, r) => n + r.rating, 0) / mine.length : 0;
+  const list = tab === 'rate' ? toRate : mine;
+  const kindOf = (x: any): CareKind => (tab === 'rate' ? x.kind : kindOfReview(x));
+  const filtered = useMemo(() => list.filter((x: any) => kind === 'all' || kindOf(x) === kind || (kind === 'doctor' && kindOf(x) === 'hospital')), [list, kind, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kinds: (CareKind | 'all')[] = ['all', 'doctor', 'lab', 'pharmacy', 'homecare'];
+  const countOf = (k: CareKind | 'all') => list.filter((x: any) => k === 'all' || kindOf(x) === k || (k === 'doctor' && kindOf(x) === 'hospital')).length;
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 max-w-6xl mx-auto">
+    <div className="space-y-5 pb-12 w-full">
       <div>
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Ratings & Reviews</h1>
-        <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">Rate your completed consultations and read the doctors' responses.</p>
+        <p className="text-sm text-slate-500 mt-1">Rate the care you received from doctors, hospitals, labs, pharmacies and home care. Your reviews help other patients choose, and providers reply here.</p>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Summary">
+        {[
+          { l: 'Waiting for your rating', v: loading ? '–' : toRate.length, warn: toRate.length > 0 },
+          { l: 'Reviews you wrote', v: loading ? '–' : mine.length },
+          { l: 'Replies from providers', v: loading ? '–' : replies },
+          { l: 'Your average rating', v: loading || !mine.length ? '–' : `${avg.toFixed(1)} ★` },
+        ].map((t) => (
+          <div key={t.l} className={`rounded-2xl border p-4 ${t.warn ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{t.l}</p>
+            <p className="text-2xl font-black text-slate-900 tabular-nums mt-1">{t.v}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" className="inline-flex rounded-xl bg-slate-100 p-1">
+          {([['rate', 'To rate', toRate.length], ['mine', 'My reviews', mine.length]] as const).map(([id, l, n]) => (
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setShown(10); }}
+              className={`px-4 py-2 rounded-lg text-sm font-bold inline-flex items-center gap-1.5 ${tab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+              {l}<span className={`min-w-[1.25rem] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${id === 'rate' && n > 0 ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{n}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5" aria-label="Type of care">
+          {kinds.map((k) => (
+            <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(10); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
+              {k === 'all' ? 'All' : k === 'doctor' ? 'Doctors & hospitals' : KIND_LABEL[k]} <span className="opacity-60">{countOf(k)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs">
-          <div className="w-7 h-7 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-slate-500 font-medium text-sm">Loading...</p>
-        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 py-14 text-center text-sm text-slate-500">Loading your visits…</div>
       ) : error ? (
-        <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs space-y-3">
-          <AlertCircle className="w-10 h-10 text-rose-400 mx-auto" />
-          <p className="text-rose-600 font-semibold text-sm">{error}</p>
-          <button onClick={load} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl">
-            <RotateCcw className="w-4 h-4" /> Retry
-          </button>
+        <div className="bg-white rounded-2xl border border-slate-200 py-14 text-center space-y-3">
+          <AlertCircle className="w-9 h-9 text-rose-400 mx-auto" /><p className="text-rose-600 font-semibold text-sm">{error}</p>
+          <button onClick={() => load()} className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 px-3 py-2 rounded-xl"><RotateCcw className="w-4 h-4" /> Retry</button>
         </div>
-      ) : completed.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center shadow-xs space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 mx-auto"><Star className="w-8 h-8" /></div>
-          <h3 className="font-extrabold text-slate-800 text-lg">No consultations to review yet</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">Once a doctor completes your appointment, you can rate it here.</p>
+      ) : !filtered.length ? (
+        <div className="bg-white rounded-2xl border border-slate-200 py-14 text-center space-y-2 px-6">
+          <Star className="w-9 h-9 text-amber-400 mx-auto" />
+          <p className="font-extrabold text-slate-800">{tab === 'rate' ? 'Nothing waiting for a rating' : 'No reviews yet'}</p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">{tab === 'rate' ? 'Completed consultations, lab reports, pharmacy orders and home care visits appear here so you can rate them.' : 'Reviews you write appear here with the provider’s reply.'}</p>
         </div>
       ) : (
-        <>
-          {/* Pending reviews */}
-          {pending.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Awaiting your review</h2>
-              {pending.map((b) => {
-                const d = draftFor(b.id);
-                return (
-                  <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-extrabold text-slate-800 text-sm">{formatDoctorName(b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
-                        <p className="text-[11px] text-slate-400 font-semibold flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{[appointmentTypeLabel(b.appointmentType), b.branchName, formatDate(b.appointmentDate || b.bookingDate)].filter(Boolean).join(' · ')}{b.patientName ? ` · for ${b.patientName}` : ''}</p>
-                      </div>
-                      <StarRow value={d.rating} onChange={(n) => setDraft(b.id, { rating: n })} size="lg" />
+        <ul className="space-y-3">
+          {filtered.slice(0, shown).map((x: any) => {
+            if (tab === 'rate') {
+              const it = x as ToRate; const Icon = ICON[it.kind];
+              const name = it.provider || (it.partnerId && names[it.partnerId]) || KIND_LABEL[it.kind];
+              return (
+                <li key={it.key} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700">{KIND_LABEL[it.kind]}</p>
+                      <h3 className="font-extrabold text-slate-900">{name}</h3>
+                      <p className="text-xs text-slate-600">{it.what}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{[dateText(it.when), it.where, it.forWhom ? `for ${it.forWhom}` : null].filter(Boolean).join(' · ')}{it.when ? ` · completed ${ago(it.when)}` : ''}</p>
                     </div>
-                    <textarea
-                      value={d.comment}
-                      onChange={(e) => setDraft(b.id, { comment: e.target.value })}
-                      placeholder="Share your experience (optional)..."
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 min-h-[70px]"
-                    />
-                    <button
-                      onClick={() => submit(b.id)}
-                      disabled={submitting === b.id}
-                      className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold text-xs flex items-center gap-1.5"
-                    >
-                      {submitting === b.id ? 'Submitting...' : <><Star className="w-4 h-4" /> Submit Review</>}
-                    </button>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Submitted reviews */}
-          {reviewed.length > 0 && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Your reviews</h2>
-              {reviewed.map((b) => {
-                const rv = reviews[b.id];
-                return (
-                  <div key={b.id} className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-extrabold text-slate-800 text-sm">{formatDoctorName(rv.doctor_name || b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
-                        <p className="text-[11px] text-slate-400 font-semibold">{[b.branchName, formatDate(b.appointmentDate || b.bookingDate)].filter(Boolean).join(' · ')}</p>
-                      </div>
-                      <StarRow value={rv.rating} />
+                  <RateBox kind={it.kind} what={name} onSubmit={async (r, t, g) => { await it.submit(r, t, g); setTimeout(() => load(true), 1200); }} />
+                </li>
+              );
+            }
+            const r = x as PatientReview; const k = kindOfReview(r); const Icon = ICON[k];
+            const name = formatDoctorName(r.doctor_name) || r.provider_name || (r.partner_id && names[r.partner_id]) || KIND_LABEL[k];
+            return (
+              <li key={r.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2">
+                <div className="flex items-start gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-extrabold text-slate-900">{name}</h3>
+                      <Stars n={r.rating} />
                     </div>
-                    {rv.review && <p className="text-sm text-slate-700">"{rv.review}"</p>}
-                    {rv.partner_response ? (
-                      <div className="mt-1 p-3 rounded-xl bg-teal-50/60 border border-teal-100">
-                        <span className="text-[11px] font-bold text-teal-700 flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> Doctor's response</span>
-                        <p className="text-sm text-slate-700 mt-1">{rv.partner_response}</p>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Submitted — awaiting the doctor's response.</p>
-                    )}
+                    <p className="text-xs text-slate-600">{[r.consultation_type, r.location].filter(Boolean).join(' · ')}</p>
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Verified visit · reviewed {ago(r.created_at)}</p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+                </div>
+                {!!r.tags?.length && <div className="flex flex-wrap gap-1.5">{r.tags.map((t) => <span key={t} className="px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-bold text-slate-700">{t}</span>)}</div>}
+                {r.review && <p className="text-sm text-slate-700">“{r.review}”</p>}
+                {r.partner_response ? (
+                  <div className="p-3 rounded-xl bg-teal-50/60 border border-teal-100">
+                    <p className="text-[11px] font-bold text-teal-800 flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> Reply from {name}{r.responded_at ? ` · ${ago(r.responded_at)}` : ''}</p>
+                    <p className="text-sm text-slate-700 mt-1">{r.partner_response}</p>
+                  </div>
+                ) : <p className="text-[11px] text-slate-400">No reply yet. You’ll be notified when {name} replies.</p>}
+              </li>
+            );
+          })}
+        </ul>
       )}
+      {filtered.length > shown && <button onClick={() => setShown((n) => n + 10)} className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Show more ({filtered.length - shown} more)</button>}
     </div>
   );
 }

@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
+import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
+import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
+import { personNameInput } from '../../../utils/inputFilters';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, RotateCcw, CheckCircle2, XCircle, Store, Truck, CreditCard, Smartphone, Building, Wallet, Stethoscope, MapPin, Phone, Circle } from 'lucide-react';
 import { getProviderDetailApi, type ProviderDetail } from '../../../services/bookingHelper';
-import { getMyOrderApi, cancelOrderApi, payOrderApi, getPharmacyRequestsApi } from '../../../services/pharmacyOrderHelper';
+import RateBox from '../../components/RateBox';
+import { getMyReviewsApi } from '../../../services/reviewHelper';
+import { ratePharmacyOrderApi, getMyOrderApi, cancelOrderApi, payOrderApi, getPharmacyRequestsApi } from '../../../services/pharmacyOrderHelper';
 import { getPrescriptionsApi, type PatientPrescription, type PrescriptionMedicine } from '../../../services/patientHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
-import type { PatientOrder } from '../../../services/types';
+import { orderEndedBy, type PatientOrder } from '../../../services/types';
 import type { PaymentMethod } from '../../../services/bookingHelper';
 
 // An order carries only medicine/qty/price — none of the CLINICAL reason it exists
@@ -56,6 +61,9 @@ export default function OrderDetailScreen() {
   const navigate = useNavigate();
 
   const [order, setOrder] = useState<PatientOrder | null>(null);
+  // The patient's earlier rating of this order, if any (so the box shows stars, not a form).
+  const [myRating, setMyRating] = useState<number | null | undefined>(undefined);
+  useEffect(() => { if (order?.status === 'COMPLETED' && myRating === undefined) getMyReviewsApi().then((m) => setMyRating(m[order.id]?.rating ?? null)).catch(() => setMyRating(null)); }, [order?.status, order?.id, myRating]);
   const [prescription, setPrescription] = useState<PatientPrescription | null>(null);
   const [pharmacy, setPharmacy] = useState<ProviderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,7 +109,9 @@ export default function OrderDetailScreen() {
     if (!order) return;
     setCancelling(true);
     try {
-      setOrder(await cancelOrderApi(order.id, 'Cancelled by patient'));
+      await cancelOrderApi(order.id, 'Cancelled by patient');
+      // The cancel reply is the bare order (no items): reload the full order to show it.
+      setOrder(await getMyOrderApi(order.id));
     } catch (e: any) {
       const msg = e?.response?.data?.message || 'Unable to cancel this order.';
       setError(Array.isArray(msg) ? msg.join(', ') : String(msg));
@@ -130,7 +140,7 @@ export default function OrderDetailScreen() {
   };
 
   if (loading) {
-    return <div className="max-w-2xl mx-auto py-16 text-center"><div className="w-7 h-7 border-[3px] border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
+    return <div className="max-w-2xl mx-auto py-16 text-center"><div className="w-7 h-7 border-[3px] border-orange-700 border-t-transparent rounded-full animate-spin mx-auto" /></div>;
   }
   if (error || !order) {
     return (
@@ -142,35 +152,45 @@ export default function OrderDetailScreen() {
     );
   }
 
-  const meta = statusMeta[order.status] || { label: order.status, className: 'bg-slate-100 text-slate-600' };
+  const ended = orderEndedBy(order);
+  const meta = ended === 'pharmacy' ? { label: 'Declined by pharmacy', className: 'bg-rose-50 text-rose-600' }
+    : ended === 'no-answer' ? { label: "Pharmacy didn't respond", className: 'bg-rose-50 text-rose-600' }
+    : statusMeta[order.status] || { label: order.status, className: 'bg-slate-100 text-slate-600' };
   const needsPayment = order.status === 'CREATED' || order.status === 'AWAITING_PAYMENT';
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 pb-16">
-      <button onClick={() => navigate('/pharmacy-orders')} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-2 rounded-xl">
+    <div className="w-full max-w-4xl mx-auto space-y-5 pb-16">
+      <button onClick={() => navigate('/pharmacy-orders')} className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-orange-900 bg-white border border-slate-200 hover:border-orange-200 px-3.5 py-2.5 rounded-xl shadow-sm motion-safe:transition-colors motion-reduce:transition-none">
         <ArrowLeft className="w-4 h-4" /> Back to Orders
       </button>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-        <div className="flex items-center justify-between">
+      <header className="px-1">
+        <p className="text-[10px] uppercase tracking-[0.16em] font-extrabold text-orange-800 mb-1">Medication care</p>
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Order details</h1>
+        <p className="text-sm text-slate-500 mt-1">Track your pharmacy order and review its items.</p>
+      </header>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-100 text-orange-800 flex items-center justify-center">
               {order.fulfillment_type === 'DELIVERY' ? <Truck className="w-4.5 h-4.5" /> : <Store className="w-4.5 h-4.5" />}
             </div>
             <div>
-              <p className="font-bold text-slate-800 text-sm">{order.fulfillment_type === 'DELIVERY' ? 'Delivery' : 'Pickup'}</p>
+              <p className="font-extrabold text-slate-900 text-base">{order.fulfillment_type === 'DELIVERY' ? 'Delivery order' : 'Pickup order'}</p>
               <p className="text-[11px] text-slate-400">{new Date(order.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })} · #{String(order.id).slice(0, 8).toUpperCase()}</p>
             </div>
           </div>
-          <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg ${meta.className}`}>{meta.label}</span>
+          <span className={`shrink-0 text-[11px] sm:text-xs font-bold px-3 py-2 rounded-xl ${meta.className}`}>{meta.label}</span>
         </div>
 
+        {order.status === 'COMPLETED' && myRating !== undefined && <RateBox kind="pharmacy" rated={myRating} what="this pharmacy" onSubmit={(r, t, g) => ratePharmacyOrderApi(order.id, r, t, g)} />}
         {/* Progress */}
         {stepIndex(order.status) >= 0 && (
           <ol className="grid grid-cols-5 gap-1" aria-label="Order progress">
             {[
               'Placed',
-              order.payment_method === 'CASH' ? 'Confirmed' : 'Paid',
+              order.payment_method === 'CASH' ? 'Confirmed' : paidLabel(),
               'Being packed',
               order.fulfillment_type === 'DELIVERY' ? 'On the way' : 'Ready to collect',
               order.fulfillment_type === 'DELIVERY' ? 'Delivered' : 'Collected',
@@ -186,76 +206,84 @@ export default function OrderDetailScreen() {
           </ol>
         )}
 
-        {/* Where to collect from / who is sending it */}
         {pharmacy && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3 text-xs space-y-1" aria-label="Pharmacy">
-            <p className="font-bold text-slate-800 flex items-center gap-1.5"><Store className="w-3.5 h-3.5" /> {pharmacy.business_name}</p>
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 space-y-3" aria-label="Pharmacy details">
+            <div className="flex items-center gap-2 text-orange-800">
+              <Store className="w-4 h-4" />
+              <h2 className="text-sm font-extrabold text-slate-900">{order.fulfillment_type === 'DELIVERY' ? 'Fulfilled by' : 'Pharmacy details'}</h2>
+            </div>
+            <p className="font-bold text-slate-800 text-sm">{pharmacy.business_name}</p>
             {pharmacy.pharmacy?.address && (
-              <p className="text-slate-600 flex items-start gap-1.5"><MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{pharmacy.pharmacy.address}{' '}
-                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pharmacy.business_name}, ${pharmacy.pharmacy.address}`)}`} target="_blank" rel="noreferrer" className="font-bold text-teal-700 hover:underline">Directions</a>
-                </span>
-              </p>
+              <div className="flex items-start gap-2 text-sm text-slate-600">
+                <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                <span className="min-w-0 flex-1 break-words">{pharmacy.pharmacy.address}</span>
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pharmacy.business_name}, ${pharmacy.pharmacy.address}`)}`} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-orange-900 hover:underline">Directions</a>
+              </div>
             )}
             {pharmacy.pharmacy?.phone && (
-              <a href={`tel:${pharmacy.pharmacy.phone}`} className="text-teal-700 font-bold flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {pharmacy.pharmacy.phone}</a>
+              <a href={`tel:${pharmacy.pharmacy.phone}`} className="inline-flex items-center gap-2 text-sm text-orange-900 font-bold hover:underline"><Phone className="w-4 h-4" /> Call pharmacy</a>
             )}
-            {order.status === 'READY_FOR_PICKUP' && (
-              <p className="text-emerald-800 font-semibold pt-1">Ready — bring this order number{prescription ? ' and your prescription' : ''} to the counter.</p>
+            {order.status === 'READY_FOR_PICKUP' && order.fulfillment_type !== 'DELIVERY' && (
+              <p className="text-sm text-emerald-800 font-semibold rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2">Ready to collect. Bring order #{String(order.id).slice(0, 8).toUpperCase()}{prescription ? ' and your prescription' : ''} to the counter.</p>
             )}
-          </div>
+          </section>
         )}
 
         {prescription && (
-          <div className="flex items-start gap-2.5 bg-purple-50/60 border border-purple-100 rounded-xl px-3.5 py-3">
-            <Stethoscope className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 bg-orange-50/70 border border-orange-100 rounded-xl px-3.5 py-3">
+            <Stethoscope className="w-4 h-4 text-orange-800 shrink-0 mt-0.5" />
             <div className="text-xs">
-              <p className="font-bold text-purple-800">
+              <p className="font-bold text-slate-800">
                 Prescribed by {formatDoctorName(prescription.doctor?.name) || 'your doctor'}
               </p>
-              {prescription.diagnosis && <p className="text-purple-600 font-medium mt-0.5">For: {prescription.diagnosis}</p>}
+              {prescription.diagnosis && <p className="text-slate-600 font-medium mt-0.5">For: {prescription.diagnosis}</p>}
             </div>
           </div>
         )}
 
-        <div className="divide-y divide-slate-100 border-t border-slate-100">
-          {order.items.map((item) => {
-            const rxMed = prescription ? findMedicineDetails(item.medicine?.medicine_name, prescription.medicines) : null;
-            return (
-              <div key={item.id} className="flex items-center justify-between py-2.5 text-sm gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-800">{item.medicine?.medicine_name || 'Medicine'}</p>
-                  <p className="text-[11px] text-slate-400">Qty {item.quantity} × ₹{Number(item.unit_price).toFixed(2)}</p>
-                  {rxMed && (rxMed.dosage || rxMed.frequency || rxMed.duration) && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {rxMed.dosage && (
-                        <span className="text-[9px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
-                          <span className="text-slate-400 uppercase mr-0.5">Dose</span>{rxMed.dosage}
-                        </span>
-                      )}
-                      {rxMed.frequency && (
-                        <span className="text-[9px] font-bold text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded">
-                          <span className="text-purple-400 uppercase mr-0.5">Freq</span>{rxMed.frequency}
-                        </span>
-                      )}
-                      {rxMed.duration && (
-                        <span className="text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded">
-                          <span className="text-teal-400 uppercase mr-0.5">For</span>{rxMed.duration}
-                        </span>
-                      )}
-                    </div>
-                  )}
+        <section className="rounded-2xl border border-slate-200 overflow-hidden" aria-label="Order items">
+          <div className="flex items-center justify-between bg-slate-50 px-4 py-3 border-b border-slate-200">
+            <h2 className="text-sm font-extrabold text-slate-900">Order summary</h2>
+            <span className="text-xs font-semibold text-slate-500">{(order.items || []).length} {(order.items || []).length === 1 ? 'item' : 'items'}</span>
+          </div>
+          <div className="divide-y divide-slate-100 px-4">
+            {(order.items || []).map((item) => {
+              const rxMed = prescription ? findMedicineDetails(item.medicine?.medicine_name, prescription.medicines) : null;
+              return (
+                <div key={item.id} className="flex items-center justify-between py-4 text-sm gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800">{item.medicine?.medicine_name || 'Unnamed item'}</p>
+                    <p className="text-xs text-slate-500 mt-1">Quantity {item.quantity} x {String.fromCharCode(8377)}{Number(item.unit_price).toFixed(2)} each</p>
+                    {rxMed && (rxMed.dosage || rxMed.frequency || rxMed.duration) && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {rxMed.dosage && <span className="text-[9px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded"><span className="text-slate-400 uppercase mr-0.5">Dose</span>{rxMed.dosage}</span>}
+                        {rxMed.frequency && <span className="text-[9px] font-bold text-orange-900 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded"><span className="text-orange-700 uppercase mr-0.5">Freq</span>{rxMed.frequency}</span>}
+                        {rxMed.duration && <span className="text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded"><span className="text-teal-400 uppercase mr-0.5">For</span>{rxMed.duration}</span>}
+                      </div>
+                    )}
+                  </div>
+                  <p className="font-bold text-slate-800 shrink-0">{String.fromCharCode(8377)}{Number(item.subtotal).toFixed(2)}</p>
                 </div>
-                <p className="font-bold text-slate-700 shrink-0">₹{Number(item.subtotal).toFixed(2)}</p>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between bg-white px-4 py-4 border-t border-slate-200">
+            <span className="text-sm font-bold text-slate-700">Total</span>
+            <span className="text-xl font-black text-slate-900">{String.fromCharCode(8377)}{Number(order.total_amount).toFixed(2)}</span>
+          </div>
+        </section>
 
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-          <span className="text-sm font-bold text-slate-600">Total</span>
-          <span className="text-lg font-black text-slate-800">₹{Number(order.total_amount).toFixed(2)}</span>
-        </div>
+        {orderEndedBy(order) && orderEndedBy(order) !== 'you' && (
+          <div role="status" className="rounded-xl border border-rose-200 bg-rose-50 p-3 space-y-1.5">
+            <p className="text-sm font-bold text-rose-900">
+              {orderEndedBy(order) === 'no-answer' ? "The pharmacy didn't respond in time, so this order was cancelled." : 'The pharmacy declined this order.'}
+            </p>
+            {orderEndedBy(order) === 'pharmacy' && order.cancellation_reason && <p className="text-xs text-rose-800">Reason: {order.cancellation_reason}</p>}
+            <button onClick={() => navigate(order.pharmacy_request_id ? '/my-records' : '/pharmacy-orders/new')} className="px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">
+              {order.pharmacy_request_id ? 'Send the prescription to another pharmacy' : 'Order from another pharmacy'}
+            </button>
+          </div>
+        )}
 
         {/* UX audit: a cancelled, previously-paid order used to show only "Cancelled" —
             with no indication of whether the money was ever refunded. A patient has no
@@ -270,12 +298,12 @@ export default function OrderDetailScreen() {
         {order.payment_status === 'REFUNDED' && (
           <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-2.5 rounded-xl">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            ₹{Number(order.total_amount).toFixed(2)} has been refunded to your original payment method.
+            {refundText(`₹${Number(order.total_amount).toFixed(2)}`)}
           </div>
         )}
 
-        {order.payment_method === 'CASH' && (
-          <p className="text-[11px] text-slate-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-teal-500" /> Pay at {order.fulfillment_type === 'DELIVERY' ? 'delivery' : 'pickup'} — nothing to pay online.</p>
+        {order.payment_method === 'CASH' && !['CANCELLED', 'FULFILLMENT_FAILED'].includes(order.status) && (
+          <p className="text-xs font-medium text-slate-600 flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-3"><CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />{order.status === 'COMPLETED' ? `Cash paid at ${order.fulfillment_type === 'DELIVERY' ? 'delivery' : 'pickup'}.` : `Pay in person at ${order.fulfillment_type === 'DELIVERY' ? 'delivery' : 'pickup'} - nothing due online.`}</p>
         )}
 
         {CANCELLABLE.includes(order.status) && (
@@ -312,9 +340,11 @@ export default function OrderDetailScreen() {
           {payMethod === 'CARD' && (
             <div className="grid grid-cols-2 gap-2">
               <input value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="Card number" className="col-span-2 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold" />
-              <input value={cardName} onChange={(e) => setCardName(e.target.value)} placeholder="Cardholder name" className="col-span-2 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold" />
+              <input value={cardName} onChange={(e) => setCardName(personNameInput(e.target.value))} placeholder="Cardholder name" className="col-span-2 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold" />
             </div>
           )}
+
+          <CancellationRefundPolicy service="pharmacy" className="mt-2" />
 
           <button onClick={handlePay} disabled={paying} className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold text-sm">
             {paying ? 'Processing...' : `Pay ₹${Number(order.total_amount).toFixed(2)}`}

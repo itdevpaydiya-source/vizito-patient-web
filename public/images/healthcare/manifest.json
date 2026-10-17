@@ -1,0 +1,514 @@
+[
+  {
+    "path": "banners/dashboard.webp",
+    "width": 1920,
+    "height": 600,
+    "alt": "Indian family smiling with a friendly doctor",
+    "usage": "Patient dashboard header banner",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/find-doctor.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "banners/find-doctor.webp",
+    "usage": "banners/find-doctor.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/find-hospital.webp",
+    "width": 1920,
+    "height": 600,
+    "alt": "Bright modern hospital corridor with doctor walking with patient",
+    "usage": "Hospital discovery page header banner",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/home-collection.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "banners/home-collection.webp",
+    "usage": "banners/home-collection.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/homecare.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "banners/homecare.webp",
+    "usage": "banners/homecare.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/lab-tests.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "banners/lab-tests.webp",
+    "usage": "banners/lab-tests.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "banners/pharmacy.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "banners/pharmacy.webp",
+    "usage": "banners/pharmacy.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/cardiology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/cardiology.webp",
+    "usage": "departments/cardiology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/dentistry.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/dentistry.webp",
+    "usage": "departments/dentistry.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/dermatology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/dermatology.webp",
+    "usage": "departments/dermatology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/emergency.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/emergency.webp",
+    "usage": "departments/emergency.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/ent.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/ent.webp",
+    "usage": "departments/ent.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/gastroenterology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/gastroenterology.webp",
+    "usage": "departments/gastroenterology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/general-medicine.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/general-medicine.webp",
+    "usage": "departments/general-medicine.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/gynecology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/gynecology.webp",
+    "usage": "departments/gynecology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/nephrology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/nephrology.webp",
+    "usage": "departments/nephrology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/neurology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/neurology.webp",
+    "usage": "departments/neurology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/oncology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/oncology.webp",
+    "usage": "departments/oncology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/ophthalmology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "Eye doctor testing a patient with a slit-lamp",
+    "usage": "Ophthalmology department card",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/orthopedics.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/orthopedics.webp",
+    "usage": "departments/orthopedics.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/pediatrics.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/pediatrics.webp",
+    "usage": "departments/pediatrics.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/psychiatry.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/psychiatry.webp",
+    "usage": "departments/psychiatry.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "departments/pulmonology.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "departments/pulmonology.webp",
+    "usage": "departments/pulmonology.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-bookings.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-bookings.webp",
+    "usage": "empty/no-bookings.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-homecare.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-homecare.webp",
+    "usage": "empty/no-homecare.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-lab-bookings.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-lab-bookings.webp",
+    "usage": "empty/no-lab-bookings.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-notifications.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-notifications.webp",
+    "usage": "empty/no-notifications.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-orders.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-orders.webp",
+    "usage": "empty/no-orders.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-records.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-records.webp",
+    "usage": "empty/no-records.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "empty/no-results.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "empty/no-results.webp",
+    "usage": "empty/no-results.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/blood-tests.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/blood-tests.webp",
+    "usage": "lab/blood-tests.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/diabetes.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/diabetes.webp",
+    "usage": "lab/diabetes.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/fever-infection.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/fever-infection.webp",
+    "usage": "lab/fever-infection.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/full-body-checkup.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/full-body-checkup.webp",
+    "usage": "lab/full-body-checkup.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/heart-lipid.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/heart-lipid.webp",
+    "usage": "lab/heart-lipid.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/liver-kidney.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "Technician loading tubes into a biochemistry analyser",
+    "usage": "Liver & Kidney function test category card",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/thyroid.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/thyroid.webp",
+    "usage": "lab/thyroid.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/urine-tests.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/urine-tests.webp",
+    "usage": "lab/urine-tests.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/vitamins.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/vitamins.webp",
+    "usage": "lab/vitamins.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "lab/womens-health.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "lab/womens-health.webp",
+    "usage": "lab/womens-health.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/ayurveda.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/ayurveda.webp",
+    "usage": "pharmacy/ayurveda.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/baby-care.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/baby-care.webp",
+    "usage": "pharmacy/baby-care.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/devices.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/devices.webp",
+    "usage": "pharmacy/devices.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/diabetes-care.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/diabetes-care.webp",
+    "usage": "pharmacy/diabetes-care.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/first-aid.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/first-aid.webp",
+    "usage": "pharmacy/first-aid.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/heart-care.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "Blood pressure monitor with tablets",
+    "usage": "Heart care category card",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/personal-care.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/personal-care.webp",
+    "usage": "pharmacy/personal-care.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/prescription-medicines.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/prescription-medicines.webp",
+    "usage": "pharmacy/prescription-medicines.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "pharmacy/vitamins-supplements.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "pharmacy/vitamins-supplements.webp",
+    "usage": "pharmacy/vitamins-supplements.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "placeholders/clinic-generic.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "placeholders/clinic-generic.webp",
+    "usage": "placeholders/clinic-generic.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "placeholders/doctor-generic.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "Neutral silhouette avatar on a soft healthcare gradient background",
+    "usage": "Generic doctor profile placeholder",
+    "source": "approved-existing"
+  },
+  {
+    "path": "placeholders/hospital-generic.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "placeholders/hospital-generic.webp",
+    "usage": "placeholders/hospital-generic.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "placeholders/lab-generic.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "placeholders/lab-generic.webp",
+    "usage": "placeholders/lab-generic.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "placeholders/pharmacy-generic.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "placeholders/pharmacy-generic.webp",
+    "usage": "placeholders/pharmacy-generic.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "services/ambulance.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Modern white ambulance with paramedics loading a stretcher",
+    "usage": "Scheduled Ambulance service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/doctor.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Doctor consulting a patient in a bright clinic",
+    "usage": "Doctor Consultation service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/equipment.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Home medical equipment wheelchair and oxygen concentrator in a bright room",
+    "usage": "Medical Equipment Rental service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/homecare.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Nurse checking an elderly patient's blood pressure at home",
+    "usage": "Home Care Services service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/hospital.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Hospital reception and lobby with caring healthcare staff",
+    "usage": "Hospital & Clinic service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/lab.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Lab technician in gloves placing blood sample tubes in a rack",
+    "usage": "Lab Tests service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "services/pharmacy.webp",
+    "width": 1200,
+    "height": 675,
+    "alt": "Pharmacist in a clean pharmacy handing medicines to a customer",
+    "usage": "Pharmacy service card",
+    "source": "approved-existing"
+  },
+  {
+    "path": "success/appointment-confirmed.webp",
+    "width": 1200,
+    "height": 500,
+    "alt": "Doctor greeting a patient with a handshake at the clinic door",
+    "usage": "Appointment confirmed confirmation screen",
+    "source": "ai-generated"
+  },
+  {
+    "path": "success/lab-booked.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "success/lab-booked.webp",
+    "usage": "success/lab-booked.webp",
+    "source": "ai-generated"
+  },
+  {
+    "path": "success/order-placed.webp",
+    "width": 800,
+    "height": 600,
+    "alt": "success/order-placed.webp",
+    "usage": "success/order-placed.webp",
+    "source": "ai-generated"
+  }
+]

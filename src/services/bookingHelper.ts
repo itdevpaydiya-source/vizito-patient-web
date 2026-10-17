@@ -17,6 +17,9 @@ export interface DoctorDetail {
   in_clinic_fee: number | null;
   video_consultation_fee: number | null;
   about: string | null;
+  medical_registration_number?: string | null;
+  medical_council_name?: string | null;
+  registration_verified?: boolean;
 }
 
 export interface ProviderDetail {
@@ -25,7 +28,7 @@ export interface ProviderDetail {
   partner_type: string;
   status: string;
   doctor: DoctorDetail | null;
-  pharmacy?: { address: string | null; phone: string | null } | null;
+  pharmacy?: { address: string | null; phone: string | null; pin?: { lat: number; lng: number } | null } | null;
 }
 
 export interface Branch {
@@ -40,6 +43,7 @@ export interface Branch {
   emergency_contact?: string | null;
   pincode: string | null;
   fee: number | null;
+  pin?: { lat: number; lng: number } | null; // confirmed by the business on the map
 }
 
 export interface BranchDepartment {
@@ -160,6 +164,28 @@ export const isSlotInPast = (slotDate: string, startTime: string): boolean => {
   const slotTimeStr = `${(parts[0] || '0').padStart(2, '0')}:${(parts[1] || '00').padStart(2, '0')}`;
 
   return slotTimeStr < currentTimeStr;
+};
+
+// Same as getProviderSlotsApi, plus whether the doctor (or the hospital) has paused new bookings,
+// so the screen can say so instead of a bare "no slots".
+/** The doctor's hours on a day with the consultation modes offered in each (IN_PERSON / VIDEO / HOME_VISIT). */
+export interface OfferedHours { clinic_id: number | null; start_time: string; end_time: string; modes: string[] }
+export const getOfferedModesApi = async (doctorPartnerId: string, date: string): Promise<OfferedHours[]> => {
+  const res = await apiClient.get('/doctor/availability/offered-modes', { params: { doctor: doctorPartnerId, date } });
+  return Array.isArray(res?.data?.hours) ? res.data.hours : [];
+};
+
+export const getProviderSlotsWithPauseApi = async (
+  doctorPartnerId: string, date: string, facilityId?: number, hospitalPartnerId?: string,
+): Promise<{ slots: AvailableSlot[]; paused: (import('./types').ProviderPause & { by: 'doctor' | 'hospital' }) | null }> => {
+  const params: Record<string, string> = { date };
+  if (facilityId) params.facility_id = String(facilityId);
+  if (hospitalPartnerId) params.hospital_partner_id = hospitalPartnerId;
+  const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_SLOTS(doctorPartnerId), { params });
+  const paused = (res as any)?.data?.paused || null;
+  const list = unwrap<AvailableSlot[]>(res);
+  const rawList = Array.isArray(list) ? list : [];
+  return { slots: rawList.filter((s) => !isSlotInPast(s.slot_date || date, s.start_time)), paused };
 };
 
 export const getProviderSlotsApi = async (

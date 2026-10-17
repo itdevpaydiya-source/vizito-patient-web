@@ -6,3 +6,12 @@ export const PASSWORD_POLICY_MESSAGE =
 
 export const isStrongPassword = (value: string): boolean =>
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,100}$/.test(value || '');
+
+// The same rules as a checklist, shown live while the person types.
+export const PASSWORD_RULES = [
+  { label: 'At least 8 characters', test: (v: string) => v.length >= 8 },
+  { label: 'An uppercase letter', test: (v: string) => /[A-Z]/.test(v) },
+  { label: 'A lowercase letter', test: (v: string) => /[a-z]/.test(v) },
+  { label: 'A number', test: (v: string) => /[0-9]/.test(v) },
+  { label: 'A symbol (e.g. ! @ # $)', test: (v: string) => /[^A-Za-z0-9]/.test(v) },
+];

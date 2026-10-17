@@ -37,8 +37,12 @@ export function ageFromDob(dob: string | null): number | null {
   if (!dob) return null;
   const d = new Date(dob);
   if (isNaN(d.getTime())) return null;
-  const diff = Date.now() - d.getTime();
-  const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+  // Calendar age on the local date (a birthday counts from that morning), never days/365.25.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dob));
+  const t = new Date();
+  let age = t.getFullYear() - (m ? +m[1] : d.getFullYear());
+  const mo = m ? +m[2] : d.getMonth() + 1, dy = m ? +m[3] : d.getDate();
+  if (t.getMonth() + 1 < mo || (t.getMonth() + 1 === mo && t.getDate() < dy)) age--;
   return age >= 0 && age < 150 ? age : null;
 }
 

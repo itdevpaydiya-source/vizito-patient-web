@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
 import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
-import { validateIndianMobile } from '../../../utils/phoneValidation';
+import { validateMobile, validateEmail } from '../../../utils/validators/india';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 interface AuthModuleProps {
@@ -130,10 +130,6 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  // Validations
-  const validateMobile = (num: string) => validateIndianMobile(num);
-  const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
-
   // "@" is the discriminator for the unified identifier box
   const isEmailIdentifier = (val: string) => val.includes('@');
 
@@ -154,18 +150,19 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       return null;
     }
     if (isEmailIdentifier(trimmed)) {
-      if (!validateEmail(trimmed)) {
-        setErrorMessage('Please enter a valid email address (e.g. user@domain.com)');
+      const emailRes = validateEmail(trimmed);
+      if (!emailRes.ok) {
+        setErrorMessage(emailRes.message);
         return null;
       }
-      return { type: 'email', value: trimmed };
+      return { type: 'email', value: emailRes.value };
     }
-    const digits = normalizeMobileCandidate(trimmed);
-    if (!validateMobile(digits)) {
-      setErrorMessage(digits ? 'Please enter a valid 10-digit mobile number' : 'Please enter a valid mobile number or email address');
+    const mobRes = validateMobile(trimmed);
+    if (!mobRes.ok) {
+      setErrorMessage(trimmed ? mobRes.message : 'Please enter a valid mobile number or email address');
       return null;
     }
-    return { type: 'mobile', value: digits };
+    return { type: 'mobile', value: mobRes.value };
   };
 
   const syncIdentifierState = (classified: ClassifiedIdentifier) => {
@@ -384,13 +381,19 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (recoveryType === 'mobile' && !validateMobile(recoveryIdentifier)) {
-      setErrorMessage('Please enter a valid 10-digit mobile number');
-      return;
+    if (recoveryType === 'mobile') {
+      const mRes = validateMobile(recoveryIdentifier);
+      if (!mRes.ok) {
+        setErrorMessage(mRes.message);
+        return;
+      }
     }
-    if (recoveryType === 'email' && !validateEmail(recoveryIdentifier)) {
-      setErrorMessage('Please enter a valid email address');
-      return;
+    if (recoveryType === 'email') {
+      const eRes = validateEmail(recoveryIdentifier);
+      if (!eRes.ok) {
+        setErrorMessage(eRes.message);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -471,7 +474,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
           </p>
           <ul className="mt-8 space-y-4">
             {[
-              { icon: Stethoscope, title: 'Book verified doctors', text: 'In-clinic and video consultations' },
+              { icon: Stethoscope, title: 'Book doctors', text: 'In-clinic and video consultations' },
               { icon: Pill, title: 'Order medicines', text: 'Straight from your prescription, pickup or delivery' },
               { icon: Users, title: 'Family profiles', text: 'Manage appointments and records for everyone' },
             ].map(({ icon: Icon, title, text }) => (
@@ -582,6 +585,17 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                       autoComplete="username"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
+                      onBlur={() => {
+                        if (identifier.trim()) {
+                          if (isEmailIdentifier(identifier)) {
+                            const eRes = validateEmail(identifier);
+                            if (!eRes.ok) setErrorMessage(eRes.message);
+                          } else {
+                            const mRes = validateMobile(identifier);
+                            if (!mRes.ok) setErrorMessage(mRes.message);
+                          }
+                        }
+                      }}
                       placeholder="Enter mobile number or email"
                       className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
                     />
@@ -790,9 +804,16 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                       <span className="px-3 py-3 bg-slate-50 border-r border-slate-200 text-slate-700 font-bold text-xs">+91</span>
                       <input
                         type="tel"
+                        inputMode="tel"
                         maxLength={10}
                         value={recoveryIdentifier}
                         onChange={(e) => setRecoveryIdentifier(e.target.value.replace(/\D/g, ''))}
+                        onBlur={() => {
+                          if (recoveryIdentifier.trim()) {
+                            const mRes = validateMobile(recoveryIdentifier);
+                            if (!mRes.ok) setErrorMessage(mRes.message);
+                          }
+                        }}
                         placeholder="Enter mobile number"
                         className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
                         required
@@ -806,8 +827,15 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                       <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                       <input
                         type="email"
+                        inputMode="email"
                         value={recoveryIdentifier}
                         onChange={(e) => setRecoveryIdentifier(e.target.value)}
+                        onBlur={() => {
+                          if (recoveryIdentifier.trim()) {
+                            const eRes = validateEmail(recoveryIdentifier);
+                            if (!eRes.ok) setErrorMessage(eRes.message);
+                          }
+                        }}
                         placeholder="abc@gmail.com"
                         className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
                         required

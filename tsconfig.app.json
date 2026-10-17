@@ -15,6 +15,13 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path mapping */
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "vitest": ["../vizito-partner-main/node_modules/vitest"]
+    },
+
     /* Linting */
     "noUnusedLocals": false,
     "noUnusedParameters": false,

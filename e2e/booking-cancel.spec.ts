@@ -49,7 +49,7 @@ test('patient cancels a paid booking and is refunded', async ({ page, request })
   if (shots) await page.screenshot({ path: `${shots}/cancel_panel.png` });
   await panel.getByRole('button', { name: 'Yes, cancel booking' }).click();
 
-  await expect(page.getByRole('status')).toContainText(`${booking.booking_number} is cancelled. ₹650 is being refunded`);
+  await expect(page.getByRole('status')).toContainText(`${booking.booking_number} is cancelled. A test refund of ₹650 is recorded`);
   await expect(page.getByRole('button', { name: /Cancelled/ })).toHaveClass(/bg-slate-900/);
   await expect(page.getByText(`Ref: ${booking.booking_number}`)).toBeVisible();
   if (shots) await page.screenshot({ path: `${shots}/cancel_done.png` });

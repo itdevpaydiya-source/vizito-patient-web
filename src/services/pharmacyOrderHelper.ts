@@ -77,6 +77,9 @@ export const getMyOrderApi = async (id: string): Promise<PatientOrder> => {
   return (res?.data?.data ?? res?.data) as PatientOrder;
 };
 
+// Rate the pharmacy once the order is completed (shows on its Reviews & Ratings).
+export const ratePharmacyOrderApi = async (id: string, rating: number, review: string, tags?: string[]): Promise<void> => { await apiClient.post(`/orders/${encodeURIComponent(id)}/rate`, { rating, review, tags }); };
+
 export const cancelOrderApi = async (id: string, reason?: string): Promise<PatientOrder> => {
   const res = await apiClient.post(ENDPOINTS.ORDERS.CANCEL(id), reason ? { reason } : undefined);
   return (res?.data?.data ?? res?.data) as PatientOrder;

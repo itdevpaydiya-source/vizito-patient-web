@@ -39,6 +39,14 @@ export interface DashboardBooking {
   // Booking entity or joined back in from the Transaction table for GET /patients/dashboard. Wired
   // up defensively in case a future backend response includes it; renders only when present.
   paymentReferenceId: string | null;
+  // Who ended a cancelled visit: PATIENT, or DOCTOR / HOSPITAL when the provider declined it.
+  cancelledBy: string | null;
+  cancellationReason: string | null;
+  // What it is and with whom (from the booking service): never a bare "Appointment".
+  kind: 'DOCTOR_VISIT' | 'VIDEO_CONSULT' | 'HOME_VISIT' | 'LAB_TEST' | 'HOME_CARE';
+  homeCare: { id: string; order_number: string; agency_name: string | null; service_name: string; category: string; kind: string; sessions: number; done: number; status: string; patient_name: string | null; next_date: string | null; next_time: string | null } | null;
+  business: { id: string; name: string | null; type: string } | null;
+  labOrder: { id: string; order_number: string; lab_name: string | null; location_name: string | null; status: string; visit_type: string; visit_date: string; visit_time: string; patient_name: string | null; tests: string[]; package_name: string | null } | null;
 }
 
 export interface DashboardData {
@@ -56,7 +64,7 @@ function mapBooking(b: any): DashboardBooking {
     bookingNumber: b?.booking_number ?? null,
     // Prefer the appointment's lifecycle status (IN_PROGRESS/COMPLETED) so the badge matches the tab;
     // booking_status is a coarser fallback that can lag behind at 'Pending'.
-    status: appt?.status || b?.booking_status || 'Pending',
+    status: appt?.status || b?.booking_status || 'Status unavailable',
     bookingDate: toStr(b?.booking_date),
     appointmentDate: toStr(appt?.appointment_date),
     timeSlot: appt?.time_slot ?? null,
@@ -84,6 +92,12 @@ function mapBooking(b: any): DashboardBooking {
     paymentMode: b?.payment_mode ?? null,
     source: b?.source ?? null,
     paymentReferenceId: b?.payment_reference_id ?? null,
+    cancelledBy: appt?.cancelled_by ?? b?.cancelled_by ?? null,
+    cancellationReason: appt?.cancellation_reason ?? b?.cancellation_reason ?? null,
+    kind: b?.kind || (b?.booking_type === 'LAB' ? 'LAB_TEST' : appt?.appointment_type === 'HOME_VISIT' ? 'HOME_VISIT' : appt?.appointment_type === 'VIDEO_CALL' ? 'VIDEO_CONSULT' : 'DOCTOR_VISIT'),
+    business: b?.business || null,
+    labOrder: b?.lab_order ? { ...b.lab_order, visit_date: String(b.lab_order.visit_date || '').slice(0, 10) } : null,
+    homeCare: b?.home_care || null,
   };
 }
 

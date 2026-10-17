@@ -12,7 +12,12 @@ import RegistrationModule from '../presentation/modules/auth/RegistrationModule'
 // Patient Feature Modules
 import PatientDashboard from '../presentation/modules/dashboard/PatientDashboard';
 import HealthcareServicesScreen from '../presentation/modules/services/HealthcareServicesScreen';
+import LabBookingScreen from '../presentation/modules/labs/LabBookingScreen';
+import LabBookingsScreen from '../presentation/modules/labs/LabBookingsScreen';
+import VerifyReportScreen from '../presentation/modules/labs/VerifyReportScreen';
+import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
 import UniversalBookingScreen from '../presentation/modules/booking/UniversalBookingScreen';
+import BookingRedirect from '../presentation/modules/booking/BookingRedirect';
 import MyConsultationsScreen from '../presentation/modules/bookings/MyConsultationsScreen';
 import MyRecordsScreen from '../presentation/modules/records/MyRecordsScreen';
 import ProfileLayout from '../presentation/modules/profile/ProfileLayout';
@@ -107,6 +112,9 @@ const RegisterWrapper = () => {
 const AppNavigator = () => {
   return (
     <Routes>
+      {/* Public: lab report verification from the QR code (no login, no patient data) */}
+      <Route path="/verify-report/:token" element={<VerifyReportScreen />} />
+
       {/* Root Session Guard */}
       <Route path="/" element={<RootSessionGuard />} />
 
@@ -127,10 +135,12 @@ const AppNavigator = () => {
         {/* Core Patient Modules */}
         <Route path="/healthcare-services" element={<HealthcareServicesScreen />} />
         <Route path="/services" element={<HealthcareServicesScreen />} />
-        <Route path="/booking" element={<UniversalBookingScreen />} />
+        <Route path="/booking" element={<BookingRedirect />} />
         <Route path="/homecare-services" element={<UniversalBookingScreen />} />
         <Route path="/ambulance-dispatch" element={<UniversalBookingScreen />} />
-        <Route path="/lab-tests" element={<UniversalBookingScreen />} />
+        <Route path="/lab-tests" element={<LabBookingScreen />} />
+        <Route path="/lab-bookings" element={<LabBookingsScreen />} />
+        <Route path="/home-care" element={<HomeCareScreen />} />
         <Route path="/equipment-rentals" element={<UniversalBookingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />

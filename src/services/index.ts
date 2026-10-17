@@ -5,7 +5,7 @@ const API_URL = (import.meta.env.VITE_API_URL as string) || 'http://157.173.220.
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -51,6 +51,10 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response) {
       const { status } = error.response;
+      // Rate limit: never show the server's internal "ThrottlerException" text to a person.
+      if (status === 429 && error.response.data && typeof error.response.data === 'object') {
+        (error.response.data as any).message = 'Too many attempts. Please wait a minute and try again.';
+      }
 
       // Only force-logout on a 401 that came back from an authenticated request
       // (one that actually carried a bearer token) — that's a real session expiry.

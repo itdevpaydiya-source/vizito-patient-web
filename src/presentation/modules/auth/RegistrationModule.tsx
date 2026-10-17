@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { personNameInput } from '../../../utils/inputFilters';
 import {
   ArrowLeft,
   User,
@@ -13,11 +14,22 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Check,
+  X
 } from 'lucide-react';
 import { registerPatientApi, registerSendOtpApi, registerVerifyOtpApi } from '../../../services/authHelper';
 import { ageFromDob, ageLabelFromDob } from '../../../services/familyHelper';
-import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
+import MapPinPicker from '../../components/location/MapPinPicker';
+import { locateOnce, addressAt, LOCATE_ERROR_TEXT, type LocateError } from '../../../services/location';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE, PASSWORD_RULES } from '../../../utils/passwordPolicy';
+import {
+  validateMobile,
+  validateEmail,
+  validatePersonName,
+  validateDob,
+  validatePinCode,
+} from '../../../utils/validators/india';
 
 interface RegistrationModuleProps {
   onBackToLogin?: () => void;
@@ -52,6 +64,7 @@ export default function RegistrationModule({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Step 3: Address Information State
   const [addressMode, setAddressMode] = useState<'auto' | 'manual'>('manual');
@@ -69,9 +82,6 @@ export default function RegistrationModule({
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Validation functions
-  const validateMobile = (num: string) => /^[6-9]\d{9}$/.test(num.trim());
-  const validateEmail = (mail: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
   const derivedAgeLabel = ageLabelFromDob(dateOfBirth || null);
   // Indian mobile numbers only start with 6-9 — drop any leading digits that don't qualify
   // instead of accepting an arbitrary digit series that would only fail later at submit time.
@@ -89,13 +99,19 @@ export default function RegistrationModule({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (verificationType === 'mobile' && !validateMobile(mobileNumber)) {
-      setErrorMessage('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9');
-      return;
+    if (verificationType === 'mobile') {
+      const v = validateMobile(mobileNumber);
+      if (!v.ok) {
+        setErrorMessage(v.message);
+        return;
+      }
     }
-    if (verificationType === 'email' && !validateEmail(emailAddress)) {
-      setErrorMessage('Please enter a valid email address');
-      return;
+    if (verificationType === 'email') {
+      const v = validateEmail(emailAddress);
+      if (!v.ok) {
+        setErrorMessage(v.message);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -153,39 +169,30 @@ export default function RegistrationModule({
     e.preventDefault();
     setErrorMessage('');
 
-    if (!fullName.trim() || fullName.trim().length < 2) {
-      setErrorMessage('Full Name is required (minimum 2 characters)');
-      return;
+    const problems: string[] = [];
+    const nameVal = validatePersonName(fullName);
+    if (!nameVal.ok) problems.push(nameVal.message);
+    if (dateOfBirth) {
+      const dobVal = validateDob(dateOfBirth);
+      if (!dobVal.ok) problems.push(dobVal.message);
     }
-
-    if (!/^[A-Za-z][A-Za-z .'-]*$/.test(fullName.trim())) {
-      setErrorMessage("Full Name can only contain letters, spaces and . ' -");
-      return;
+    if (verificationType === 'mobile') {
+      const mobVal = validateMobile(mobileNumber);
+      if (!mobVal.ok) problems.push(mobVal.message);
     }
-
-    const age = dateOfBirth ? ageFromDob(dateOfBirth) : null;
-    if (dateOfBirth && (age === null || age > 120)) {
-      setErrorMessage('Please enter a valid date of birth (not in the future)');
-      return;
+    if (verificationType === 'email') {
+      const emailVal = validateEmail(emailAddress);
+      if (!emailVal.ok) problems.push(emailVal.message);
+    } else if (verificationType === 'mobile' && emailAddress.trim()) {
+      const emailVal = validateEmail(emailAddress);
+      if (!emailVal.ok) problems.push(emailVal.message);
     }
-
-    if (verificationType === 'mobile' && !validateMobile(mobileNumber)) {
-      setErrorMessage('Valid Mobile Number is required');
-      return;
-    }
-
-    if (verificationType === 'email' && !validateEmail(emailAddress)) {
-      setErrorMessage('Valid Email Address is required');
-      return;
-    }
-
-    if (!isStrongPassword(password)) {
-      setErrorMessage(PASSWORD_POLICY_MESSAGE);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage('Confirm Password must match Password');
+    if (!password) problems.push('Create a password.');
+    else if (!isStrongPassword(password)) problems.push(PASSWORD_POLICY_MESSAGE);
+    if (!confirmPassword) problems.push('Re-enter the password to confirm it.');
+    else if (password !== confirmPassword) problems.push('Confirm Password must match Password.');
+    if (problems.length) {
+      setErrorMessage(problems.join('\n'));
       return;
     }
 
@@ -193,120 +200,34 @@ export default function RegistrationModule({
   };
 
   // --- STEP 3: ADDRESS AUTOMATIC CAPTURE & MANUAL ENTRY ---
-  const handleAutoCaptureAddress = () => {
+  const handleAutoCaptureAddress = async () => {
     setErrorMessage('');
     setSuccessMessage('');
     setIsDetectingLocation(true);
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          setLatitude(lat);
-          setLongitude(lng);
-
-          try {
-            let detectedStreet = '';
-            let detectedCity = '';
-            let detectedState = '';
-            let detectedPincode = '';
-
-            // 1. Primary High-Accuracy Reverse Geocoding via OpenStreetMap Nominatim (zoom=18 includes postal code)
-            try {
-              const nomRes = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-                { headers: { 'Accept-Language': 'en' } }
-              );
-              if (nomRes.ok) {
-                const nomData = await nomRes.json();
-                const addr = nomData.address || {};
-
-                detectedStreet = [
-                  addr.building,
-                  addr.house_number,
-                  addr.road,
-                  addr.suburb || addr.neighbourhood || addr.residential
-                ].filter(Boolean).join(', ');
-
-                detectedCity = addr.city || addr.town || addr.city_district || addr.district || addr.county || '';
-                detectedState = addr.state || '';
-
-                if (addr.postcode) {
-                  const cleanPin = String(addr.postcode).replace(/\D/g, '').slice(0, 6);
-                  if (cleanPin.length === 6) detectedPincode = cleanPin;
-                }
-                if (!detectedPincode && nomData.display_name) {
-                  const pinMatch = nomData.display_name.match(/\b([1-9]\d{5})\b/);
-                  if (pinMatch) detectedPincode = pinMatch[1];
-                }
-              }
-            } catch (nomErr) {
-              console.warn('[handleAutoCaptureAddress] Nominatim error:', nomErr);
-            }
-
-            // 2. Secondary fallback via BigDataCloud to fill any remaining missing fields
-            if (!detectedCity || !detectedState || !detectedPincode || !detectedStreet) {
-              try {
-                const bdcRes = await fetch(
-                  `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
-                );
-                if (bdcRes.ok) {
-                  const bdcData = await bdcRes.json();
-                  if (!detectedStreet) detectedStreet = [bdcData.locality, bdcData.principalSubdivisionCity].filter(Boolean).join(', ');
-                  if (!detectedCity) detectedCity = bdcData.city || bdcData.locality || bdcData.principalSubdivisionCity || '';
-                  if (!detectedState) detectedState = bdcData.principalSubdivision || '';
-                  if (!detectedPincode && bdcData.postcode) {
-                    const cleanPin = String(bdcData.postcode).replace(/\D/g, '').slice(0, 6);
-                    if (cleanPin.length === 6) detectedPincode = cleanPin;
-                  }
-                }
-              } catch (bdcErr) {
-                console.warn('[handleAutoCaptureAddress] BigDataCloud error:', bdcErr);
-              }
-            }
-
-            // 3. If Pincode is still missing but we have City/Area, query Nominatim search for the pincode
-            if (!detectedPincode && (detectedCity || detectedStreet)) {
-              try {
-                const searchQ = [detectedStreet, detectedCity, detectedState].filter(Boolean).join(', ');
-                const searchRes = await fetch(
-                  `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQ)}&format=json&addressdetails=1&limit=1`
-                );
-                if (searchRes.ok) {
-                  const searchData = await searchRes.json();
-                  if (searchData && searchData[0]?.address?.postcode) {
-                    const cleanPin = String(searchData[0].address.postcode).replace(/\D/g, '').slice(0, 6);
-                    if (cleanPin.length === 6) detectedPincode = cleanPin;
-                  }
-                }
-              } catch (searchErr) {}
-            }
-
-            if (detectedStreet && !street) setStreet(detectedStreet);
-            if (detectedCity) setCity(detectedCity);
-            if (detectedState) setState(detectedState);
-            if (detectedPincode) setPincode(detectedPincode);
-
-            setSuccessMessage('Location detected and all address fields auto-filled! You can edit any field below.');
-          } catch (geoErr) {
-            console.warn('[handleAutoCaptureAddress] Reverse geocode error:', geoErr);
-            setSuccessMessage('Location coordinates captured. Please enter your address details below.');
-          } finally {
-            setIsDetectingLocation(false);
-            setAddressMode('manual');
-          }
-        },
-        () => {
-          setIsDetectingLocation(false);
-          setAddressMode('manual');
-          setErrorMessage('Could not detect your location automatically. Please enter your address manually.');
-        },
-        { timeout: 10000, enableHighAccuracy: true }
-      );
-    } else {
+    try {
+      const here = await locateOnce(true);
+      setLatitude(here.lat);
+      setLongitude(here.lng);
+      // A laptop without GPS reports a Wi-Fi / internet-provider position that can be kilometres off.
+      const rough = !here.accuracy || here.accuracy > 500;
+      const near = here.accuracy ? (here.accuracy >= 1000 ? `about ${Math.round(here.accuracy / 1000)} km` : `about ${here.accuracy} m`) : '';
+      let addr: Awaited<ReturnType<typeof addressAt>> = null;
+      try { addr = await addressAt(here); } catch { /* typed by hand below */ }
+      if (addr) {
+        // A fresh detection replaces what an earlier one filled in.
+        setStreet([addr.line1, addr.area].filter(Boolean).join(', '));
+        setCity(addr.city);
+        setState(addr.state);
+        setPincode(addr.pincode);
+      }
+      if (!addr) setErrorMessage('Location found, but we could not read the address there. Please type it below.');
+      else if (rough) setErrorMessage(`Your device gave only an approximate location${near ? ` (${near})` : ''}. Please check the address and correct it, especially the house number and PIN code.`);
+      else setSuccessMessage(`Address filled from your location${near ? ` (accurate to ${near})` : ''}. Add your house / flat number and check every field.`);
+    } catch (e) {
+      setErrorMessage(LOCATE_ERROR_TEXT[e as LocateError] || 'Could not detect your location. Please enter your address manually.');
+    } finally {
       setIsDetectingLocation(false);
-      setErrorMessage('Geolocation is not supported by your browser. Please enter address manually.');
+      setAddressMode('manual');
     }
   };
 
@@ -336,13 +257,14 @@ export default function RegistrationModule({
     e.preventDefault();
     setErrorMessage('');
 
-    if (!street.trim() || !city.trim() || !state.trim() || !pincode.trim()) {
-      setErrorMessage('Please fill in all mandatory address fields before proceeding.');
-      return;
-    }
-
-    if (pincode.trim().length !== 6) {
-      setErrorMessage('Please enter a valid 6-digit pincode.');
+    const problems: string[] = [];
+    if (street.trim().length < 3) problems.push('Enter the house / street address.');
+    if (!city.trim()) problems.push('Enter the city.');
+    if (!state.trim()) problems.push('Enter the state.');
+    const pinVal = validatePinCode(pincode);
+    if (!pinVal.ok) problems.push(pinVal.message);
+    if (problems.length) {
+      setErrorMessage(problems.join('\n'));
       return;
     }
 
@@ -394,7 +316,8 @@ export default function RegistrationModule({
         token: result.access_token || result.token
       };
 
-      // Auto Login & Redirect to Dashboard
+      // Auto Login & Redirect to Dashboard, which greets the new patient once.
+      try { sessionStorage.setItem('vizito_welcome', '1'); } catch { /* no storage */ }
       onRegisterSuccess(userData);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || 'Registration failed. Please check your information and try again.');
@@ -476,9 +399,18 @@ export default function RegistrationModule({
 
           {/* Error Message Banner */}
           {errorMessage && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-              <span className="flex-1">{errorMessage}</span>
+            <div role="alert" className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-px" />
+              {errorMessage.includes('\n') ? (
+                <div className="flex-1">
+                  <p className="mb-1">Please fix these before continuing:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 font-semibold">
+                    {errorMessage.split('\n').map((line) => <li key={line}>{line}</li>)}
+                  </ul>
+                </div>
+              ) : (
+                <span className="flex-1">{errorMessage}</span>
+              )}
             </div>
           )}
 
@@ -549,9 +481,16 @@ export default function RegistrationModule({
                         </span>
                         <input
                           type="tel"
+                          inputMode="tel"
                           maxLength={10}
                           value={mobileNumber}
                           onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
+                          onBlur={() => {
+                            if (mobileNumber) {
+                              const v = validateMobile(mobileNumber);
+                              if (!v.ok) setErrorMessage(v.message);
+                            }
+                          }}
                           placeholder="10-digit mobile number"
                           className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 outline-none"
                           required
@@ -565,8 +504,15 @@ export default function RegistrationModule({
                         <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                         <input
                           type="email"
+                          inputMode="email"
                           value={emailAddress}
                           onChange={(e) => setEmailAddress(e.target.value)}
+                          onBlur={() => {
+                            if (emailAddress) {
+                              const v = validateEmail(emailAddress);
+                              if (!v.ok) setErrorMessage(v.message);
+                            }
+                          }}
                           placeholder="abc@gmail.com"
                           className="flex-1 py-3 text-xs font-semibold text-slate-800 outline-none"
                           required
@@ -642,7 +588,7 @@ export default function RegistrationModule({
 
           {/* ── STEP 2: PERSONAL INFORMATION ── */}
           {currentStep === 2 && (
-            <form onSubmit={handlePersonalInfoSubmit} className="space-y-4">
+            <form onSubmit={handlePersonalInfoSubmit} noValidate className="space-y-4">
               <div className="mb-4">
                 <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
                   <User className="w-5 h-5 text-primary" /> Personal Information
@@ -657,7 +603,13 @@ export default function RegistrationModule({
                 <input
                   type="text"
                   value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  onChange={(e) => setFullName(personNameInput(e.target.value))}
+                  onBlur={() => {
+                    if (fullName) {
+                      const v = validatePersonName(fullName);
+                      if (!v.ok) setErrorMessage(v.message);
+                    }
+                  }}
                   placeholder="e.g. Sarah Connor"
                   className="w-full px-3 py-3 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
                   required
@@ -672,6 +624,12 @@ export default function RegistrationModule({
                     value={dateOfBirth}
                     max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setDateOfBirth(e.target.value)}
+                    onBlur={() => {
+                      if (dateOfBirth) {
+                        const v = validateDob(dateOfBirth);
+                        if (!v.ok) setErrorMessage(v.message);
+                      }
+                    }}
                     className="w-full px-3 py-3 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
                   />
                 </div>
@@ -706,9 +664,16 @@ export default function RegistrationModule({
                     <span className="px-3 py-3 border-r border-slate-200 text-slate-600 font-bold text-xs">+91</span>
                     <input
                       type="tel"
+                      inputMode="tel"
                       maxLength={10}
                       value={mobileNumber}
                       onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
+                      onBlur={() => {
+                        if (mobileNumber) {
+                          const v = validateMobile(mobileNumber);
+                          if (!v.ok) setErrorMessage(v.message);
+                        }
+                      }}
                       placeholder="10-digit mobile"
                       // A mobile number verified via OTP in Step 1 must not be silently swappable
                       // here for a different, unverified one while still showing "Verified via OTP".
@@ -730,8 +695,15 @@ export default function RegistrationModule({
                   </label>
                   <input
                     type="email"
+                    inputMode="email"
                     value={emailAddress}
                     onChange={(e) => setEmailAddress(e.target.value)}
+                    onBlur={() => {
+                      if (emailAddress) {
+                        const v = validateEmail(emailAddress);
+                        if (!v.ok) setErrorMessage(v.message);
+                      }
+                    }}
                     placeholder="sarah@example.com"
                     // Same reasoning as the mobile field above — an OTP-verified email must not be
                     // editable here while the "Verified via OTP" badge still shows underneath it.
@@ -759,7 +731,9 @@ export default function RegistrationModule({
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
+                    placeholder="Create a strong password"
+                    aria-label="Create password"
+                    aria-describedby="pw-rules"
                     className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none pr-8"
                     required
                   />
@@ -771,6 +745,17 @@ export default function RegistrationModule({
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                <ul id="pw-rules" className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1" aria-label="Password requirements">
+                  {PASSWORD_RULES.map((rule) => {
+                    const ok = rule.test(password);
+                    return (
+                      <li key={rule.label} className={`flex items-center gap-1.5 text-[11px] font-semibold ${ok ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <Check className={`w-3.5 h-3.5 ${ok ? 'opacity-100' : 'opacity-30'}`} />
+                        {rule.label}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
 
               <div>
@@ -778,14 +763,24 @@ export default function RegistrationModule({
                 <div className="flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                   <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                   <input
-                    type="password"
+                    type={showConfirm ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter password"
+                    aria-label="Confirm password"
                     className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
                     required
                   />
+                  <button type="button" onClick={() => setShowConfirm((v) => !v)} aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'} className="text-slate-400 hover:text-slate-600 p-1">
+                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+                {confirmPassword && (
+                  <p role="status" className={`mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold ${confirmPassword === password ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {confirmPassword === password ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                    {confirmPassword === password ? 'Passwords match' : 'Passwords do not match'}
+                  </p>
+                )}
               </div>
 
               <button
@@ -845,7 +840,7 @@ export default function RegistrationModule({
               </div>
 
               {/* Address Form (Editable regardless of auto/manual mode) */}
-              <form onSubmit={handleSaveAddress} className="space-y-3 pt-2">
+              <form onSubmit={handleSaveAddress} noValidate className="space-y-3 pt-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Flat / House No / Street Address *</label>
                   <input
@@ -868,7 +863,7 @@ export default function RegistrationModule({
                       type="text"
                       value={city}
                       onChange={(e) => {
-                        setCity(e.target.value);
+                        setCity(personNameInput(e.target.value));
                         if (errorMessage) setErrorMessage('');
                       }}
                       placeholder="City"
@@ -883,7 +878,7 @@ export default function RegistrationModule({
                       type="text"
                       value={state}
                       onChange={(e) => {
-                        setState(e.target.value);
+                        setState(personNameInput(e.target.value));
                         if (errorMessage) setErrorMessage('');
                       }}
                       placeholder="State"
@@ -898,21 +893,33 @@ export default function RegistrationModule({
                     <label className="block text-xs font-bold text-slate-700 mb-1">Pincode *</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       maxLength={6}
                       value={pincode}
                       onChange={(e) => handlePincodeChange(e.target.value)}
+                      onBlur={() => {
+                        if (pincode) {
+                          const v = validatePinCode(pincode);
+                          if (!v.ok) setErrorMessage(v.message);
+                        }
+                      }}
                       placeholder="6-digit Pincode"
                       className="w-full px-3 py-2.5 text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl focus:border-primary outline-none"
                       required
                     />
                   </div>
 
-                  {latitude && longitude && (
-                    <div className="flex flex-col justify-center text-[10px] text-slate-500 font-semibold bg-slate-50 px-3 py-1 rounded-xl border border-slate-200">
-                      <span>Lat: {latitude.toFixed(4)}</span>
-                      <span>Lng: {longitude.toFixed(4)}</span>
-                    </div>
-                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                  <p className="text-xs font-bold text-slate-800">Pin your home on the map <span className="font-semibold text-slate-500">(recommended)</span></p>
+                  <p className="text-[11px] text-slate-500">At home now? Tap “I’m here now”. Otherwise search, or tap and drag the pin onto your door.</p>
+                  <MapPinPicker key={latitude != null && longitude != null ? `${latitude},${longitude}` : 'none'}
+                    value={latitude != null && longitude != null ? { lat: latitude, lng: longitude } : null}
+                    placeName="your home" hint="Lab collectors, nurses and delivery staff use this pin to reach your door."
+                    address={[street, city, state, pincode].filter(Boolean).join(', ')}
+                    onChange={(p) => { setLatitude(p ? p.lat : undefined); setLongitude(p ? p.lng : undefined); }}
+                    onUseAddress={(a) => { setStreet(a.line1 || a.area ? [a.line1, a.area].filter(Boolean).join(', ') : street); if (a.city) setCity(a.city); if (a.state) setState(a.state); if (a.pincode) setPincode(a.pincode); }} />
                 </div>
 
                 <div className="flex gap-3 pt-3">

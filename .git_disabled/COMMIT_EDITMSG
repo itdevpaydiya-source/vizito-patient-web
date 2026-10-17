@@ -1,0 +1,10 @@
+test(e2e): standard categories, header search coverage, realistic timeouts
+
+- use a platform-standard pharmacy category instead of creating throwaway
+  categories as a doctor (now correctly refused by provider-scoped categories)
+- new header-search spec for the Pharmacy service and a specific pharmacy
+- loginAsTestPatient tolerates the app's own redirect; 120s suite timeout
+- booking.spec: accept the current "Find a Verified Doctor" heading (the spec
+  still expects the older date-first flow and needs a rewrite)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
