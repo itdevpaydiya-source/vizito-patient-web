@@ -13,8 +13,7 @@ import {
   Settings,
   LogOut,
   Sparkles,
-  Pill
-} from 'lucide-react';
+  Pill, FlaskConical, Home, Stethoscope } from 'lucide-react';
 import { useLanguage } from '../../store/language/LanguageContext';
 import logoImg from '../../assets/vizito_logo.png';
 
@@ -37,7 +36,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   return (
     <div
       className={`
-      fixed inset-y-0 left-0 z-50 w-64 bg-white flex flex-col border-r border-slate-200
+      fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-white flex flex-col border-r border-slate-200
       transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
       ${isOpen ? 'translate-x-0' : '-translate-x-full'}
     `}
@@ -94,6 +93,22 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           <span>{t('Healthcare Services')}</span>
         </NavLink>
 
+        {/* 2b. Find Doctors */}
+        <NavLink
+          to="/find-doctors"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 shadow-xs ring-1 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Stethoscope className="w-4 h-4 text-teal-600 shrink-0" />
+          <span>{t('Find Doctors')}</span>
+        </NavLink>
+
         {/* 3. Bookings */}
         <NavLink
           to="/bookings"
@@ -140,6 +155,38 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         >
           <Pill className="w-4 h-4 shrink-0" />
           <span>{t('Pharmacy Orders')}</span>
+        </NavLink>
+
+        {/* 4c. Lab tests */}
+        <NavLink
+          to="/lab-bookings"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 shadow-xs ring-1 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <FlaskConical className="w-4 h-4 shrink-0" />
+          <span>{t('Lab Tests')}</span>
+        </NavLink>
+
+        {/* 4d. Home care */}
+        <NavLink
+          to="/home-care"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 shadow-xs ring-1 ring-teal-200'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Home className="w-4 h-4 shrink-0" />
+          <span>{t('Home Care')}</span>
         </NavLink>
 
         {/* 5. Ratings & Reviews */}

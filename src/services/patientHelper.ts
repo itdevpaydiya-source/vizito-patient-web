@@ -70,21 +70,29 @@ export const getProvidersApi = async (serviceId?: string, search?: string): Prom
   return list.map((p: any): ProviderItem => ({
     id: String(p.id),
     serviceId: serviceId || '',
-    name: p.business_name || p.display_name || p.name || (serviceId === 'hospital' ? 'Hospital' : 'Provider'),
+    // The public name the business chose ("Display name"), else its registered business name.
+    name: p.display_name || p.business_name || p.name || (serviceId === 'hospital' ? 'Hospital' : 'Provider'),
     // Prefer the friendly display_type (e.g. "Multi-Speciality Hospital") the backend resolves from the
     // hospital profile; fall back to the raw partner_type only when no nicer label exists.
     subtitle: p.display_type || p.partner_type || undefined,
     specialtyOrType: p.display_type || p.partner_type || undefined,
+    partnerType: String(p.partner_type || '').toLowerCase() || null,
     qualification: p.doctor?.qualification ?? null,
+    specialization: p.doctor?.specialization ?? p.doctor?.primary_specialization ?? null,
     experienceYears: p.doctor?.years_of_experience ?? null,
+    medicalRegistrationNumber: p.doctor?.medical_registration_number ?? p.doctor?.registration_number ?? p.medical_registration_number ?? null,
+    medicalCouncilName: p.doctor?.medical_council_name ?? p.doctor?.council_name ?? p.medical_council_name ?? null,
     languages: p.doctor?.languages ?? null,
     city: p.doctor?.city ?? null,
     inClinicFee: p.doctor?.in_clinic_fee ?? null,
     videoFee: p.doctor?.video_fee ?? null,
-    registrationVerified: Boolean(p.doctor?.registration_verified),
+    registrationVerified: Boolean(p.doctor?.registration_verified ?? p.doctor?.verification_status === 'VERIFIED'),
     logo: p.logo ?? null,
     address: p.address ?? null,
+    storePin: p.store_pin ?? null,
     rating: p.rating && Number(p.rating.count) > 0 ? { average: Number(p.rating.average), count: Number(p.rating.count) } : null,
+    pause: p.pause?.paused ? p.pause : null,
+    org: p.org || null,
   }));
 };
 
@@ -145,8 +153,8 @@ export const getFavoritesApi = async (): Promise<PatientFavoriteItem[]> => {
     id: String(f.id),
     partnerId: f.doctor_partner_id ?? null,
     facilityId: f.facility_id ?? null,
-    name: f.doctor_partner?.business_name ?? null,
-    partnerType: f.doctor_partner?.partner_type ?? null,
+    name: f.name ?? f.doctor_partner?.business_name ?? null,
+    partnerType: f.partner_type ?? f.doctor_partner?.partner_type ?? null,
   }));
 };
 
@@ -174,6 +182,12 @@ export interface PatientAddress {
   stateId: number | null;
   countryId: number | null;
   isDefault: boolean;
+  addressType?: string | null;
+  city?: string | null;
+  state?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  pin?: { lat: number; lng: number } | null;
 }
 
 export const getAddressesApi = async (): Promise<PatientAddress[]> => {
@@ -191,8 +205,36 @@ export const getAddressesApi = async (): Promise<PatientAddress[]> => {
     stateId: a.stateId ?? null,
     countryId: a.countryId ?? null,
     isDefault: Boolean(a.isDefault),
+    addressType: a.addressType ?? null,
+    city: a.city ?? null,
+    state: a.state ?? null,
+    contactName: a.contactName ?? null,
+    contactPhone: a.contactPhone ?? null,
+    pin: a.latitude != null && a.longitude != null && Number(a.latitude) !== 0 ? { lat: Number(a.latitude), lng: Number(a.longitude) } : null,
   }));
 };
+
+export interface AddressInput {
+  address_type?: 'HOME' | 'WORK' | 'OTHER'; label?: string; address_line_1: string; address_line_2?: string; landmark?: string;
+  pincode: string; city: string; state: string; contact_name?: string; contact_phone?: string; is_default?: boolean;
+  latitude?: number; longitude?: number; // set when the patient used their location for this address
+}
+/** Add (no id) or update (with id) a saved address. */
+export const saveAddressApi = async (body: AddressInput, addressId?: string): Promise<void> => {
+  if (addressId) await apiClient.patch(`${ENDPOINTS.PATIENTS.ADDRESS}/${addressId}`, body);
+  else await apiClient.post(ENDPOINTS.PATIENTS.ADDRESS, body);
+};
+
+/** One line for showing an address anywhere (booking forms, cards). */
+export const addressText = (a: PatientAddress): string =>
+  [a.addressLine1, a.addressLine2, a.landmark ? `near ${a.landmark}` : null, a.city, a.state, a.pincode].filter(Boolean).join(', ');
+
+// Mobile / email change: a code goes to the NEW number or email; it changes only once the code is right.
+export const sendContactOtpApi = async (body: { phone?: string; email?: string }): Promise<{ dev_otp?: string; identifier: string }> =>
+  (await apiClient.post('/patient/auth/contact/send-otp', body)).data;
+export const verifyContactApi = async (body: { phone?: string; email?: string; otp: string }): Promise<{ phone?: string; email?: string }> =>
+  (await apiClient.post('/patient/auth/contact/verify', body)).data;
+export const logoutOtherDevicesApi = async (): Promise<{ signed_out: number }> => (await apiClient.post('/patient/auth/logout-others', {})).data;
 
 export const deleteAddressApi = async (addressId: string): Promise<void> => {
   await apiClient.delete(`${ENDPOINTS.PATIENTS.ADDRESS}/${addressId}`);
@@ -215,6 +257,10 @@ export interface PrescriptionDoctor {
   name: string | null;
   qualification: string | null;
   specialization: string | null;
+  experience_years?: number | null;
+  medical_registration_number?: string | null;
+  medical_council_name?: string | null;
+  registration_verified?: boolean;
   clinic_name: string | null;
   address: string | null;
   phone: string | null;
@@ -223,6 +269,7 @@ export interface PrescriptionDoctor {
 export interface PatientPrescription {
   id: string;
   prescription_number: string | null;
+  patient_id: string | null;
   booking_id: string | null;
   date: string | null;
   chief_complaint: string | null;
@@ -232,7 +279,7 @@ export interface PatientPrescription {
   followup_date: string | null;
   followup_after_days: number | null;
   consultation_mode: string | null;
-  tests: { name: string; urgency: string | null; fasting_required: boolean; notes: string | null }[];
+  tests: { name: string; code: string | null; urgency: string | null; fasting_required: boolean; notes: string | null }[];
   allergies: { allergen: string; reaction: string | null; severity: string | null }[];
   no_known_allergies: boolean;
   pdf_url: string | null;
@@ -246,6 +293,9 @@ export interface PatientPrescription {
   // request is accepted and fulfilled (see pharmacyOrderHelper.ts). null = never routed.
   pharmacy_status: string | null;
   pharmacy_partner_id: string | null;
+  pharmacy_name?: string | null;
+  pharmacy_address?: string | null;
+  pharmacy_phone?: string | null;
   doctor: PrescriptionDoctor | null;
   vitals?: {
     bp?: string | null;
@@ -267,6 +317,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
   return list.map((p: any): PatientPrescription => ({
     id: String(p.id),
     prescription_number: p.prescription_number ?? null,
+    patient_id: p.patient_id ? String(p.patient_id) : (p.patientId ? String(p.patientId) : null),
     booking_id: p.booking_id ?? null,
     date: p.date ? String(p.date).split('T')[0] : null,
     chief_complaint: p.chief_complaint ?? null,
@@ -277,7 +328,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     followup_after_days: p.followup_after_days ?? null,
     consultation_mode: p.consultation_mode ?? null,
     tests: Array.isArray(p.tests) ? p.tests.map((t: any) => ({
-      name: String(t.name ?? t), urgency: t.urgency ?? null, fasting_required: Boolean(t.fasting_required), notes: t.notes ?? null,
+      name: String(t.name ?? t), code: t.code ?? null, urgency: t.urgency ?? null, fasting_required: Boolean(t.fasting_required), notes: t.notes ?? null,
     })) : [],
     allergies: Array.isArray(p.allergies) ? p.allergies : [],
     no_known_allergies: Boolean(p.no_known_allergies),
@@ -289,10 +340,17 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     patient_sex: p.patient_sex ?? null,
     pharmacy_status: p.pharmacy_status ?? null,
     pharmacy_partner_id: p.pharmacy_partner_id ?? null,
+    pharmacy_name: p.pharmacy_name ?? p.pharmacy?.business_name ?? p.pharmacy?.name ?? p.pharmacy_details?.business_name ?? p.pharmacy_details?.name ?? null,
+    pharmacy_address: p.pharmacy_address ?? p.pharmacy?.address ?? p.pharmacy_details?.address ?? null,
+    pharmacy_phone: p.pharmacy_phone ?? p.pharmacy?.phone ?? p.pharmacy_details?.phone ?? null,
     doctor: p.doctor ? {
       name: p.doctor.name ?? null,
       qualification: p.doctor.qualification ?? null,
       specialization: p.doctor.specialization ?? null,
+      experience_years: p.doctor.experience_years ?? p.doctor.years_of_experience ?? null,
+      medical_registration_number: p.doctor.medical_registration_number ?? p.doctor.registration_number ?? null,
+      medical_council_name: p.doctor.medical_council_name ?? p.doctor.council_name ?? null,
+      registration_verified: Boolean(p.doctor.registration_verified ?? p.doctor.verification_status === 'VERIFIED'),
       clinic_name: p.doctor.clinic_name ?? null,
       address: p.doctor.address ?? null,
       phone: p.doctor.phone ?? null,
@@ -307,4 +365,19 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
       instructions: m.instructions ?? null,
     })) : [],
   }));
+};
+
+// Profile photo: stored as a file (not Base64); the profile keeps its URL.
+export const uploadPatientPhotoApi = async (file: File): Promise<string> => {
+  const fd = new FormData(); fd.append('file', file);
+  const r = await apiClient.post('/facility/patient-photo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  const url = r?.data?.url;
+  if (!url) throw new Error('No URL returned');
+  return url;
+};
+/** Stored photo paths (/uploads/...) are served by the API gateway. */
+export const photoUrl = (u?: string | null): string => {
+  if (!u) return '';
+  if (/^(https?:|data:|blob:)/.test(u)) return u;
+  return `${String(apiClient.defaults.baseURL || '').replace(/\/$/, '')}${u.startsWith('/') ? '' : '/'}${u}`;
 };

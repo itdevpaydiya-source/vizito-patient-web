@@ -1,0 +1,567 @@
+{
+  "successful": [
+    {
+      "path": "banners/find-hospital.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Bright modern hospital corridor with doctor walking with patient",
+      "usage": "Hospital discovery page header banner",
+      "source": "ai-generated",
+      "size_kb": 21.2,
+      "success": true
+    },
+    {
+      "path": "departments/ophthalmology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Eye doctor testing a patient with a slit-lamp",
+      "usage": "Ophthalmology department card",
+      "source": "ai-generated",
+      "size_kb": 19.5,
+      "success": true
+    },
+    {
+      "path": "pharmacy/heart-care.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Blood pressure monitor with tablets",
+      "usage": "Heart care category card",
+      "source": "ai-generated",
+      "size_kb": 12.4,
+      "success": true
+    }
+  ],
+  "failed": [
+    {
+      "path": "banners/find-doctor.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Indian doctor smiling at a desk in a consultation room",
+      "usage": "Doctor discovery page header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "banners/dashboard.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Indian family smiling with a friendly doctor",
+      "usage": "Patient dashboard header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "banners/lab-tests.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Phlebotomist with gloves applying cotton swab to patient's arm",
+      "usage": "Lab tests booking page header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "banners/pharmacy.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Neat pharmacy shelves with plain medicine boxes and pharmacist",
+      "usage": "Pharmacy storefront header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "banners/home-collection.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Lab technician with sample kit greeting patient at apartment door",
+      "usage": "Home sample collection page header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "banners/homecare.webp",
+      "width": 1920,
+      "height": 600,
+      "alt": "Physiotherapist helping an elderly Indian man walk with a walker at home",
+      "usage": "Home care services page header banner",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/general-medicine.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Physician checking a patient's pulse at a desk",
+      "usage": "General Medicine department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/cardiology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Cardiologist reviewing an ECG trace on a monitor with a patient",
+      "usage": "Cardiology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/orthopedics.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Orthopaedic doctor examining a patient's knee",
+      "usage": "Orthopedics department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/pediatrics.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Paediatrician listening to a smiling child's chest, parent beside",
+      "usage": "Pediatrics department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/gynecology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Female gynaecologist consulting a woman with ultrasound machine in background",
+      "usage": "Gynecology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/dermatology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Dermatologist examining a patient's forearm skin with a dermatoscope",
+      "usage": "Dermatology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/ent.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "ENT doctor examining a patient's ear with an otoscope",
+      "usage": "ENT department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/neurology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Neurologist pointing at a brain MRI scan with a patient",
+      "usage": "Neurology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/gastroenterology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Doctor explaining a stomach diagram model to a patient",
+      "usage": "Gastroenterology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/dentistry.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Dentist with a patient in a dental chair",
+      "usage": "Dentistry department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/psychiatry.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Psychiatrist in a calm conversation with a patient, sofa and plant",
+      "usage": "Psychiatry department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/pulmonology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Patient using a spirometer while a lung doctor watches",
+      "usage": "Pulmonology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/nephrology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Kidney specialist reviewing reports with an elderly patient",
+      "usage": "Nephrology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/oncology.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Oncologist gently explaining a care plan to a patient and family member",
+      "usage": "Oncology department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "departments/emergency.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Emergency room bay with a doctor and nurse attending a patient on a bed",
+      "usage": "Emergency department card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/blood-tests.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Rack of blood sample tubes with coloured caps, gloved hands",
+      "usage": "Blood tests category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/thyroid.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Doctor gently examining a patient's neck (thyroid)",
+      "usage": "Thyroid test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/heart-lipid.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Lab report sheet with cholesterol tubes and a heart-shaped model",
+      "usage": "Heart & Lipid panel category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/diabetes.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Glucometer and test strip on a fingertip",
+      "usage": "Diabetes test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/liver-kidney.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Technician loading tubes into a biochemistry analyser",
+      "usage": "Liver & Kidney function test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/vitamins.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Vitamin capsules beside blood tubes on a clean lab bench",
+      "usage": "Vitamins & Minerals test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/fever-infection.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Digital thermometer and lab tubes, technician at a microscope",
+      "usage": "Fever & Infection test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/urine-tests.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Sterile urine sample containers with plain labels on a tray",
+      "usage": "Urine test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/full-body-checkup.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Patient on an examination bed with a doctor and a checklist",
+      "usage": "Full body checkup package category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "lab/womens-health.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Woman in consultation with a female doctor in a clinic",
+      "usage": "Women's health test category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/prescription-medicines.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Blister packs and a plain prescription paper (no readable text)",
+      "usage": "Prescription medicines category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/diabetes-care.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Glucometer, test strips, lancets",
+      "usage": "Diabetes care category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/vitamins-supplements.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Supplement bottles (plain labels) and capsules",
+      "usage": "Vitamins & Supplements category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/first-aid.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Open first-aid kit with bandages and antiseptic",
+      "usage": "First aid category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/baby-care.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Baby bottle, mild lotion and soft towel",
+      "usage": "Baby care category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/personal-care.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Soap, sanitiser, toothbrush set",
+      "usage": "Personal care category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/ayurveda.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Herbal powders, leaves and small jars",
+      "usage": "Ayurveda category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "pharmacy/devices.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Thermometer, pulse oximeter and nebuliser together",
+      "usage": "Medical devices category card",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-bookings.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Empty calendar on a desk beside a stethoscope",
+      "usage": "Empty appointments list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-lab-bookings.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Clean empty test-tube rack",
+      "usage": "Empty lab bookings list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-records.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Neat empty medical folder",
+      "usage": "Empty medical records list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-orders.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Empty pharmacy basket on a counter",
+      "usage": "Empty pharmacy orders list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-homecare.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Quiet, tidy living room with an armchair",
+      "usage": "Empty home care bookings list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-notifications.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Smartphone face-down on a calm desk with a plant",
+      "usage": "Empty notifications list state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "empty/no-results.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Magnifying glass on a clean desk",
+      "usage": "Search with no results state",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "success/appointment-confirmed.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Doctor greeting a patient with a handshake at the clinic door",
+      "usage": "Appointment confirmed confirmation screen",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "placeholders/hospital-generic.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Modern hospital building exterior, no signage or name",
+      "usage": "Generic hospital fallback image",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "success/order-placed.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Pharmacist packing medicines into a paper bag",
+      "usage": "Pharmacy order placed confirmation screen",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "success/lab-booked.webp",
+      "width": 1200,
+      "height": 500,
+      "alt": "Neatly arranged sample tubes in a rack",
+      "usage": "Lab test booked confirmation screen",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "placeholders/clinic-generic.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Small clinic reception interior, no signage",
+      "usage": "Generic clinic fallback image",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "placeholders/lab-generic.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Clean diagnostics lab interior with analysers",
+      "usage": "Generic diagnostic lab fallback image",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    },
+    {
+      "path": "placeholders/pharmacy-generic.webp",
+      "width": 800,
+      "height": 600,
+      "alt": "Pharmacy counter interior, no brand names",
+      "usage": "Generic pharmacy fallback image",
+      "source": "ai-generated",
+      "size_kb": 0,
+      "success": false
+    }
+  ],
+  "total_manifest": 11
+}

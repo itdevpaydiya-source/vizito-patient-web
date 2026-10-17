@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Calendar, FileText, Star, Trash2, AlertCircle, LifeBuoy, ChevronRight } from 'lucide-react';
+import { Bell, Calendar, FlaskConical, Home, FileText, Star, Trash2, AlertCircle, LifeBuoy, ChevronRight } from 'lucide-react';
 import { useNotifications } from '../../../store/notifications/NotificationsContext';
 
 // Real patient notifications from the backend feed (vizito-booking). Opening this page marks
@@ -9,6 +9,8 @@ import { useNotifications } from '../../../store/notifications/NotificationsCont
 const categoryIcon = (category: string) => {
   const c = (category || '').toLowerCase();
   if (c.includes('appoint')) return <Calendar className="w-4.5 h-4.5" />;
+  if (c.includes('lab')) return <FlaskConical className="w-4.5 h-4.5" />;
+  if (c.includes('home')) return <Home className="w-4.5 h-4.5" />;
   if (c.includes('record') || c.includes('prescription')) return <FileText className="w-4.5 h-4.5" />;
   if (c.includes('review') || c.includes('rating') || c.includes('announce')) return <Star className="w-4.5 h-4.5" />;
   if (c.includes('support')) return <LifeBuoy className="w-4.5 h-4.5" />;
@@ -19,7 +21,12 @@ const categoryIcon = (category: string) => {
 const destination = (category: string, targetId?: string): string | null => {
   const c = (category || '').toLowerCase();
   if (c.includes('support')) return targetId ? `/help?ticket=${encodeURIComponent(targetId)}` : '/help';
+  if (c === 'home visits') return '/home-care?tab=mine';
+  if (c === 'home care') return targetId ? `/home-care?tab=mine&open=${encodeURIComponent(targetId)}` : '/home-care?tab=mine';
+  if (c === 'lab tests') return targetId ? `/lab-bookings?open=${encodeURIComponent(targetId)}` : '/lab-bookings';
   if (c.includes('record') || c.includes('prescription')) return '/my-records';
+  if (c === 'pharmacy order') return targetId ? `/pharmacy-orders/${encodeURIComponent(targetId)}` : '/pharmacy-orders';
+  if (c === 'pharmacy') return '/pharmacy-orders?tab=requests'; // a prescription request
   if (c.includes('pharmacy') || c.includes('order')) return '/pharmacy-orders';
   if (c.includes('review') || c.includes('rating')) return '/reviews';
   if (c.includes('appoint') || c.includes('booking')) return '/my-consultations';

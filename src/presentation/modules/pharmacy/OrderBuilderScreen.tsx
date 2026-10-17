@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Plus, Minus, Trash2, AlertCircle, Store, Truck, Wallet, Banknote, X } from 'lucide-react';
+import { ArrowLeft, Search, Plus, Minus, Trash2, AlertCircle, Store, Truck, Wallet, Banknote, X, Pill } from 'lucide-react';
 import {
   getPharmacyRequestsApi, createRxOrderApi, createDirectOrderApi,
   searchMedicinesApi, type MedicineSearchResult, type OrderCartLine,
@@ -9,6 +9,10 @@ import { getPrescriptionsApi, getAddressesApi, type PatientAddress } from '../..
 import type { PharmacyRequestItem, OrderFulfillmentType } from '../../../services/types';
 import type { PaymentMethod } from '../../../services/bookingHelper';
 import SelectPharmacyModal from './SelectPharmacyModal';
+import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
+import { OrderSteps, PharmacyCard, PharmacyDirectory, PrescriptionsReady, TrustStrip } from './OrderStart';
+import { getProvidersApi } from '../../../services/patientHelper';
+import type { ProviderItem } from '../../../services/types';
 
 interface CartLine {
   medicine: MedicineSearchResult;
@@ -45,7 +49,13 @@ export default function OrderBuilderScreen() {
 
   // Direct mode state
   const [pharmacyId, setPharmacyId] = useState<string | null>(preselectedPharmacyId);
-  const [pickerOpen, setPickerOpen] = useState(!pharmacyRequestId && !preselectedPharmacyId);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pharmacy, setPharmacy] = useState<ProviderItem | null>(null);
+  useEffect(() => {
+    if (!pharmacyId || pharmacy?.id === pharmacyId) return;
+    getProvidersApi('pharmacy').then((list) => setPharmacy(list.find((p) => p.id === pharmacyId) || null)).catch(() => undefined);
+  }, [pharmacyId, pharmacy?.id]);
+  const choose = (p: ProviderItem) => { setPharmacy(p); setPharmacyId(p.id); setCart([]); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const [cart, setCart] = useState<CartLine[]>([]);
   const [medQuery, setMedQuery] = useState('');
   const [medResults, setMedResults] = useState<MedicineSearchResult[]>([]);
@@ -109,6 +119,7 @@ export default function OrderBuilderScreen() {
   };
 
   const addToCart = (medicine: MedicineSearchResult) => {
+    if (medicine.requires_prescription && !isRxMode) return;
     setCart((prev) => {
       const existing = prev.find((l) => l.medicine.id === medicine.id);
       if (existing) return prev.map((l) => (l.medicine.id === medicine.id ? { ...l, quantity: l.quantity + 1 } : l));
@@ -134,10 +145,11 @@ export default function OrderBuilderScreen() {
   }, [isRxMode, rxLines, cart]);
 
   const hasUnmatchedRequiredLines = isRxMode && rxLines.some((l) => !l.matched);
-  const canSubmit = items.length > 0 && !!pharmacyId && (fulfillmentType === 'PICKUP' || !!deliveryAddressId);
+  const hasDirectRxItem = !isRxMode && cart.some((l) => l.medicine.requires_prescription);
+  const canSubmit = items.length > 0 && !hasDirectRxItem && !!pharmacyId && (fulfillmentType === 'PICKUP' || !!deliveryAddressId);
 
   const handleSubmit = async () => {
-    if (!canSubmit || !pharmacyId) return;
+    if (!canSubmit || !pharmacyId || hasDirectRxItem) return;
     setSubmitError(null); setSubmitting(true);
     try {
       // Cash is load-bearing here (Order.claim() checks payment_method===CASH at CREATED).
@@ -181,22 +193,34 @@ export default function OrderBuilderScreen() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5 pb-28">
-      <button onClick={() => navigate('/pharmacy-orders')} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-2 rounded-xl">
-        <ArrowLeft className="w-4 h-4" /> Back
+    <div className="w-full space-y-5 pb-28">
+      <button onClick={() => navigate('/pharmacy-orders')} className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900">
+        <ArrowLeft className="w-4 h-4" /> Pharmacy orders
       </button>
 
-      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 text-white shadow-xl">
-        <h2 className="text-xl font-black">{isRxMode ? 'Confirm Your Prescription Order' : 'Order Medicines'}</h2>
-        <p className="text-teal-100/80 text-xs mt-1">{isRxMode ? 'Match each prescribed medicine and confirm quantities.' : 'Search and add medicines to your cart.'}</p>
-      </div>
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5"><span className="w-10 h-10 rounded-xl bg-[#FDF7F1] text-[#B45F28] grid place-items-center"><Pill className="w-5 h-5" /></span>{isRxMode ? 'Confirm your prescription order' : 'Order medicines'}</h1>
+          <p className="text-sm text-slate-500 mt-1.5">{isRxMode ? 'Match each prescribed medicine to the pharmacy’s stock and confirm quantities.' : 'From a licensed pharmacy near you: send your prescription, or add medicines yourself.'}</p>
+        </div>
+        {!isRxMode && <OrderSteps step={!pharmacyId ? 1 : items.length === 0 ? 2 : 3} />}
+      </header>
 
-      {!pharmacyId && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center">
-          <p className="text-sm font-bold text-slate-700 mb-3">Choose a pharmacy to get started</p>
-          <button onClick={() => setPickerOpen(true)} className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">Select Pharmacy</button>
+      {pharmacyId && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[220px]">{pharmacy ? <PharmacyCard p={pharmacy} compact /> : <p className="text-sm font-bold text-slate-700">{'Your pharmacy'}</p>}</div>
+          {!isRxMode && <button type="button" onClick={() => { setPharmacyId(null); setPharmacy(null); setCart([]); }} className="text-xs font-bold text-[#B45F28] hover:underline">Change pharmacy</button>}
         </div>
       )}
+
+      {!pharmacyId && !isRxMode && (
+        <>
+          <TrustStrip />
+          <PrescriptionsReady pharmacy={null} onPickPharmacy={() => document.getElementById('ph-dir')?.scrollIntoView({ behavior: 'smooth' })} />
+          <PharmacyDirectory onChoose={choose} />
+        </>
+      )}
+      {pharmacyId && !isRxMode && cart.length === 0 && <PrescriptionsReady pharmacy={pharmacy} onPickPharmacy={() => undefined} />}
 
       {pharmacyId && isRxMode && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
@@ -260,30 +284,68 @@ export default function OrderBuilderScreen() {
             <input
               value={medQuery}
               onChange={(e) => setMedQuery(e.target.value)}
-              placeholder="Search medicines by name..."
+              aria-label="Search medicines" placeholder="Search a medicine, e.g. Paracetamol 650, Dolo, Cetirizine"
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
             />
             {searching && <div className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />}
           </div>
           {medResults.length > 0 && (
             <div className="border border-slate-100 rounded-xl divide-y divide-slate-100 overflow-hidden">
-              {medResults.map((m) => (
-                <button key={m.id} onClick={() => addToCart(m)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-slate-50 text-left">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{m.medicine_name} <span className="text-slate-400 font-medium">{m.strength}{m.strength_unit}</span></p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] text-slate-400">₹{m.mrp.toFixed(2)}</span>
-                      {m.requires_prescription && <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Rx required</span>}
+              {medResults.map((m) => {
+                const rxBlocked = m.requires_prescription && !isRxMode;
+                if (rxBlocked) {
+                  return (
+                    <div key={m.id} className="p-3 bg-amber-50/50 flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">
+                            {m.medicine_name} <span className="text-slate-400 font-medium">{m.strength}{m.strength_unit}</span>
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400">₹{m.mrp.toFixed(2)}</span>
+                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Rx required</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-white border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-sm">
+                        <p className="text-xs text-amber-900 font-medium leading-relaxed">
+                          Needs a doctor's prescription — send your prescription to a pharmacy
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/my-records')}
+                          className="px-3 py-1.5 bg-[#B45F28] hover:bg-[#9A4F20] text-white rounded-lg text-xs font-bold shrink-0 shadow-sm transition"
+                        >
+                          Send to pharmacy
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <Plus className="w-4 h-4 text-teal-600 shrink-0" />
-                </button>
-              ))}
+                  );
+                }
+                return (
+                  <button key={m.id} type="button" onClick={() => addToCart(m)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-slate-50 text-left">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{m.medicine_name} <span className="text-slate-400 font-medium">{m.strength}{m.strength_unit}</span></p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] text-slate-400">₹{m.mrp.toFixed(2)}</span>
+                        {m.requires_prescription && <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Rx required</span>}
+                      </div>
+                    </div>
+                    <Plus className="w-4 h-4 text-teal-600 shrink-0" />
+                  </button>
+                );
+              })}
             </div>
           )}
           {cart.length > 0 && (
             <div className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cart</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Your cart · {cart.reduce((n, l) => n + l.quantity, 0)} item{cart.reduce((n, l) => n + l.quantity, 0) === 1 ? '' : 's'}</span>
+              {hasDirectRxItem && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-900 shadow-sm">
+                  <p className="font-semibold">Needs a doctor's prescription — send your prescription to a pharmacy</p>
+                  <button type="button" onClick={() => navigate('/my-records')} className="px-3 py-1.5 bg-[#B45F28] hover:bg-[#9A4F20] text-white rounded-lg text-xs font-bold shrink-0">Send to pharmacy</button>
+                </div>
+              )}
               {cart.map((l) => (
                 <div key={l.medicine.id} className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl p-2.5">
                   <div className="min-w-0">
@@ -300,7 +362,8 @@ export default function OrderBuilderScreen() {
               ))}
             </div>
           )}
-          {cart.length === 0 && <p className="text-xs text-slate-400 text-center py-4">Your cart is empty — search above to add medicines.</p>}
+          {cart.length === 0 && !medQuery && <p className="text-xs text-slate-500 text-center py-4">Search above to add medicines. Medicines marked <b className="text-amber-700">Rx</b> need a prescription; the pharmacist checks it before handing them over.</p>}
+          {medQuery.trim().length >= 2 && !searching && medResults.length === 0 && <p className="text-xs text-slate-500 text-center py-3">No medicine matches “{medQuery.trim()}”. Check the spelling or try the generic name.</p>}
         </div>
       )}
 
@@ -309,10 +372,10 @@ export default function OrderBuilderScreen() {
           <div>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Fulfillment</span>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setFulfillmentType('PICKUP')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${fulfillmentType === 'PICKUP' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
+              <button onClick={() => setFulfillmentType('PICKUP')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${fulfillmentType === 'PICKUP' ? 'border-[#B45F28] bg-[#FDF7F1] text-[#8A4518]' : 'border-slate-200 text-slate-600'}`}>
                 <Store className="w-4 h-4" /> Pickup
               </button>
-              <button onClick={() => setFulfillmentType('DELIVERY')} disabled={addresses.length === 0} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed ${fulfillmentType === 'DELIVERY' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
+              <button onClick={() => setFulfillmentType('DELIVERY')} disabled={addresses.length === 0} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed ${fulfillmentType === 'DELIVERY' ? 'border-[#B45F28] bg-[#FDF7F1] text-[#8A4518]' : 'border-slate-200 text-slate-600'}`}>
                 <Truck className="w-4 h-4" /> Delivery
               </button>
             </div>
@@ -336,10 +399,10 @@ export default function OrderBuilderScreen() {
           <div>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Payment</span>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setPayChoice('CASH')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${payChoice === 'CASH' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
+              <button onClick={() => setPayChoice('CASH')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${payChoice === 'CASH' ? 'border-[#B45F28] bg-[#FDF7F1] text-[#8A4518]' : 'border-slate-200 text-slate-600'}`}>
                 <Banknote className="w-4 h-4" /> Pay at {fulfillmentType === 'DELIVERY' ? 'delivery' : 'pickup'}
               </button>
-              <button onClick={() => setPayChoice('ONLINE')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${payChoice === 'ONLINE' ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
+              <button onClick={() => setPayChoice('ONLINE')} className={`p-3 rounded-xl border flex items-center gap-2 text-sm font-bold ${payChoice === 'ONLINE' ? 'border-[#B45F28] bg-[#FDF7F1] text-[#8A4518]' : 'border-slate-200 text-slate-600'}`}>
                 <Wallet className="w-4 h-4" /> Pay online now
               </button>
             </div>
@@ -351,14 +414,23 @@ export default function OrderBuilderScreen() {
           </div>
           <p className="text-[10px] text-slate-400 -mt-2">Final pricing and availability are confirmed by the pharmacy when you place the order.</p>
 
+          {/* Pharmacy Cancellation & Refund Policy (Requirement 4) */}
+          <CancellationRefundPolicy service="pharmacy" className="my-2" />
+
+          {hasDirectRxItem && (
+            <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+              Needs a doctor's prescription — send your prescription to a pharmacy
+            </p>
+          )}
+
           {submitError && <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{submitError}</p>}
 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm"
+            className="w-full py-3 rounded-2xl bg-[#B45F28] hover:bg-[#9A4F20] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm"
           >
-            {submitting ? 'Placing order...' : 'Place Order'}
+            {submitting ? 'Placing order...' : 'Place order'}
           </button>
         </div>
       )}
@@ -366,7 +438,7 @@ export default function OrderBuilderScreen() {
       {pickerOpen && (
         <SelectPharmacyModal
           title="Select Pharmacy"
-          onSelect={(p) => { setPharmacyId(p.id); setPickerOpen(false); }}
+          onSelect={(p) => { choose(p); setPickerOpen(false); }}
           onClose={() => setPickerOpen(false)}
         />
       )}

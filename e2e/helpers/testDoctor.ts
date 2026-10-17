@@ -77,7 +77,9 @@ export async function createTestDoctorWithAvailability(request: APIRequestContex
   const facilityId = facilityRows[0]?.facility_id ?? facilityRows[0]?.facility?.id;
   if (!facilityId) throw new Error('Could not resolve created facility id');
 
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Local calendar date (UTC would give "today" between midnight and 5:30 AM IST).
+  const t = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
   const availRes = await request.post('http://localhost:3000/doctor/availability', {
     headers: { Authorization: `Bearer ${token}` },
     data: {

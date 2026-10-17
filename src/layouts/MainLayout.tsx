@@ -3,12 +3,14 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../presentation/components/Sidebar';
 import {
   Bell, Search, Menu, ChevronDown, User, Settings, LogOut, ArrowLeft, Home,
-  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill } from 'lucide-react';
+  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill, FlaskConical, HeartHandshake } from 'lucide-react';
 import { useRole } from '../store/role/RoleContext';
 import { useLanguage } from '../store/language/LanguageContext';
 import { useNotifications } from '../store/notifications/NotificationsContext';
 import { getProvidersApi } from '../services/patientHelper';
-import { SERVICE_TILES } from '../config/serviceTypes';
+import { SERVICE_TILES, serviceRoute } from '../config/serviceTypes';
+import { fetchLabTestsApi, type LabTestDef } from '../services/labHelper';
+import { kindOf, providerRoute } from '../presentation/components/ProviderCard';
 import type { ProviderItem } from '../services/types';
 
 const MainLayout = () => {
@@ -27,6 +29,12 @@ const MainLayout = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  // Lab tests are searchable too ("CBC", "thyroid"): loaded once, matched as the patient types.
+  const [labTests, setLabTests] = useState<LabTestDef[]>([]);
+  useEffect(() => { fetchLabTestsApi().then(setLabTests).catch(() => setLabTests([])); }, []);
+  const testResults = searchQuery.trim().length >= 2
+    ? labTests.filter((x) => `${x.name} ${x.short_name || ''} ${x.code}`.toLowerCase().includes(searchQuery.trim().toLowerCase())).slice(0, 4)
+    : [];
 
   const userString = localStorage.getItem('vizito_user');
   let loggedInUserName = '';
@@ -181,7 +189,8 @@ const MainLayout = () => {
                     setIsSearchOpen(true);
                   }}
                   onFocus={() => setIsSearchOpen(true)}
-                  placeholder={t("Search healthcare services, doctors, hospitals...")}
+                  aria-label="Search Vizito"
+                  placeholder="Search doctors, hospitals, labs, tests (e.g. CBC), pharmacies…"
                   className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
                 />
                 {isSearching ? (
@@ -218,7 +227,7 @@ const MainLayout = () => {
                               key={svc.id}
                               onClick={() => {
                                 setIsSearchOpen(false);
-                                navigate(svc.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${svc.id}`);
+                                navigate(serviceRoute(svc.id));
                               }}
                               className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center justify-between group transition-colors"
                             >
@@ -235,6 +244,21 @@ const MainLayout = () => {
                         </div>
                       )}
 
+                      {/* Lab tests */}
+                      {testResults.length > 0 && (
+                        <div className="p-2">
+                          <p className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">Lab tests</p>
+                          {testResults.map((tt) => (
+                            <button key={tt.code} onClick={() => { setIsSearchOpen(false); navigate(`/lab-tests?test=${encodeURIComponent(tt.code)}`); }}
+                              className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center gap-2.5 group transition-colors">
+                              <span className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100"><FlaskConical className="w-4 h-4" /></span>
+                              <span className="min-w-0"><span className="block text-xs font-bold text-slate-800 group-hover:text-teal-700 truncate">{tt.name}</span>
+                                <span className="block text-[10px] text-slate-400 truncate">{[tt.specimen_type, tt.fasting_hours ? `${tt.fasting_hours} h fasting` : null].filter(Boolean).join(' · ')}</span></span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Providers (Doctors & Hospitals) */}
                       {searchResults.length > 0 ? (
                         <div className="p-2">
@@ -243,23 +267,23 @@ const MainLayout = () => {
                           </p>
                           {searchResults.map((p) => {
                             // serviceId is the search scope (empty here); the provider's own type is specialtyOrType.
-                            const isPharmacy = p.serviceId === 'pharmacy' || (p.specialtyOrType || p.subtitle || '').toLowerCase() === 'pharmacy';
-                            const isDoctor = !isPharmacy && (p.serviceId === 'doctor' || (p.specialtyOrType || '').toLowerCase().includes('physician') || (p.specialtyOrType || '').toLowerCase().includes('doctor') || !(p.specialtyOrType || '').toLowerCase().includes('hospital'));
+                            // What kind of business this is decides where "Book" goes (a lab is not a doctor).
+                            const kind = kindOf(p);
+                            const isPharmacy = kind === 'pharmacy';
+                            const isDoctor = kind === 'doctor';
                             return (
                               <button
                                 key={p.id}
                                 onClick={() => {
                                   setIsSearchOpen(false);
                                   // A pharmacy is ordered from, not booked.
-                                  navigate(isPharmacy
-                                    ? `/pharmacy-orders/new?pharmacy=${p.id}`
-                                    : `/booking?service=${isDoctor ? 'doctor' : 'hospital'}`);
+                                  navigate(providerRoute(p));
                                 }}
                                 className="w-full text-left px-3 py-2 rounded-xl hover:bg-teal-50/60 flex items-center justify-between group transition-colors"
                               >
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 font-black text-xs">
-                                    {isPharmacy ? <Pill className="w-4 h-4" /> : isDoctor ? <Stethoscope className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                    {isPharmacy ? <Pill className="w-4 h-4" /> : kind === 'lab' ? <FlaskConical className="w-4 h-4" /> : kind === 'homecare' ? <HeartHandshake className="w-4 h-4" /> : isDoctor ? <Stethoscope className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                                   </div>
                                   <div className="min-w-0">
                                     <p className="text-xs font-bold text-slate-800 group-hover:text-teal-700 truncate">{p.name}</p>
@@ -269,7 +293,7 @@ const MainLayout = () => {
                                   </div>
                                 </div>
                                 <span className="text-[10px] font-bold text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  Book Slot &rarr;
+                                  {isPharmacy ? 'Order' : kind === 'lab' ? 'Book tests' : kind === 'homecare' ? 'Book care' : 'Book slot'} &rarr;
                                 </span>
                               </button>
                             );
@@ -278,7 +302,7 @@ const MainLayout = () => {
                       ) : null}
 
                       {/* No Results at all */}
-                      {matchingServices.length === 0 && searchResults.length === 0 && !isSearching && (
+                      {matchingServices.length === 0 && searchResults.length === 0 && testResults.length === 0 && !isSearching && (
                         <div className="p-6 text-center">
                           <p className="text-xs font-bold text-slate-700">No matching providers or services</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">Try searching with a doctor name, hospital, or specialty.</p>

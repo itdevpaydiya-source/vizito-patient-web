@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { personNameInput } from '../../../utils/inputFilters';
 import { HeartPulse, Plus, X, ShieldAlert, Pill, Phone, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import {
   BLOOD_GROUPS, COMMON_CONDITIONS, getHealthProfileApi, saveHealthProfileApi,
   type HealthProfile, type ReportedAllergy, type ReportedMedication,
 } from '../../../services/healthProfileHelper';
 import { formatDate } from '../../../utils/dateFormat';
+import { validateMobile, validatePersonName } from '../../../utils/validators/india';
 
-const field = 'w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20';
-const label = 'block text-[11px] font-bold text-slate-600 mb-1';
+const field = 'w-full min-w-0 p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-shadow';
+const label = 'block text-xs font-bold text-slate-600 mb-1.5';
 
 // Health Profile: what the patient tells us once so every doctor sees it (marked "patient-reported")
 // instead of the patient repeating it at each visit.
@@ -75,8 +77,15 @@ export default function HealthProfileSection() {
     setError(null);
     if (height && (h < 30 || h > 250)) return setError('Height must be between 30 and 250 cm.');
     if (weight && (w < 1 || w > 300)) return setError('Weight must be between 1 and 300 kg.');
-    if (ecPhone && !/^[6-9]\d{9}$/.test(ecPhone)) return setError('Emergency contact must be a 10-digit Indian mobile number.');
+    if (ecPhone) {
+      const mob = validateMobile(ecPhone);
+      if (!mob.ok) return setError(mob.message);
+    }
     if (ecPhone && !ecName.trim()) return setError('Add the emergency contact’s name.');
+    if (ecName.trim()) {
+      const name = validatePersonName(ecName, { required: false });
+      if (!name.ok) return setError(name.message);
+    }
     setSaving(true);
     try {
       fill(await saveHealthProfileApi({
@@ -96,9 +105,9 @@ export default function HealthProfileSection() {
   if (!loaded) return <div className="bg-white rounded-3xl border border-slate-200 p-6 text-sm text-slate-400">Loading…</div>;
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-6 shadow-xs">
+    <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="border-b border-slate-100 pb-3">
-        <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2"><HeartPulse className="w-5 h-5 text-teal-600" /> Health Profile</h3>
+        <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50"><HeartPulse className="w-4 h-4 text-brand-700" /></span> Health profile</h3>
         <p className="text-xs text-slate-500 mt-0.5 flex items-start gap-1.5">
           <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Your doctor sees this at every visit, marked as reported by you, so you don’t have to repeat it.
           {loaded.updated_at && ` Last updated ${formatDate(loaded.updated_at)}.`}
@@ -106,7 +115,9 @@ export default function HealthProfileSection() {
       </div>
 
       {/* Basics */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <section aria-label="Health basics" className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5">
+        <div className="mb-4"><h4 className="text-sm font-extrabold text-slate-800">Health basics</h4><p className="mt-1 text-xs text-slate-500">Optional details that help your care team understand your health.</p></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <div>
           <label htmlFor="hp-bg" className={label}>Blood group</label>
           <select id="hp-bg" value={bloodGroup} onChange={(e) => { setBloodGroup(e.target.value); dirty(); }} className={field}>
@@ -124,12 +135,13 @@ export default function HealthProfileSection() {
         </div>
         <div>
           <span className={label}>BMI</span>
-          <p className="p-2.5 text-xs font-black text-slate-800" aria-live="polite">{bmi ?? '—'}</p>
+          <p className="min-h-12 rounded-xl border border-slate-200 bg-white p-3 text-sm font-extrabold text-slate-800" aria-live="polite">{bmi ?? '—'} <span className="ml-1 text-xs font-medium text-slate-500">kg/m²</span></p>
         </div>
       </div>
+      </section>
 
       {/* Allergies */}
-      <fieldset className="space-y-2">
+      <fieldset className="min-w-0 rounded-2xl border border-rose-100 bg-rose-50/30 p-4 sm:p-5 space-y-3">
         <legend className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5"><ShieldAlert className="w-4 h-4 text-rose-600" /> Allergies</legend>
         {allergies.length > 0 && (
           <ul className="flex flex-wrap gap-2" aria-label="Your allergies">
@@ -142,7 +154,7 @@ export default function HealthProfileSection() {
           </ul>
         )}
         {!noAllergies && (
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_120px_auto] gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto] gap-2">
             <label htmlFor="hp-al" className="sr-only">Allergic to</label>
             <input id="hp-al" value={newAllergy.allergen} maxLength={80} onChange={(e) => setNewAllergy({ ...newAllergy, allergen: e.target.value })} placeholder="Allergic to, e.g. Penicillin, peanuts" className={field} />
             <label htmlFor="hp-alr" className="sr-only">Reaction</label>
@@ -151,24 +163,24 @@ export default function HealthProfileSection() {
             <select id="hp-als" value={newAllergy.severity || ''} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })} className={field}>
               <option value="">Severity</option><option>Mild</option><option>Moderate</option><option>Severe</option>
             </select>
-            <button type="button" onClick={addAllergy} disabled={newAllergy.allergen.trim().length < 2} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add allergy</button>
+            <button type="button" onClick={addAllergy} disabled={newAllergy.allergen.trim().length < 2} className="px-3 py-2.5 rounded-xl border border-rose-200 bg-white text-xs font-bold text-rose-800 hover:bg-rose-50 disabled:opacity-50 inline-flex items-center justify-center gap-1"><Plus className="w-3.5 h-3.5" /> Add allergy</button>
           </div>
         )}
         {allergies.length === 0 && (
           <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={noAllergies} onChange={(e) => { setNoAllergies(e.target.checked); dirty(); }} className="w-4 h-4 accent-teal-600" />
+            <input type="checkbox" checked={noAllergies} onChange={(e) => { setNoAllergies(e.target.checked); dirty(); }} className="w-4 h-4 accent-brand-700" />
             I have no known allergies
           </label>
         )}
       </fieldset>
 
       {/* Conditions */}
-      <fieldset className="space-y-2">
+      <fieldset className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 space-y-3">
         <legend className="text-sm font-extrabold text-slate-800">Long-term conditions</legend>
         <div className="flex flex-wrap gap-2">
           {[...COMMON_CONDITIONS, ...conditions.filter((c) => !COMMON_CONDITIONS.includes(c))].map((c) => (
             <button key={c} type="button" role="checkbox" aria-checked={conditions.includes(c)} onClick={() => toggleCondition(c)}
-              className={`px-3 py-1.5 rounded-full border text-xs font-bold ${conditions.includes(c) ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+              className={`px-3 py-2 rounded-full border text-xs font-bold transition-colors ${conditions.includes(c) ? 'bg-brand-700 border-brand-700 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-brand-300 hover:bg-brand-50'}`}>
               {c}
             </button>
           ))}
@@ -182,7 +194,7 @@ export default function HealthProfileSection() {
       </fieldset>
 
       {/* Medicines */}
-      <fieldset className="space-y-2">
+      <fieldset className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 space-y-3">
         <legend className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5"><Pill className="w-4 h-4 text-teal-600" /> Medicines you take regularly</legend>
         {meds.length > 0 && (
           <ul className="space-y-1" aria-label="Your regular medicines">
@@ -194,29 +206,29 @@ export default function HealthProfileSection() {
             ))}
           </ul>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
           <label htmlFor="hp-med" className="sr-only">Medicine</label>
           <input id="hp-med" value={newMed.name} maxLength={100} onChange={(e) => setNewMed({ ...newMed, name: e.target.value })} placeholder="Medicine, e.g. Metformin 500 mg" className={field} />
           <label htmlFor="hp-dose" className="sr-only">How you take it</label>
           <input id="hp-dose" value={newMed.dose || ''} maxLength={80} onChange={(e) => setNewMed({ ...newMed, dose: e.target.value })} placeholder="How you take it, e.g. 1-0-1 after food" className={field} />
-          <button type="button" onClick={addMed} disabled={newMed.name.trim().length < 2} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add medicine</button>
+          <button type="button" onClick={addMed} disabled={newMed.name.trim().length < 2} className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-brand-50 hover:text-brand-800 disabled:opacity-50 inline-flex items-center justify-center gap-1"><Plus className="w-3.5 h-3.5" /> Add medicine</button>
         </div>
       </fieldset>
 
       {/* Emergency contact */}
-      <fieldset className="space-y-2">
+      <fieldset className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 space-y-3">
         <legend className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5"><Phone className="w-4 h-4 text-teal-600" /> Emergency contact</legend>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div><label htmlFor="hp-ecn" className={label}>Name</label><input id="hp-ecn" value={ecName} maxLength={100} onChange={(e) => { setEcName(e.target.value); dirty(); }} className={field} /></div>
+          <div><label htmlFor="hp-ecn" className={label}>Name</label><input id="hp-ecn" value={ecName} maxLength={100} onChange={(e) => { setEcName(personNameInput(e.target.value)); dirty(); }} onBlur={() => { if (ecName.trim()) { const n = validatePersonName(ecName, { required: false }); if (!n.ok) setError(n.message); } }} className={field} /></div>
           <div><label htmlFor="hp-ecr" className={label}>Relationship</label><input id="hp-ecr" value={ecRelation} maxLength={40} onChange={(e) => { setEcRelation(e.target.value); dirty(); }} placeholder="e.g. Spouse" className={field} /></div>
-          <div><label htmlFor="hp-ecp" className={label}>Mobile</label><input id="hp-ecp" inputMode="numeric" value={ecPhone} maxLength={10} onChange={(e) => { setEcPhone(e.target.value.replace(/\D/g, '')); dirty(); }} placeholder="10-digit mobile" className={field} /></div>
+          <div><label htmlFor="hp-ecp" className={label}>Mobile</label><input id="hp-ecp" inputMode="tel" value={ecPhone} maxLength={10} onChange={(e) => { setEcPhone(e.target.value.replace(/\D/g, '')); dirty(); }} onBlur={() => { if (ecPhone) { const m = validateMobile(ecPhone); if (!m.ok) setError(m.message); } }} placeholder="10-digit mobile" className={field} /></div>
         </div>
       </fieldset>
 
       {error && <p role="alert" className="flex items-center gap-2 text-xs font-bold text-rose-700"><AlertCircle className="w-4 h-4" /> {error}</p>}
-      <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-        {saved && <span role="status" className="flex items-center gap-1.5 text-xs font-bold text-emerald-700"><CheckCircle2 className="w-4 h-4" /> Saved — your doctor will see this at your next visit.</span>}
-        <button type="button" onClick={save} disabled={saving} className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold text-xs">
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-slate-100">
+        {saved ? <span role="status" className="flex items-center gap-1.5 text-xs font-bold text-emerald-700"><CheckCircle2 className="w-4 h-4" /> Saved — your doctor will see this at your next visit.</span> : <span className="text-xs text-slate-500">Changes are saved to your patient-reported health profile.</span>}
+        <button type="button" onClick={save} disabled={saving} className="px-5 py-3 rounded-xl bg-brand-700 hover:bg-brand-800 disabled:opacity-60 text-white font-bold text-sm shadow-sm transition-colors">
           {saving ? 'Saving…' : 'Save health profile'}
         </button>
       </div>

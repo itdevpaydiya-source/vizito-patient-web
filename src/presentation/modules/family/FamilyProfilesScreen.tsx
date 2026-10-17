@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { personNameInput } from '../../../utils/inputFilters';
 import { useNavigate } from 'react-router-dom';
 import {
   UserPlus, MoreVertical, Search, X, Trash2, AlertCircle, RotateCcw, User as UserIcon
@@ -12,6 +13,7 @@ import {
   type PatientFamilyMember,
   type FamilyRelationship,
 } from '../../../services/familyHelper';
+import { validatePersonName, validateDob } from '../../../utils/validators/india';
 
 const FamilyProfilesScreen = () => {
   const navigate = useNavigate();
@@ -72,16 +74,14 @@ const FamilyProfilesScreen = () => {
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    if (!memberName.trim()) {
-      setFormError('Please enter the full name.');
+    const nameVal = validatePersonName(memberName);
+    if (!nameVal.ok) {
+      setFormError(nameVal.message);
       return;
     }
-    if (!memberDob) {
-      setFormError('Add the date of birth — doctors need the age to prescribe safely.');
-      return;
-    }
-    if (memberDob > new Date().toLocaleDateString('en-CA')) {
-      setFormError('Date of birth can’t be in the future.');
+    const dobVal = validateDob(memberDob);
+    if (!dobVal.ok) {
+      setFormError(dobVal.message);
       return;
     }
     if (userId == null) {
@@ -270,7 +270,13 @@ const FamilyProfilesScreen = () => {
                 <label htmlFor="fm-name" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Full Name</label>
                 <input
                   id="fm-name" type="text" required placeholder="e.g. Ramesh Patel"
-                  value={memberName} onChange={(e) => setMemberName(e.target.value)}
+                  value={memberName} onChange={(e) => setMemberName(personNameInput(e.target.value))}
+                  onBlur={() => {
+                    if (memberName) {
+                      const v = validatePersonName(memberName);
+                      if (!v.ok) setFormError(v.message);
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-semibold text-slate-700"
                 />
               </div>
@@ -305,6 +311,12 @@ const FamilyProfilesScreen = () => {
                 <label htmlFor="fm-dob" className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Date of Birth</label>
                 <input
                   id="fm-dob" type="date" required max={new Date().toLocaleDateString('en-CA')} aria-describedby="fm-dob-hint" value={memberDob} onChange={(e) => setMemberDob(e.target.value)}
+                  onBlur={() => {
+                    if (memberDob) {
+                      const v = validateDob(memberDob);
+                      if (!v.ok) setFormError(v.message);
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500/20 text-xs font-semibold text-slate-700"
                 />
                 <p id="fm-dob-hint" className="text-[11px] text-slate-500">Doctors need the exact age to prescribe the right dose, especially for children.</p>

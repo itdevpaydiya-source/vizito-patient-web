@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
+import VisitLocation from '../../components/location/VisitLocation';
+import { getBranchesApi, type Branch } from '../../../services/bookingHelper';
+import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Calendar, Clock, MapPin, X, Sparkles, RotateCcw, AlertCircle, FileText, CheckCircle2, Star, MessageSquare,
-  Stethoscope, Building2, Receipt, CreditCard, Users, Phone, Copy, Check, Hourglass, Ban, LifeBuoy, CalendarClock
+  Stethoscope, Building2, Receipt, CreditCard, Users, Phone, Copy, Check, Hourglass, Ban, LifeBuoy, CalendarClock,
+  FlaskConical, Video, Home, ChevronRight, Pill
 } from 'lucide-react';
+import { getMyOrdersApi } from '../../../services/pharmacyOrderHelper';
 import { getDashboardApi, cancelBookingApi, type DashboardBooking } from '../../../services/dashboardHelper';
 import ReschedulePanel from './ReschedulePanel';
+import { bookingView } from '../../../utils/bookingView';
 import { createReviewApi, getMyReviewsApi, type PatientReview } from '../../../services/reviewHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import { formatDayDate, formatTime } from '../../../utils/dateFormat';
@@ -27,10 +34,32 @@ function appointmentTypeLabel(t: string | null): string {
   }
 }
 
+// What the booking is, shown on every card so lab tests, home visits and doctor visits never look alike.
+const KIND: Record<string, { label: string; cls: string; icon: React.ComponentType<{ className?: string }> }> = {
+  DOCTOR_VISIT: { label: 'Doctor visit', cls: 'bg-teal-50 text-teal-800 border-teal-200', icon: Stethoscope },
+  VIDEO_CONSULT: { label: 'Video consultation', cls: 'bg-indigo-50 text-indigo-800 border-indigo-200', icon: Video },
+  HOME_VISIT: { label: 'Doctor home visit', cls: 'bg-amber-50 text-amber-900 border-amber-200', icon: Home },
+  LAB_TEST: { label: 'Lab test', cls: 'bg-violet-50 text-violet-800 border-violet-200', icon: FlaskConical },
+  HOME_CARE: { label: 'Home care', cls: 'bg-rose-50 text-rose-800 border-rose-200', icon: Home },
+};
+const LAB_STATUS: Record<string, string> = { BOOKED: 'Booked', SAMPLE_PENDING: 'Sample pending', IN_PROGRESS: 'Being tested', PARTIALLY_REPORTED: 'Partial report', REPORTED: 'Report ready', CANCELLED: 'Cancelled' };
+const testsTitle = (t: string[], pkg: string | null) => pkg || (t.length ? `${t[0]}${t.length > 1 ? ` + ${t.length - 1} more` : ''}` : 'Lab tests');
+
 // "NO_SHOW" -> "No show"; the badge is uppercase via CSS, this keeps screen readers sane.
 function statusLabel(status: string): string {
   const s = String(status || '').replace(/_/g, ' ').toLowerCase();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Pending';
+}
+
+// A visit the doctor or hospital declined says so, instead of a bare "Cancelled".
+function declinedBy(b: { cancelledBy?: string | null; status?: string }): 'doctor' | 'clinic' | null {
+  if (!String(b.status || '').toUpperCase().includes('CANCEL')) return null;
+  const by = String(b.cancelledBy || '').toUpperCase();
+  return by === 'DOCTOR' ? 'doctor' : by === 'HOSPITAL' ? 'clinic' : null;
+}
+function displayStatus(b: { cancelledBy?: string | null; status: string }): string {
+  const d = declinedBy(b);
+  return d ? `Declined by ${d}` : statusLabel(b.status);
 }
 
 function statusBadgeClass(status: string): string {
@@ -143,6 +172,7 @@ const paidOnline = (b: DisplayBooking) =>
 
 export default function MyConsultationsScreen() {
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion() ?? false;
 
   const [activeTab, setActiveTab] = useState<TabKey>('active');
   // Open on the first tab that has something in it (a patient with one upcoming visit shouldn't land
@@ -161,7 +191,11 @@ export default function MyConsultationsScreen() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ tone: 'ok' | 'warn'; text: string; bookingRef?: string } | null>(null);
 
+  const [kindFilter, setKindFilter] = useState<string>('ALL');
   const openBooking = (b: DisplayBooking | null) => {
+    // Lab bookings open their own screen (samples, report, lab cancellation rules), not the doctor view.
+    if (b?.labOrder) { navigate(`/lab-bookings?open=${encodeURIComponent(b.labOrder.id)}`); return; }
+    if (b?.homeCare) { navigate(`/home-care?tab=mine&open=${encodeURIComponent(b.homeCare.id)}`); return; }
     setSelectedBooking(b);
     setCancelOpen(false); setCancelReason(''); setCancelError(null); setRescheduleOpen(false);
   };
@@ -210,6 +244,14 @@ export default function MyConsultationsScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // Medicine orders live on their own page; count them so an empty Bookings tab can point there.
+  const [medOrders, setMedOrders] = useState<{ open: number; done: number } | null>(null);
+  useEffect(() => {
+    getMyOrdersApi().then((list) => {
+      const done = list.filter((o: any) => ['COMPLETED', 'CANCELLED', 'DECLINED', 'REJECTED', 'EXPIRED'].includes(String(o.status).toUpperCase())).length;
+      setMedOrders({ open: list.length - done, done });
+    }).catch(() => setMedOrders(null));
+  }, []);
 
   const confirmCancel = async () => {
     if (!selectedBooking) return;
@@ -217,13 +259,14 @@ export default function MyConsultationsScreen() {
     setCancelBusy(true); setCancelError(null);
     try {
       const r = await cancelBookingApi(selectedBooking.id, cancelReason);
-      const ref = r.booking_number || selectedBooking.bookingNumber || 'Your booking';
+      const ref = r.booking_number || selectedBooking.bookingNumber;
+      const refPart = ref ? `${ref} ` : '';
       if (r.refund.status === 'REFUNDED') {
-        setBanner({ tone: 'ok', text: `${ref} is cancelled. ₹${r.refund.amount} is being refunded to your original payment method — banks usually take 5–7 working days.` });
+        setBanner({ tone: 'ok', text: `${refPart}is cancelled. ${refundText(`₹${r.refund.amount}`)}` });
       } else if (r.refund.status === 'NEEDS_SUPPORT') {
-        setBanner({ tone: 'warn', text: `${ref} is cancelled. Your ₹${r.refund.amount} refund needs our support team — raise a request and we'll sort it out.`, bookingRef: r.booking_number || undefined });
+        setBanner({ tone: 'warn', text: `${refPart}is cancelled. Your ₹${r.refund.amount} refund needs our support team — raise a request and we'll sort it out.`, bookingRef: r.booking_number || undefined });
       } else {
-        setBanner({ tone: 'ok', text: `${ref} is cancelled. Nothing was charged, so there is nothing to refund.` });
+        setBanner({ tone: 'ok', text: `${refPart}is cancelled. Nothing was charged, so there is nothing to refund.` });
       }
       openBooking(null);
       tabChosen.current = true;
@@ -252,10 +295,15 @@ export default function MyConsultationsScreen() {
 
   const filteredBookings = bookings.filter((b) => {
     if (b.tab !== activeTab) return false;
+    if (kindFilter !== 'ALL' && b.kind !== kindFilter) return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
       (b.bookingNumber || '').toLowerCase().includes(q) ||
+      (b.business?.name || '').toLowerCase().includes(q) ||
+      (b.doctorName || '').toLowerCase().includes(q) ||
+      (b.labOrder ? `${b.labOrder.order_number} ${b.labOrder.tests.join(' ')} ${b.labOrder.lab_name}` : '').toLowerCase().includes(q) ||
+      KIND[b.kind]?.label.toLowerCase().includes(q) ||
       (b.location || '').toLowerCase().includes(q) ||
       appointmentTypeLabel(b.appointmentType).toLowerCase().includes(q) ||
       (b.patientName || '').toLowerCase().includes(q)
@@ -277,32 +325,41 @@ export default function MyConsultationsScreen() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.28, ease: 'easeOut' }}
+      className="space-y-6 pb-12"
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+          <p className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-orange-800 mb-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-600" /> Your care, organized
+          </p>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Bookings</h1>
           <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">
-            Your healthcare bookings and their current status.
+            Keep track of appointments, tests and home care in one place.
           </p>
         </div>
         <button
           onClick={() => navigate('/healthcare-services')}
-          className="self-start sm:self-auto flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all active:scale-98"
+          className="self-start sm:self-auto flex items-center gap-2 bg-orange-800 hover:bg-orange-900 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-sm motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none hover:shadow-md active:scale-[0.98]"
         >
-          <Sparkles className="w-4 h-4" /> Book New Service
+          <Sparkles className="w-4 h-4" /> Book care
         </button>
       </div>
 
-      {/* Search */}
+      {/* Search and booking filters */}
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4" aria-label="Find a booking">
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by reference, location, or service..."
-          className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-xs"
+          placeholder="Search by doctor, hospital, lab, test or reference"
+          className="w-full pl-11 pr-11 py-3 bg-slate-50/70 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-700/15 focus:border-orange-700 motion-safe:transition-colors motion-reduce:transition-none"
         />
         {searchTerm && (
           <button onClick={() => setSearchTerm('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600">
@@ -312,22 +369,38 @@ export default function MyConsultationsScreen() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto modal-scrollbar">
+      <div className="flex items-center gap-2 overflow-x-auto modal-scrollbar" role="group" aria-label="Booking status">
         {tabs.map((tab) => (
           <button
             key={tab.key}
+            aria-pressed={activeTab === tab.key}
             onClick={() => { tabChosen.current = true; setActiveTab(tab.key); }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 ${
-              activeTab === tab.key ? 'bg-slate-900 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none shrink-0 flex items-center gap-2 ${
+              activeTab === tab.key ? 'bg-orange-800 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:border-orange-200 hover:bg-orange-50/40'
             }`}
           >
             {tab.label}
-            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === tab.key ? 'bg-white/20' : 'bg-slate-100'}`}>
+            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === tab.key ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
               {counts[tab.key]}
             </span>
           </button>
         ))}
       </div>
+
+      {(() => {
+        const kinds = Array.from(new Set(bookings.map((b) => b.kind)));
+        if (kinds.length < 2) return null;
+        return (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Booking type">
+            {['ALL', ...kinds].map((k) => (
+              <button key={k} aria-pressed={kindFilter === k} onClick={() => setKindFilter(k)} className={`px-3 py-1.5 rounded-full border text-xs font-bold motion-safe:transition-colors motion-reduce:transition-none ${kindFilter === k ? 'bg-orange-50 text-orange-900 border-orange-300' : 'bg-white text-slate-600 border-slate-200 hover:border-orange-200'}`}>
+                {k === 'ALL' ? 'All types' : KIND[k]?.label || k} <span className="opacity-60">{bookings.filter((b) => b.tab === activeTab && (k === 'ALL' || b.kind === k)).length}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+      </section>
 
       {banner && (
         <div role="status" className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold ${banner.tone === 'ok' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
@@ -355,38 +428,57 @@ export default function MyConsultationsScreen() {
           </button>
         </div>
       ) : filteredBookings.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredBookings.map((b) => (
-            <div
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+          {filteredBookings.map((b, index) => {
+            const K = KIND[b.kind] || KIND.DOCTOR_VISIT;
+            // One shared description for every booking type (doctor, video, home visit, lab, home care).
+            const lab = b.labOrder;
+            const bv = bookingView(b);
+            const title = bv.title;
+            const businessLine = [bv.business, b.labOrder || b.homeCare ? null : b.department].filter(Boolean).join(' · ');
+            const date = bv.date;
+            const time = bv.time;
+            const place = lab && lab.visit_type === 'HOME' ? 'Home sample collection' : bv.place;
+            const forWhom = lab ? lab.patient_name : b.homeCare ? b.homeCare.patient_name : b.patientName;
+            return (
+            <motion.button
               key={b.id}
+              type="button"
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.24, delay: reduceMotion ? 0 : Math.min(index * 0.035, 0.2), ease: 'easeOut' }}
+              whileHover={reduceMotion ? undefined : { y: -2 }}
+              aria-label={`${K.label}: ${title}`}
               onClick={() => openBooking(b)}
-              className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:border-slate-300 cursor-pointer transition-all space-y-3"
+              className="group w-full text-left bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:border-orange-200 hover:shadow-md cursor-pointer motion-safe:transition-[border-color,box-shadow] motion-safe:duration-200 motion-reduce:transition-none flex flex-col min-h-[17rem]"
             >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="min-w-0">
-                  <h3 className="font-extrabold text-slate-900 text-sm truncate">{formatDoctorName(b.doctorName) || appointmentTypeLabel(b.appointmentType)}</h3>
-                  <p className="text-[11px] text-slate-500 font-semibold truncate">
-                    {[b.doctorName ? appointmentTypeLabel(b.appointmentType) : null, b.department].filter(Boolean).join(' · ') || (b.bookingNumber ? `Ref: ${b.bookingNumber}` : '')}
-                  </p>
-                </div>
-                <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${statusBadgeClass(b.status)}`}>
-                  {statusLabel(b.status)}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${K.cls}`}><K.icon className="w-3 h-3" />{K.label}</span>
+                <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${lab ? statusBadgeClass(lab.status === 'REPORTED' ? 'COMPLETED' : lab.status === 'CANCELLED' ? 'CANCELLED' : lab.status === 'BOOKED' ? 'CONFIRMED' : 'PENDING') : statusBadgeClass(b.homeCare ? b.homeCare.status : b.status)}`}>
+                  {lab ? LAB_STATUS[lab.status] || lab.status : b.homeCare ? bv.status : displayStatus(b)}
                 </span>
               </div>
-              <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+              <div className="min-w-0 border-b border-slate-100 pb-3 mb-3 min-h-[4.25rem]">
+                <h3 className="font-extrabold text-slate-900 text-sm leading-5 line-clamp-2">{title}</h3>
+                {businessLine && <p className="text-[11px] text-slate-600 font-semibold truncate flex items-center gap-1 mt-1"><Building2 className="w-3 h-3 text-slate-400 shrink-0" />{businessLine}</p>}
+                {lab && lab.tests.length > 1 && <p className="text-[11px] text-slate-500 truncate mt-0.5">{lab.tests.join(', ')}</p>}
+              </div>
+              <div className="flex-1 space-y-2 text-xs text-slate-600 font-medium">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="font-bold text-slate-800">{formatDayDate(b.appointmentDate || b.bookingDate)}</span>
-                  {b.timeSlot && <><Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" /><span className="font-bold text-slate-800">{formatTime(b.timeSlot)}</span></>}
+                  <span className="font-bold text-slate-800">{formatDayDate(date)}</span>
+                  {time && <><Clock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" /><span className="font-bold text-slate-800">{formatTime(time)}</span></>}
                 </div>
-                {(b.branchName || b.location) && (
-                  <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate">{b.branchName || b.location}</span></div>
+                {place && (
+                  <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate">{place}</span></div>
                 )}
-                {b.doctorName && b.bookingNumber && <p className="text-[11px] text-slate-400 font-semibold">Ref: {b.bookingNumber}</p>}
+                {forWhom && <div className="flex items-center gap-2"><Users className="w-3.5 h-3.5 text-slate-400 shrink-0" /><span className="truncate">For {forWhom}</span></div>}
+                <p className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">Ref: {bv.ref || b.bookingNumber}{(lab || b.homeCare) && <span className="text-orange-800 inline-flex items-center">{lab ? 'Open lab booking' : 'Open home care'}<ChevronRight className="w-3.5 h-3.5" /></span>}
+                {b.homeCare && bv.detail && <span className="block text-slate-500">{bv.detail}</span>}</p>
               </div>
-              {b.totalAmount != null && (
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Amount</span>
+              {b.totalAmount != null ? (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between min-h-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
                   <span className="font-black text-slate-800 text-sm flex items-center gap-2">
                     {String(b.paymentStatus || '').toUpperCase() === 'REFUNDED' && (
                       <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-sky-50 text-sky-700 border-sky-200">Refunded</span>
@@ -394,15 +486,38 @@ export default function MyConsultationsScreen() {
                     ₹{b.totalAmount}
                   </span>
                 </div>
+              ) : (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between min-h-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Booking details</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-orange-800 motion-safe:transition-colors motion-reduce:transition-none" />
+                </div>
               )}
-            </div>
-          ))}
+            </motion.button>
+            );
+          })}
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs">
           <FileText className="w-12 h-12 text-slate-300 mx-auto mb-2" />
           <h3 className="font-bold text-slate-700 text-lg">No {activeTab} bookings</h3>
-          <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">Bookings you make will appear here.</p>
+          <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto px-4">
+            {activeTab === 'active' ? 'Visits, lab tests and home care happening today or in progress show here.'
+              : activeTab === 'upcoming' ? 'Your future doctor visits, video consultations, lab tests and home care visits show here.'
+              : activeTab === 'completed' ? 'Finished visits show here, with their prescriptions, reports and bills.'
+              : 'Bookings you or the provider cancelled show here, with the refund status.'}
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2 px-4">
+            <button type="button" onClick={() => navigate('/find-doctors')} className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"><Stethoscope className="w-4 h-4 text-primary" /> Book a doctor</button>
+            <button type="button" onClick={() => navigate('/lab-tests')} className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"><FlaskConical className="w-4 h-4 text-primary" /> Book a lab test</button>
+            <button type="button" onClick={() => navigate('/home-care')} className="px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5"><Home className="w-4 h-4 text-primary" /> Home care</button>
+          </div>
+          {medOrders && medOrders.open + medOrders.done > 0 && (
+            <button type="button" onClick={() => navigate('/pharmacy-orders')} className="mt-6 mx-auto flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-50 border border-teal-100 text-xs font-semibold text-teal-900 hover:bg-teal-100">
+              <Pill className="w-4 h-4" />
+              Medicine orders are in Pharmacy Orders: {[medOrders.open ? `${medOrders.open} in progress` : '', medOrders.done ? `${medOrders.done} finished` : ''].filter(Boolean).join(', ')}
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       )}
 
@@ -413,7 +528,8 @@ export default function MyConsultationsScreen() {
             {/* Header — stays fixed while the body below scrolls */}
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-6 py-5 shrink-0">
               <div className="min-w-0">
-                <h3 className="font-extrabold text-slate-900 text-lg truncate">{appointmentTypeLabel(selectedBooking.appointmentType)}</h3>
+                <h3 className="font-extrabold text-slate-900 text-lg truncate">{KIND[selectedBooking.kind]?.label || appointmentTypeLabel(selectedBooking.appointmentType)}{selectedBooking.doctorName ? ` with ${formatDoctorName(selectedBooking.doctorName)}` : ""}</h3>
+                {selectedBooking.business?.name && <p className="text-sm font-semibold text-slate-600 truncate">{selectedBooking.business.name} · {selectedBooking.business.type}</p>}
                 {selectedBooking.bookingNumber && (
                   <button
                     onClick={() => copyBookingRef(selectedBooking.bookingNumber!)}
@@ -427,7 +543,7 @@ export default function MyConsultationsScreen() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border whitespace-nowrap ${statusBadgeClass(selectedBooking.status)}`}>
-                  {statusLabel(selectedBooking.status)}
+                  {displayStatus(selectedBooking)}
                 </span>
                 <button onClick={() => openBooking(null)} className="p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-full">
                   <X className="w-5 h-5" />
@@ -437,16 +553,46 @@ export default function MyConsultationsScreen() {
 
             {/* Scrollable body */}
             <div className="overflow-y-auto px-6 py-5 space-y-6 modal-scrollbar">
+              {declinedBy(selectedBooking) && (
+                <div role="status" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 space-y-2">
+                  <p className="text-sm font-extrabold text-rose-900">
+                    {declinedBy(selectedBooking) === 'doctor' ? `${formatDoctorName(selectedBooking.doctorName) || 'The doctor'} couldn't see you` : `${selectedBooking.branchName || 'The clinic'} couldn't see you`} at this time.
+                  </p>
+                  {selectedBooking.cancellationReason && <p className="text-sm text-rose-800">Reason: {selectedBooking.cancellationReason}</p>}
+                  <p className="text-xs font-semibold text-rose-800">
+                    {String(selectedBooking.paymentStatus || '').toUpperCase() === 'REFUNDED'
+                      ? refundText(`₹${Number(selectedBooking.totalAmount || 0).toLocaleString('en-IN')}`)
+                      : 'You were not charged for this visit.'}
+                  </p>
+                  <button onClick={() => navigate('/find-doctors')} className="mt-1 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">
+                    Find another doctor
+                  </button>
+                </div>
+              )}
               {/* Doctor & Clinic */}
               {(selectedBooking.doctorName || selectedBooking.branchName || selectedBooking.location) && (
                 <DetailSection icon={Stethoscope} title="Doctor & Clinic">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                     <DetailField label="Doctor" value={formatDoctorName(selectedBooking.doctorName)} />
-                    <DetailField label="Department" value={selectedBooking.department} />
-                    <DetailField label="Clinic" value={selectedBooking.branchName} />
+                    {(() => {
+                      // A doctor's own practice is listed under the doctor's name: show just the clinic, once.
+                      // A hospital visit shows the hospital and which branch.
+                      const b = selectedBooking.business;
+                      const doc = String(selectedBooking.doctorName || '').replace(/^dr[.]?[ ]*/i, '').trim().toLowerCase();
+                      const ownPractice = !b?.name || (doc && String(b.name).trim().toLowerCase() === doc) || /clinic/i.test(String(b?.type || ''));
+                      const isHospital = /hospital/i.test(String(b?.type || ''));
+                      return <>
+                        {!ownPractice && <DetailField label={b?.type || 'Hospital'} value={b?.name || null} />}
+                        <DetailField label="Department" value={selectedBooking.department} />
+                        <DetailField label={isHospital ? 'Branch' : 'Clinic'} value={selectedBooking.branchName || (ownPractice ? null : b?.name || null)} />
+                      </>;
+                    })()}
                     <DetailField label="Location" value={selectedBooking.location} />
                   </div>
                 </DetailSection>
+              )}
+              {selectedBooking.facilityId && selectedBooking.appointmentType !== 'VIDEO_CALL' && selectedBooking.appointmentType !== 'HOME_VISIT' && !/CANCEL|DECLIN/i.test(String(selectedBooking.status || '')) && (
+                <BookedBranchLocation owner={selectedBooking.hospitalPartnerId || selectedBooking.providerId} facilityId={selectedBooking.facilityId} fallbackName={selectedBooking.business?.name || selectedBooking.branchName || 'Clinic'} fallbackAddress={selectedBooking.location || ''} />
               )}
 
               {/* Appointment Schedule — the most prominent section */}
@@ -660,7 +806,14 @@ export default function MyConsultationsScreen() {
               )}
               {(selectedBooking.tab === 'completed' || selectedBooking.tab === 'cancelled') && selectedBooking.appointmentType && (
                 <button
-                  onClick={() => navigate('/booking?service=doctor')}
+                  onClick={() => {
+                    const b = selectedBooking;
+                    if (b && b.providerId && (b.kind === 'DOCTOR_VISIT' || b.kind === 'VIDEO_CONSULT')) {
+                      const q = new URLSearchParams({ doctor: String(b.providerId), mode: b.kind === 'VIDEO_CONSULT' ? 'video' : 'clinic', rebook: '1' });
+                      if (b.patientName) q.set('for', b.patientName);
+                      navigate(`/find-doctors?${q.toString()}`);
+                    } else navigate(b?.kind === 'LAB_TEST' ? '/lab-tests' : b?.kind === 'HOME_VISIT' || b?.kind === 'HOME_CARE' ? '/home-care' : '/find-doctors');
+                  }}
                   className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5"
                 >
                   <RotateCcw className="w-4 h-4" /> Book Again
@@ -673,6 +826,19 @@ export default function MyConsultationsScreen() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
+}
+
+// The booked branch (by its id, so it is the exact place booked, not the hospital's main address):
+// address, confirmed map pin and directions.
+function BookedBranchLocation({ owner, facilityId, fallbackName, fallbackAddress }: { owner: string | null; facilityId: number; fallbackName: string; fallbackAddress: string }) {
+  const [b, setB] = useState<Branch | null | undefined>(undefined);
+  useEffect(() => {
+    if (!owner) { setB(null); return; }
+    getBranchesApi(owner).then((list) => setB(list.find((x) => Number(x.facility_id) === Number(facilityId)) || null)).catch(() => setB(null));
+  }, [owner, facilityId]);
+  if (b === undefined) return null;
+  const address = b ? [b.address_line_1, b.area, b.city, b.state, b.pincode].filter(Boolean).join(', ') : fallbackAddress;
+  return <VisitLocation title="Where to go" name={b ? `${fallbackName.includes(b.name) ? fallbackName : `${fallbackName} · ${b.name}`}` : fallbackName} address={address} pin={b?.pin || null} phone={b?.phone || null} />;
 }

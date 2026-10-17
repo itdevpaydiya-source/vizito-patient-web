@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
+import { personNameInput } from '../../../utils/inputFilters';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -25,6 +27,9 @@ import {
   HeartPulse
 } from 'lucide-react';
 import HealthProfileSection from './HealthProfileSection';
+import { getHealthProfileApi, type HealthProfile } from '../../../services/healthProfileHelper';
+import AddressBook from './AddressBook';
+import ContactSection from './ContactSection';
 import {
   getPatientProfileApi,
   updateProfileApi,
@@ -33,6 +38,9 @@ import {
   deleteAddressApi,
   setDefaultAddressApi,
   type PatientAddress,
+  uploadPatientPhotoApi,
+  photoUrl,
+  logoutOtherDevicesApi,
 } from '../../../services/patientHelper';
 import {
   getMyUserId,
@@ -47,6 +55,7 @@ import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwo
 
 export default function ProfileLayout() {
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion() ?? false;
 
   // Active Tab / Section
   const [activeSection, setActiveSection] = useState<
@@ -63,7 +72,7 @@ export default function ProfileLayout() {
   // via PATCH /patients/profile — no fabricated defaults, no local-only fields.
   const [fullName, setFullName] = useState('');
   const [dob, setDob] = useState('');
-  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | ''>('');
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const [savingPersonal, setSavingPersonal] = useState(false);
 
@@ -108,7 +117,10 @@ export default function ProfileLayout() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   // 7. Account Settings State
-  const [language, setLanguage] = useState('English');
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
+  // Health profile, only to count what's filled in for the completeness meter.
+  const [health, setHealth] = useState<HealthProfile | null>(null);
+  useEffect(() => { getHealthProfileApi().then(setHealth).catch(() => setHealth(null)); }, [activeSection]);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   // Load identity from the session for a fast paint, then hydrate authoritative profile, addresses,
@@ -133,8 +145,8 @@ export default function ProfileLayout() {
           if (profile.email) setEmailAddress(profile.email);
           if (profile.phone) setMobileNumber(profile.phone);
           if (profile.dateOfBirth) setDob(profile.dateOfBirth);
-          if (profile.gender === 'Male' || profile.gender === 'Female' || profile.gender === 'Other') setGender(profile.gender);
-          if (profile.profilePicture) setProfilePhoto(profile.profilePicture);
+          { const g = String(profile.gender || '').toLowerCase(); setGender(g === 'male' ? 'Male' : g === 'female' ? 'Female' : g === 'other' ? 'Other' : ''); }
+          if (profile.profilePicture) setProfilePhoto(photoUrl(profile.profilePicture));
           setUserId(profile.userId);
           try {
             const stored = localStorage.getItem('vizito_user');
@@ -171,15 +183,25 @@ export default function ProfileLayout() {
   // 1. Personal Information Submit — persisted to the backend (PATCH /patients/profile).
   const handleSavePersonal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) {
+    const name = fullName.trim();
+    if (!name) {
       showToast('Full name is required.');
+      return;
+    }
+    if (!/^[A-Za-z][A-Za-z .'-]{1,59}$/.test(name)) {
+      showToast("Full name can only contain letters, spaces and . ' -");
+      return;
+    }
+    if (dob && new Date(`${dob}T00:00:00`) > new Date()) {
+      showToast('Date of birth cannot be in the future.');
       return;
     }
     setSavingPersonal(true);
     try {
+      // Date of birth is optional; leaving it empty keeps it unset (doctors then see no age).
       await updateProfileApi({
-        fullName: fullName.trim(),
-        dateOfBirth: dob || '',
+        fullName: name,
+        ...(dob ? { dateOfBirth: dob } : {}),
         gender,
       });
       try {
@@ -199,11 +221,22 @@ export default function ProfileLayout() {
 
   // Profile photo preview. There is no patient image-upload/storage endpoint yet, so this shows the
   // selected image locally only — it is NOT persisted, and we say so honestly rather than fake a save.
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setProfilePhoto(URL.createObjectURL(file));
-      showToast('Preview only — photo upload will be saved once storage is enabled.');
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) { showToast('Use a PNG, JPEG or WEBP photo.'); return; }
+    if (file.size > 2 * 1024 * 1024) { showToast('That photo is over 2 MB. Choose a smaller one.'); return; }
+    const before = profilePhoto;
+    setProfilePhoto(URL.createObjectURL(file));
+    try {
+      const url = await uploadPatientPhotoApi(file);
+      await updateProfileApi({ profilePicture: url });
+      setProfilePhoto(photoUrl(url));
+      showToast('Profile photo updated.');
+    } catch (err: any) {
+      setProfilePhoto(before);
+      const m = err?.response?.data?.message; showToast(Array.isArray(m) ? m.join(' ') : m || 'Could not upload the photo. Please try again.');
     }
   };
 
@@ -360,7 +393,7 @@ export default function ProfileLayout() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-[1440px] space-y-6 px-1 pb-12 sm:px-2 animate-in fade-in slide-in-from-bottom-3 duration-500">
       {/* Toast Banner */}
       {toastMessage && (
         <div className="fixed top-20 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-top-3">
@@ -370,17 +403,19 @@ export default function ProfileLayout() {
       )}
 
       {/* Page Title */}
-      <div>
+      <div className="flex flex-col gap-1 border-b border-slate-200/80 pb-5">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-700">Your account</p>
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Profile & Account</h1>
-        <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">
+        <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1 max-w-3xl">
           Manage your personal details, contact info, saved addresses, family members, security, and preferences.
         </p>
       </div>
 
       {/* Profile Summary Card */}
-      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-[#A95724] via-[#75472F] to-[#35251E] rounded-[1.75rem] p-5 sm:p-7 text-white shadow-[0_18px_45px_-26px_rgba(74,47,32,.7)] flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
+        <div aria-hidden="true" className="absolute -right-12 -top-24 h-72 w-72 rounded-full border-[32px] border-white/[0.06]" />
         <div className="flex items-center gap-5 z-10">
-          <div className="relative group">
+          <div className="relative group shrink-0">
             {profilePhoto ? (
               <img
                 src={profilePhoto}
@@ -394,22 +429,44 @@ export default function ProfileLayout() {
                 </span>
               </div>
             )}
-            <label className="absolute -bottom-1 -right-1 bg-teal-500 hover:bg-teal-600 text-white p-1.5 rounded-xl cursor-pointer shadow-md transition-transform group-hover:scale-110">
+            <label title="Change profile photo" className="absolute -bottom-1 -right-1 bg-brand-500 hover:bg-brand-400 text-white p-2 rounded-xl cursor-pointer shadow-md transition-transform group-hover:scale-110">
               <Camera className="w-3.5 h-3.5" />
               <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
             </label>
           </div>
 
-          <div>
-            <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-bold text-teal-200 border border-white/10 mb-1">
-              <Sparkles className="w-3 h-3 text-teal-300" /> Patient Profile
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-orange-100 border border-white/15 mb-1.5">
+              <Sparkles className="w-3 h-3 text-orange-200" /> Patient profile
             </div>
             <h2 className="text-xl font-extrabold tracking-tight">{fullName}</h2>
-            <p className="text-xs text-teal-100/80 font-medium">{emailAddress} • {mobileNumber}</p>
+            <p className="text-xs text-teal-100/80 font-medium">{[emailAddress, mobileNumber].filter(Boolean).join(' • ')}</p>
+            {(() => {
+              // What doctors, labs and home care need from you, and what's still missing.
+              const def = addresses.find((a) => a.isDefault) || addresses[0];
+              const checks: [boolean, string, typeof activeSection][] = [
+                [!!dob, 'date of birth', 'personal'], [!!gender, 'gender', 'personal'], [!!mobileNumber && !!emailAddress, 'mobile and email', 'contact'],
+                [!!def && !!def.city && !!def.state && !!def.pincode, 'home address', 'addresses'],
+                [!!health && (!!health.blood_group || health.no_known_allergies || (health.allergies || []).length > 0), 'blood group / allergies', 'health'],
+                [!!health?.emergency_contact?.phone, 'emergency contact', 'health'],
+              ];
+              const done = checks.filter((x) => x[0]).length; const pct = Math.round((done / checks.length) * 100); const next = checks.find((x) => !x[0]);
+              return (
+                <div className="mt-3 max-w-sm" aria-label="Profile completeness">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-teal-100"><span>Profile {pct}% complete</span><span>{done}/{checks.length}</span></div>
+                  <div className="h-2 rounded-full bg-black/20 mt-1.5 overflow-hidden"><div className="h-full rounded-full bg-emerald-300 transition-[width] duration-500" style={{ width: `${pct}%` }} /></div>
+                  {next && <button type="button" onClick={() => setActiveSection(next[2])} className="mt-1 text-[11px] font-bold text-white underline underline-offset-2">Add your {next[1]} →</button>}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 z-10">
+        <div className="z-10 flex w-full flex-col gap-3 sm:w-auto sm:min-w-56 sm:items-end">
+          <div className="flex items-center gap-2 self-start rounded-2xl border border-white/15 bg-white/[0.08] px-3 py-2 sm:self-auto">
+            <ShieldCheck className="h-4 w-4 text-emerald-200" />
+            <div><p className="text-xs font-bold">Your care details</p><p className="text-[10px] text-orange-50/75">Private and in your control</p></div>
+          </div>
           {profilePhoto && (
             <button
               onClick={async () => {
@@ -417,7 +474,7 @@ export default function ProfileLayout() {
                 try { await updateProfileApi({ profilePicture: '' }); showToast('Profile photo removed.'); }
                 catch { showToast('Failed to remove photo.'); }
               }}
-              className="text-xs font-bold text-teal-200 hover:text-white bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 hover:bg-white/20 transition-all"
+              className="text-xs font-bold text-white bg-white/10 px-3 py-2 rounded-xl border border-white/15 hover:bg-white/20 transition-all"
             >
               Remove Photo
             </button>
@@ -426,109 +483,116 @@ export default function ProfileLayout() {
       </div>
 
       {/* Main Container Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)] gap-4 lg:gap-6 items-start">
         
         {/* Navigation Sidebar / Tabs */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-2 space-y-1 shadow-xs">
+        <div className="sticky top-3 z-10 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/95 p-2 shadow-sm backdrop-blur lg:static lg:flex-col lg:gap-1 lg:overflow-visible">
+          <p className="hidden px-3 pb-2 pt-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400 lg:block">Profile sections</p>
           <button
             onClick={() => setActiveSection('personal')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'personal'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <User className="w-4 h-4 shrink-0" />
-            <span>Personal Information</span>
+            <span className="whitespace-nowrap">Personal Information</span>
           </button>
 
           <button
             onClick={() => setActiveSection('contact')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'contact'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <Phone className="w-4 h-4 shrink-0" />
-            <span>Contact Information</span>
+            <span className="whitespace-nowrap">Contact Information</span>
           </button>
 
           <button
             onClick={() => setActiveSection('addresses')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'addresses'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <MapPin className="w-4 h-4 shrink-0" />
-            <span>Address Management</span>
+            <span className="whitespace-nowrap">Address Management</span>
           </button>
 
           <button
             onClick={() => setActiveSection('family')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'family'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <Users className="w-4 h-4 shrink-0" />
-            <span>Family Members</span>
+            <span className="whitespace-nowrap">Family Members</span>
           </button>
 
           <button
             onClick={() => setActiveSection('health')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'health'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <HeartPulse className="w-4 h-4 shrink-0" />
-            <span>Health Profile</span>
+            <span className="whitespace-nowrap">Health Profile</span>
           </button>
 
           <button
             onClick={() => setActiveSection('password')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'password'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <Lock className="w-4 h-4 shrink-0" />
-            <span>Change Password</span>
+            <span className="whitespace-nowrap">Change Password</span>
           </button>
 
           <button
             onClick={() => setActiveSection('settings')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+            className={`w-auto shrink-0 lg:w-full lg:shrink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 text-left ${
               activeSection === 'settings'
-                ? 'bg-teal-600 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-brand-700 text-white shadow-sm ring-1 ring-brand-800/10'
+                : 'text-slate-600 hover:bg-brand-50 hover:text-brand-800'
             }`}
           >
             <Globe className="w-4 h-4 shrink-0" />
-            <span>Account Settings</span>
+            <span className="whitespace-nowrap">Account Settings</span>
           </button>
         </div>
 
         {/* Section Detail Views */}
-        <div className="lg:col-span-3 space-y-6">
+        <motion.div
+          key={activeSection}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.22, ease: 'easeOut' }}
+          className="min-w-0 space-y-4"
+        >
           
           {/* SECTION 1: Personal Information */}
           {activeSection === 'personal' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                  <User className="w-5 h-5 text-teal-600" /> Personal Information
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50"><User className="w-4 h-4 text-brand-700" /></span> Personal Information
                 </h3>
                 {!isEditingPersonal ? (
                   <button
                     onClick={() => setIsEditingPersonal(true)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-xl bg-brand-50 hover:bg-brand-100 font-bold text-xs text-brand-800 transition-colors flex items-center gap-1.5"
                   >
                     <Edit2 className="w-3.5 h-3.5" /> Edit
                   </button>
@@ -542,10 +606,10 @@ export default function ProfileLayout() {
                     type="text"
                     disabled={!isEditingPersonal}
                     value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    onChange={(e) => setFullName(personNameInput(e.target.value))}
                     className={`w-full p-3 rounded-xl font-bold text-sm text-slate-800 border transition-all ${
                       isEditingPersonal
-                        ? 'bg-white border-teal-500 ring-2 ring-teal-500/20'
+                        ? 'bg-white border-brand-500 ring-2 ring-brand-500/15'
                         : 'bg-slate-50 border-slate-200'
                     }`}
                   />
@@ -561,7 +625,7 @@ export default function ProfileLayout() {
                       onChange={(e) => setDob(e.target.value)}
                       className={`w-full p-3 rounded-xl font-bold text-sm text-slate-800 border transition-all ${
                         isEditingPersonal
-                          ? 'bg-white border-teal-500 ring-2 ring-teal-500/20'
+                          ? 'bg-white border-brand-500 ring-2 ring-brand-500/15'
                           : 'bg-slate-50 border-slate-200'
                       }`}
                     />
@@ -575,10 +639,11 @@ export default function ProfileLayout() {
                       onChange={(e) => setGender(e.target.value as any)}
                       className={`w-full p-3 rounded-xl font-bold text-sm text-slate-800 border transition-all ${
                         isEditingPersonal
-                          ? 'bg-white border-teal-500 ring-2 ring-teal-500/20'
+                        ? 'bg-white border-brand-500 ring-2 ring-brand-500/15'
                           : 'bg-slate-50 border-slate-200'
                       }`}
                     >
+                      <option value="">Not set</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
@@ -598,7 +663,7 @@ export default function ProfileLayout() {
                     <button
                       type="submit"
                       disabled={savingPersonal}
-                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold shadow-md"
+                      className="px-6 py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 disabled:opacity-60 text-white font-bold shadow-sm transition-colors"
                     >
                       {savingPersonal ? 'Saving...' : 'Save Profile'}
                     </button>
@@ -608,157 +673,27 @@ export default function ProfileLayout() {
             </div>
           )}
 
-          {/* SECTION 2: Contact Information */}
+          {/* SECTION 2: Contact Information (verified change) */}
           {activeSection === 'contact' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                  <Phone className="w-5 h-5 text-teal-600" /> Contact Information
-                </h3>
-                {!isEditingContact && (
-                  <button
-                    onClick={() => setIsEditingContact(true)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 transition-colors flex items-center gap-1.5"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                )}
-              </div>
-
-              <form onSubmit={handleSaveContact} className="space-y-4 text-xs">
-                <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Mobile Number</label>
-                  <input
-                    type="text"
-                    disabled={!isEditingContact}
-                    value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
-                    className={`w-full p-3 rounded-xl font-bold text-sm text-slate-800 border transition-all ${
-                      isEditingContact
-                        ? 'bg-white border-teal-500 ring-2 ring-teal-500/20'
-                        : 'bg-slate-50 border-slate-200'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    disabled={!isEditingContact}
-                    value={emailAddress}
-                    onChange={(e) => setEmailAddress(e.target.value)}
-                    className={`w-full p-3 rounded-xl font-bold text-sm text-slate-800 border transition-all ${
-                      isEditingContact
-                        ? 'bg-white border-teal-500 ring-2 ring-teal-500/20'
-                        : 'bg-slate-50 border-slate-200'
-                    }`}
-                  />
-                </div>
-
-                {isEditingContact && (
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingContact(false)}
-                      className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={savingContact}
-                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold shadow-md"
-                    >
-                      {savingContact ? 'Saving...' : 'Save Contact Info'}
-                    </button>
-                  </div>
-                )}
-              </form>
-            </div>
+            <ContactSection phone={mobileNumber} email={emailAddress} toast={showToast}
+              onChanged={(w, v) => {
+                if (w === 'phone') setMobileNumber(v); else setEmailAddress(v);
+                try { const u = JSON.parse(localStorage.getItem('vizito_user') || '{}'); localStorage.setItem('vizito_user', JSON.stringify({ ...u, ...(w === 'phone' ? { mobile: v } : { email: v }) })); } catch { /* non-fatal */ }
+              }} />
           )}
 
           {/* SECTION 3: Address Management */}
           {activeSection === 'addresses' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-teal-600" /> Saved Addresses
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Your saved delivery and home-visit locations.</p>
-                </div>
-              </div>
-
-              {/* Adding/editing an address requires selecting country/state/city from the catalogue
-                  (numeric IDs validated server-side). Those pickers are not built yet, so creation is
-                  reported here rather than fabricated. Viewing, deleting, and set-default are live. */}
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Adding a new address is coming soon (requires city/state selection). You can view, delete, or change your default address below.</span>
-              </div>
-
-              {/* Address Cards List (real, from /patients/me) */}
-              {addresses.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {addresses.map((addr) => (
-                    <div
-                      key={addr.addressId}
-                      className={`p-4 rounded-2xl border flex flex-col justify-between space-y-3 relative ${
-                        addr.isDefault
-                          ? 'border-teal-600 bg-teal-50/20 ring-2 ring-teal-600/20 shadow-xs'
-                          : 'border-slate-200 bg-slate-50/50'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-extrabold text-slate-900 text-sm">{addr.label || 'Address'}</span>
-                          {addr.isDefault ? (
-                            <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-100 px-2.5 py-0.5 rounded-full border border-teal-200">
-                              Default
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleSetDefaultAddress(addr.addressId)}
-                              className="text-[10px] font-bold text-slate-500 hover:text-teal-700 underline"
-                            >
-                              Set as Default
-                            </button>
-                          )}
-                        </div>
-
-                        {addr.addressLine1 && <p className="text-xs text-slate-700 font-semibold">{addr.addressLine1}</p>}
-                        {addr.addressLine2 && <p className="text-xs text-slate-600">{addr.addressLine2}</p>}
-                        {addr.landmark && <p className="text-xs text-slate-500">Landmark: {addr.landmark}</p>}
-                        {addr.pincode && <p className="text-xs text-slate-500">Pincode: {addr.pincode}</p>}
-                      </div>
-
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/60 text-xs font-bold">
-                        <button
-                          onClick={() => setAddressDeleteModal(addr)}
-                          className="px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-100 flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-slate-500 text-xs">
-                  <p className="font-bold">No saved addresses.</p>
-                </div>
-              )}
-            </div>
+            <AddressBook addresses={addresses} me={{ name: fullName, phone: mobileNumber }} onChanged={reloadAddresses} toast={showToast} />
           )}
 
           {/* SECTION 4: Family Members */}
           {activeSection === 'family' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                    <Users className="w-5 h-5 text-teal-600" /> Family Member Management
+                  <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50"><Users className="w-4 h-4 text-brand-700" /></span> Family members
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">Manage family profiles available during healthcare bookings.</p>
                 </div>
@@ -767,7 +702,7 @@ export default function ProfileLayout() {
                     setFamilyForm({ name: '', dob: '', relationship: 'Father', gender: 'Male' });
                     setFamilyModal('new');
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+                  className="px-4 py-2.5 rounded-xl bg-brand-700 hover:bg-brand-800 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" /> Add Family Member
                 </button>
@@ -778,12 +713,12 @@ export default function ProfileLayout() {
                   {familyMembers.map((member) => (
                     <div
                       key={member.associationId}
-                      className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-center justify-between"
+                      className="p-4 rounded-2xl border border-slate-200/80 bg-white hover:border-brand-200 hover:shadow-sm transition-all flex items-center justify-between"
                     >
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <h4 className="font-extrabold text-slate-900 text-sm">{member.name}</h4>
-                          <span className="text-[10px] font-black uppercase text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
+                            <span className="text-[10px] font-black uppercase text-brand-800 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">
                             {member.relationship}
                           </span>
                         </div>
@@ -817,10 +752,10 @@ export default function ProfileLayout() {
 
           {/* SECTION 6: Change Password */}
           {activeSection === 'password' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                  <Lock className="w-5 h-5 text-teal-600" /> Change Password
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50"><Lock className="w-4 h-4 text-brand-700" /></span> Change Password
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">Update your password to keep your health account secure.</p>
               </div>
@@ -832,89 +767,89 @@ export default function ProfileLayout() {
                 </div>
               )}
 
-              <form onSubmit={handlePasswordSubmit} className="space-y-4 text-xs max-w-md">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.8fr)] gap-6 items-start">
+              <form onSubmit={handlePasswordSubmit} className="space-y-4 text-xs max-w-xl">
                 <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Current Password</label>
+                  <label className="block font-bold text-slate-700 mb-1.5">Current password</label>
                   <input
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full p-3 rounded-xl font-bold text-sm text-slate-800 border border-slate-200 bg-slate-50 focus:outline-none focus:border-teal-500"
+                    className="w-full p-3 rounded-xl font-medium text-sm text-slate-800 border border-slate-200 bg-white focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">New Password</label>
+                  <label className="block font-bold text-slate-700 mb-1.5">New password</label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full p-3 rounded-xl font-bold text-sm text-slate-800 border border-slate-200 bg-slate-50 focus:outline-none focus:border-teal-500"
+                    className="w-full p-3 rounded-xl font-medium text-sm text-slate-800 border border-slate-200 bg-white focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Confirm New Password</label>
+                  <label className="block font-bold text-slate-700 mb-1.5">Confirm new password</label>
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full p-3 rounded-xl font-bold text-sm text-slate-800 border border-slate-200 bg-slate-50 focus:outline-none focus:border-teal-500"
+                    className="w-full p-3 rounded-xl font-medium text-sm text-slate-800 border border-slate-200 bg-white focus:outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white font-bold text-xs shadow-md transition-all"
+                  className="px-6 py-3 rounded-xl bg-brand-700 hover:bg-brand-800 disabled:opacity-60 text-white font-bold text-sm shadow-sm transition-all"
                 >
                   {savingPassword ? 'Updating...' : 'Update Password'}
                 </button>
               </form>
+              <aside className="rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
+                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-700 shadow-sm"><ShieldCheck className="h-5 w-5" /></div>
+                <h4 className="text-sm font-extrabold text-slate-900">Keep your account secure</h4>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">Choose a password that is hard to guess and unique to your Vizito account. We’ll check it against the password requirements before saving.</p>
+              </aside>
+              </div>
             </div>
           )}
 
           {/* SECTION 7: Account Settings & Logout */}
           {activeSection === 'settings' && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-5 shadow-xs">
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-7 space-y-5 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-teal-600" /> Account Settings
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Manage language preferences and session controls.</p>
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50"><Globe className="w-4 h-4 text-brand-700" /></span> Account settings</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Language, where you’re signed in, and your account.</p>
               </div>
-
-              <div className="space-y-4 text-xs max-w-md">
-                <div>
-                  <label className="block font-extrabold text-slate-700 uppercase tracking-wider mb-1">Language Preference</label>
-                  <select
-                    value={language}
-                    onChange={(e) => {
-                      setLanguage(e.target.value);
-                      showToast(`Language set to ${e.target.value}`);
-                    }}
-                    className="w-full p-3 rounded-xl font-bold text-sm text-slate-800 border border-slate-200 bg-slate-50 focus:outline-none focus:border-teal-500"
-                  >
-                    <option value="English">English</option>
-                    <option value="Telugu">Telugu (తెలుగు)</option>
-                    <option value="Hindi">Hindi (हिंदी)</option>
-                  </select>
+              <div className="space-y-4 text-xs">
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5">
+                  <p className="font-extrabold text-slate-800 text-sm">Language</p>
+                  <p className="text-slate-600 mt-1">Vizito is in <b>English</b>. Telugu and Hindi will be added once every medical screen has a reviewed translation, so instructions and reports are never mistranslated.</p>
                 </div>
-
-                <div className="pt-4 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowLogoutDialog(true)}
-                    className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs border border-rose-200 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" /> Logout of Account
-                  </button>
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 space-y-2">
+                  <p className="font-extrabold text-slate-800 text-sm">Where you’re signed in</p>
+                  <p className="text-slate-600">Your account can stay signed in on up to 5 devices. Lost a phone, or used a shared computer? Sign out everywhere else; this device stays signed in.</p>
+                  <button type="button" disabled={signingOutOthers} onClick={async () => {
+                    setSigningOutOthers(true);
+                    try { const r = await logoutOtherDevicesApi(); showToast(r.signed_out ? `Signed out of ${r.signed_out} other device${r.signed_out === 1 ? '' : 's'}.` : 'You weren’t signed in anywhere else.'); }
+                    catch { showToast('Could not sign out other devices. Please try again.'); } finally { setSigningOutOthers(false); }
+                  }} className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-60">{signingOutOthers ? 'Signing out…' : 'Sign out of all other devices'}</button>
                 </div>
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 space-y-2">
+                  <p className="font-extrabold text-slate-800 text-sm">Your data</p>
+                  <p className="text-slate-600">Your records are shared only with the doctors, labs, pharmacies and home care you book. To get a copy of your data or close your account, contact us from <button type="button" onClick={() => navigate('/help')} className="font-bold text-teal-700 underline">Help & Support</button>.</p>
+                </div>
+                <button type="button" onClick={() => setShowLogoutDialog(true)}
+                  className="w-full max-w-md flex items-center justify-center gap-2 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs border border-rose-200">
+                  <LogOut className="w-4 h-4" /> Log out of this device
+                </button>
               </div>
             </div>
           )}
 
-        </div>
+        </motion.div>
       </div>
 
       {/* Delete Address Confirmation */}
@@ -972,7 +907,7 @@ export default function ProfileLayout() {
                   type="text"
                   required
                   value={familyForm.name}
-                  onChange={(e) => setFamilyForm({ ...familyForm, name: e.target.value })}
+                  onChange={(e) => setFamilyForm({ ...familyForm, name: personNameInput(e.target.value) })}
                   placeholder="e.g. Ramesh Kumar"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800"
                 />

@@ -11,9 +11,13 @@ export interface ProviderItem {
   name: string;            // business_name
   subtitle?: string;       // partner_type
   specialtyOrType?: string; // partner_type
+  partnerType?: string | null; // raw business type (doctor, hospitaladmin, diagnostics, pharmacy, homecare…)
   // Public profile details (doctors) and rating — only present when the backend has them.
   qualification?: string | null;
+  specialization?: string | null;
   experienceYears?: number | null;
+  medicalRegistrationNumber?: string | null;
+  medicalCouncilName?: string | null;
   languages?: string | null;
   city?: string | null;
   inClinicFee?: number | null;
@@ -21,8 +25,31 @@ export interface ProviderItem {
   registrationVerified?: boolean;
   logo?: string | null;
   address?: string | null;     // pharmacies: store address for pickup
+  storePin?: { lat: number; lng: number } | null; // pharmacies: store pin, once the pharmacy confirmed it
   rating?: { average: number; count: number } | null;
+  // The provider has paused new bookings/orders (emergency, leave, rush). Shown, not bookable.
+  pause?: ProviderPause | null;
+  // Hospitals / clinics: where they are, what they run and who consults there.
+  org?: OrgSummary | null;
 }
+
+export interface OrgSummary {
+  locations: { facility_id?: number; name: string; area: string | null; city: string | null; pin?: { lat: number; lng: number } | null }[];
+  departments: { name: string; from_fee: number | null }[];
+  doctors: { name: string; specialization: string | null }[];
+  doctor_count: number;
+}
+
+export interface ProviderPause { paused: boolean; until: string | null; indefinite: boolean; reason: string | null }
+
+/** "Not taking bookings right now · back at 4:30 PM" */
+export const pauseText = (p: ProviderPause, noun: 'bookings' | 'orders' = 'bookings'): string => {
+  if (!p.until || p.indefinite) return `Not taking ${noun} right now`;
+  const d = new Date(p.until);
+  const t = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  const when = d.toDateString() === new Date().toDateString() ? t : `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${t}`;
+  return `Not taking ${noun} right now · back ${when}`;
+};
 
 // Pharmacy ordering — mirrors vizito-catalogue's Order/OrderItem and vizito-booking's
 // PharmacyRequest exactly (field names, enum values). Only fields the backend actually
@@ -85,4 +112,12 @@ export interface PatientOrder {
   sale_id: string | null;
   items: OrderItemLine[];
   created_at: string;
+  patient_id?: string;
+  // Who ended a cancelled order: 'SYSTEM' when the pharmacy didn't answer in time, the patient's
+  // own id when they cancelled, anyone else = the pharmacy declined.
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 }
+
+export const orderEndedBy = (o: PatientOrder): 'pharmacy' | 'no-answer' | 'you' | null =>
+  o.status !== 'CANCELLED' ? null : o.cancelled_by === 'SYSTEM' ? 'no-answer' : o.cancelled_by && o.cancelled_by !== o.patient_id ? 'pharmacy' : 'you';

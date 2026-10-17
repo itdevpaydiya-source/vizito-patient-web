@@ -22,10 +22,10 @@ async function registerPharmacy(request: APIRequestContext, name: string) {
 test('the "Pharmacy" service in header search opens medicine ordering', async ({ page, request }) => {
   const patient = await createTestPatient(request);
   await loginAsTestPatient(page, patient);
-  await page.getByPlaceholder(/Search healthcare services, doctors/).fill('pharmacy');
+  await page.getByLabel('Search Vizito').fill('pharmacy');
   await page.getByRole('button').filter({ hasText: 'Medicines & Prescription Upload' }).click();
   await expect(page).toHaveURL(/\/pharmacy-orders\/new$/);
-  await expect(page.getByText('Select Pharmacy').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose a pharmacy' })).toBeVisible();
 });
 
 test('a specific pharmacy in header search opens ordering from that pharmacy', async ({ page, request }) => {
@@ -35,7 +35,7 @@ test('a specific pharmacy in header search opens ordering from that pharmacy', a
   await activatePartner(pharmacyPartnerId);
   const patient = await createTestPatient(request);
   await loginAsTestPatient(page, patient);
-  await page.getByPlaceholder(/Search healthcare services, doctors/).fill(pharmacyName);
+  await page.getByLabel('Search Vizito').fill(pharmacyName);
   await page.getByRole('button').filter({ hasText: pharmacyName }).filter({ hasNotText: 'View all results' }).first().click();
   await expect(page).toHaveURL(new RegExp(`/pharmacy-orders/new\\?pharmacy=${pharmacyPartnerId}`));
 });

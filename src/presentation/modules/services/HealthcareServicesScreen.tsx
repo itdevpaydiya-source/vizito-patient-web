@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ProviderCard, { providerDistance } from '../../components/ProviderCard';
+import LocationBar from '../../components/location/LocationBar';
+import { useSearchArea } from '../../../services/location';
+import FavoriteButton from '../../components/FavoriteButton';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, useReducedMotion } from 'motion/react';
 import {
   Search, ChevronRight, Stethoscope, Building2, Home, Truck, Pill, Microscope,
   Accessibility, AlertCircle, RotateCcw, ArrowRight, Star, X
 } from 'lucide-react';
-import { SERVICE_TILES } from '../../../config/serviceTypes';
+import { SERVICE_TILES, serviceRoute } from '../../../config/serviceTypes';
+import ServiceVisual from '../../components/illustrations/ServiceVisual';
 import { getProvidersApi, getFavoritesApi, addFavoriteApi, removeFavoriteApi } from '../../../services/patientHelper';
 import type { ProviderItem } from '../../../services/types';
 
@@ -18,6 +24,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 // tracking are intentionally not shown here (they have no backend) rather than fabricated.
 export default function HealthcareServicesScreen() {
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion() ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
   const urlQuery = searchParams.get('q') || searchParams.get('search') || '';
 
@@ -26,6 +33,8 @@ export default function HealthcareServicesScreen() {
   const [providerSearch, setProviderSearch] = useState('');
 
   const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const area = useSearchArea();
+  const [nearFirst, setNearFirst] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -100,135 +109,84 @@ export default function HealthcareServicesScreen() {
       (p.subtitle || '').toLowerCase().includes(activeSearch)
     );
   });
+  const orderedProviders = nearFirst
+    ? [...filteredProviders].sort((x, y) => (providerDistance(x, area)?.metres ?? Infinity) - (providerDistance(y, area)?.metres ?? Infinity))
+    : filteredProviders;
 
   const initialsOf = (name: string) =>
     name.trim().split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-[#B45F28] via-[#6B4530] to-[#2B1A11] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl space-y-3">
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">Healthcare Services</h1>
-          <p className="text-teal-100/80 text-sm sm:text-base font-medium leading-relaxed">
-            Choose a service and book with a verified provider.
-          </p>
-          <div className="mt-6 relative max-w-2xl">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              value={globalSearch}
-              onChange={(e) => {
-                const val = e.target.value;
-                setGlobalSearch(val);
-                if (val.trim()) {
-                  setSearchParams({ q: val.trim() });
-                } else {
-                  setSearchParams({});
-                }
-              }}
-              placeholder="Search doctors, hospitals, clinics, or services..."
-              className="w-full pl-12 pr-10 py-3.5 bg-white text-slate-900 rounded-2xl font-semibold text-sm placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-400/30 shadow-lg"
-            />
-            {globalSearch && (
-              <button
-                onClick={() => {
-                  setGlobalSearch('');
-                  setSearchParams({});
-                }}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-md"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+    <motion.div
+      className="mx-auto w-full max-w-[1600px] space-y-6 pb-12"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: 'easeOut' }}
+    >
+      {/* Title. Search lives in the header (doctors, hospitals, labs, tests, pharmacies); a header
+          search lands here as ?q= and filters the results below. */}
+      <section aria-label="Healthcare services" className="rounded-3xl border border-orange-100 bg-gradient-to-r from-orange-50/80 via-white to-white px-5 py-5 sm:px-7 sm:py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-orange-800"><span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden="true" />Care, made easier</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mt-1">Find the right care for you</h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-2xl">Browse services, find a provider near you, and continue to booking when you’re ready.</p>
+          </div>
+          <div className="hidden lg:flex items-center gap-2 rounded-2xl border border-white bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm">
+            <Stethoscope className="h-5 w-5 text-teal-700" /> <span>Care from trusted local providers</span>
           </div>
         </div>
-      </div>
+        {globalSearch.trim() && (
+          <p className="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-100 rounded-full pl-3 pr-1 py-1">
+            Results for “{globalSearch.trim()}”
+            <button aria-label="Clear search" onClick={() => { setGlobalSearch(''); setSearchParams({}); }} className="p-1 rounded-full hover:bg-white"><X className="w-3.5 h-3.5" /></button>
+          </p>
+        )}
+      </section>
 
-      {/* Service tiles (static config) */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2"><span>🩺</span> Available Services</h2>
+      {/* One category selector (replaces the big tiles + the repeated category strip). */}
+      <section aria-label="Type of care" className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div><h2 className="text-lg font-bold text-slate-900">Browse by service</h2><p className="text-sm text-slate-500 mt-0.5">Choose a category to narrow down your options.</p></div>
+          <span className="hidden sm:inline-flex text-xs font-semibold text-slate-500">{activeCategory === 'all' ? 'All services' : SERVICE_TILES.find((s) => s.id === activeCategory)?.name}</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredServices.map((service) => {
-            const IconComponent = ICON_MAP[service.iconName] || Stethoscope;
-            const isSelected = activeCategory === service.id;
+        <div role="radiogroup" aria-label="Type of care" className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2.5">
+          {[{ id: 'all', name: 'All providers', shortDesc: 'Every type of care', iconName: 'Package', available: true } as any, ...SERVICE_TILES].map((svc) => {
+            const Ic = svc.id === 'all' ? Building2 : ICON_MAP[svc.iconName] || Stethoscope;
+            const sel = activeCategory === svc.id;
             return (
-              <div
-                key={service.id}
-                onClick={() => { setActiveCategory(service.id); setProviderSearch(''); }}
-                className={`group relative bg-white rounded-2xl border p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
-                  isSelected ? 'border-teal-600 ring-2 ring-teal-600/30 shadow-lg bg-teal-50/20' : 'border-slate-200 hover:border-teal-300'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-50 to-teal-50/50 border border-slate-100 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                      {service.emoji}
-                    </div>
-                    {service.available ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(service.id === 'pharmacy' ? '/pharmacy-orders/new' : `/booking?service=${service.id}`);
-                        }}
-                        className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-600 hover:text-white px-3 py-1.5 rounded-xl border border-teal-100 transition-colors flex items-center gap-1 shadow-xs"
-                      >
-                        {service.id === 'pharmacy' ? 'Order Now' : 'Book Now'} &rarr;
-                      </button>
-                    ) : (
-                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">Coming soon</span>
-                    )}
-                  </div>
-                  <h3 className="font-extrabold text-slate-800 text-base group-hover:text-teal-700 transition-colors">{service.name}</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1.5 leading-relaxed line-clamp-2">{service.shortDesc}</p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-400 group-hover:text-teal-600">
-                  <span>{service.available ? 'View Providers' : 'Not bookable yet'}</span>
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </div>
+              <button key={svc.id} type="button" role="radio" aria-checked={sel} disabled={!svc.available}
+                onClick={() => { setActiveCategory(svc.id); setProviderSearch(''); }}
+                className={`min-h-[92px] text-left rounded-2xl border p-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55 ${sel ? 'border-teal-700 bg-orange-50/70 shadow-sm ring-1 ring-orange-200' : 'border-slate-200 bg-white hover:border-orange-200 hover:shadow-sm'}`}>
+                <Ic className={`w-5 h-5 ${sel ? 'text-teal-700' : 'text-slate-500'}`} aria-hidden="true" />
+                <span className="block text-xs font-extrabold text-slate-900 mt-1.5 leading-tight">{svc.name}</span>
+                {!svc.available && <span className="mt-1 block text-[10px] font-bold text-slate-400">Coming soon</span>}
+              </button>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {/* Category tabs + provider list */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto modal-scrollbar">
-          <button
-            onClick={() => setActiveCategory('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-              activeCategory === 'all' ? 'bg-slate-900 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            All Providers
-          </button>
-          {SERVICE_TILES.map((svc) => (
-            <button
-              key={svc.id}
-              onClick={() => setActiveCategory(svc.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                activeCategory === svc.id ? 'bg-teal-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <span>{svc.emoji}</span><span>{svc.name}</span>
+      {/* Results: location, filter and sort sit right above the providers they change. */}
+      <section aria-label="Find providers" className="rounded-3xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4 space-y-3">
+        <LocationBar compact purpose="see how far each provider is and sort nearest first" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[14rem] max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input type="text" aria-label="Filter these providers by name" value={providerSearch} onChange={(e) => setProviderSearch(e.target.value)}
+              placeholder={`Filter ${activeCategory === 'all' ? 'providers' : (SERVICE_TILES.find((x) => x.id === activeCategory)?.name || 'providers').toLowerCase()} by name`}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" />
+          </div>
+          {activeCategory !== 'all' && SERVICE_TILES.find((x) => x.id === activeCategory)?.available && (
+            <button type="button" onClick={() => navigate(serviceRoute(activeCategory))} className="px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 inline-flex items-center gap-1 hover:border-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+              {activeCategory === 'doctor' || activeCategory === 'hospital' ? 'Find by date & availability' : activeCategory === 'diagnostic' ? 'Choose tests first' : 'Open full booking'} <ChevronRight className="w-3.5 h-3.5" />
             </button>
-          ))}
+          )}
         </div>
 
-        {/* Provider search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={providerSearch}
-            onChange={(e) => setProviderSearch(e.target.value)}
-            placeholder="Search providers by name..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-xs"
-          />
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
+          <div><h2 className="text-lg font-bold text-slate-900">{activeCategory === 'all' ? 'Available providers' : `Available ${SERVICE_TILES.find((s) => s.id === activeCategory)?.name || 'providers'}`}</h2><p className="text-xs text-slate-500 mt-0.5">Choose a provider to see the next steps.</p></div>
+          {!isLoading && !loadError && <span className="text-xs font-semibold text-slate-500">{filteredProviders.length} {filteredProviders.length === 1 ? 'provider' : 'providers'}</span>}
         </div>
 
         {/* Provider list states */}
@@ -246,45 +204,30 @@ export default function HealthcareServicesScreen() {
             </button>
           </div>
         ) : filteredProviders.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredProviders.map((provider) => {
-              const isFav = Boolean(favByPartner[provider.id]);
-              return (
-                <div key={provider.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between hover:shadow-xl transition-all duration-300 relative group">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider capitalize">
-                      {provider.specialtyOrType || 'Verified Partner'}
-                    </span>
-                    <button
-                      onClick={() => toggleFavorite(provider.id)}
-                      className={`p-2 rounded-full transition-colors ${isFav ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-400 hover:text-amber-500'}`}
-                      title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                    >
-                      <Star className={`w-4 h-4 ${isFav ? 'fill-amber-500' : ''}`} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-2xl border border-slate-100 shadow-xs shrink-0 bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg">
-                      {initialsOf(provider.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-extrabold text-slate-800 text-base truncate group-hover:text-teal-700 transition-colors">{provider.name}</h3>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      const svc = provider.serviceId || activeCategory;
-                      navigate(svc === 'pharmacy' ? `/pharmacy-orders/new?pharmacy=${provider.id}` : `/booking?service=${svc}`);
-                    }}
-                    className="w-full mt-5 px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all shadow-xs"
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {area && filteredProviders.some((p) => providerDistance(p, area)) && (
+                <button type="button" aria-pressed={nearFirst} onClick={() => setNearFirst(!nearFirst)} className={`px-3 py-1 rounded-full border text-xs font-bold ${nearFirst ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>Nearest first</button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {orderedProviders.map((p, index) => {
+                if (reduceMotion || index >= 6) return <ProviderCard key={p.id} p={p} />;
+                return (
+                  <motion.div
+                    key={p.id}
+                    className="h-full"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.995 }}
+                    transition={{ duration: 0.24, delay: index * 0.045, ease: 'easeOut' }}
                   >
-                    {(provider.serviceId || activeCategory) === 'pharmacy' ? 'Order Now' : 'Book Now'}
-                  </button>
-                </div>
-              );
-            })}
+                    <ProviderCard p={p} />
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center shadow-xs space-y-3">
@@ -297,7 +240,7 @@ export default function HealthcareServicesScreen() {
             </p>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </motion.div>
   );
 }

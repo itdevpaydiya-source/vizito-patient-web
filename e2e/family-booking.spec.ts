@@ -22,7 +22,7 @@ test('parent books a visit for their child and receives the prescription', async
   await page.getByLabel('Relationship').selectOption('Child');
   await page.getByLabel('Gender').selectOption('Female');
   await page.getByRole('button', { name: 'Save Profile' }).click();
-  await expect(page.getByText('Add the date of birth')).toBeVisible();
+  await expect(page.getByText('Enter a valid date of birth.')).toBeVisible();
   const dob = `${new Date().getFullYear() - 7}-03-10`;
   await page.getByLabel('Date of Birth').fill(dob);
   await page.getByRole('button', { name: 'Save Profile' }).click();
@@ -30,15 +30,13 @@ test('parent books a visit for their child and receives the prescription', async
 
   // Book for her.
   await page.goto('/booking?service=doctor');
-  await page.getByPlaceholder(/Search doctors by name or specialty/).fill(doctor.fullName);
+  await page.getByPlaceholder(/Search by doctor/).fill(doctor.fullName);
   await page.locator('div.rounded-2xl', { hasText: doctor.fullName }).filter({ has: page.getByRole('button', { name: /Book Appointment/ }) }).first().getByRole('button', { name: /Book Appointment/ }).click();
-  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-  await page.getByText(tomorrow, { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Tomorrow' }).click();
   await page.getByRole('button', { name: '9:00 AM' }).click();
   await page.getByRole('button', { name: /Anika Rao/ }).click();
-  await page.getByRole('button', { name: /Proceed to Payment/ }).click();
   await page.getByRole('button', { name: 'Pay at Clinic' }).click();
-  await page.getByRole('button', { name: /Confirm & Pay ₹\d+ at Clinic/ }).click();
+  await page.getByRole('button', { name: /Confirm & Book/ }).click();
   await expect(page.getByRole('heading', { name: 'Appointment Confirmed!' })).toBeVisible({ timeout: 15000 });
   if (shots) await page.screenshot({ path: `${shots}/family_booked.png`, fullPage: true });
 

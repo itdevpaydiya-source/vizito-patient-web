@@ -1,10 +1,11 @@
+import { validateMobile } from './validators/india';
+
 /**
  * Validates whether a given string is a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.
+ * Compliant with VALIDATION_RULES.md (delegates to shared validator).
  */
 export const validateIndianMobile = (num: string): boolean => {
-  if (!num) return false;
-  const clean = num.trim().replace(/\D/g, '');
-  return /^[6-9]\d{9}$/.test(clean);
+  return validateMobile(num).ok;
 };
 
 /**

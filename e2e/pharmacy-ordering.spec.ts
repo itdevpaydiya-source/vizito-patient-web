@@ -58,23 +58,23 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     await loginAsTestPatient(page, patient);
 
     await page.goto(`/pharmacy-orders/new?pharmacy=${pharmacy.partnerId}`);
-    await expect(page.getByText('Order Medicines')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Order medicines' })).toBeVisible();
 
     const [autocompleteResponse] = await Promise.all([
       page.waitForResponse((r) => r.url().includes('/medicines/autocomplete')),
-      page.getByPlaceholder('Search medicines by name...').fill(`PW OTC Med ${unique}`),
+      page.getByLabel('Search medicines').fill(`PW OTC Med ${unique}`),
     ]);
     expect(autocompleteResponse.ok()).toBeTruthy();
 
     await page.getByText(medicine.medicine_name, { exact: false }).first().click();
-    await expect(page.getByText('Cart', { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Your cart · /)).toBeVisible();
 
     // Pickup + Cash are the defaults — just confirm the total reflects the real MRP (₹12) before placing.
     await expect(page.getByText('₹12.00', { exact: false }).first()).toBeVisible();
 
     const [orderResponse] = await Promise.all([
       page.waitForResponse((r) => r.url().includes('/orders') && r.request().method() === 'POST'),
-      page.getByRole('button', { name: 'Place Order' }).click(),
+      page.getByRole('button', { name: 'Place order' }).click(),
     ]);
     expect(orderResponse.ok()).toBeTruthy();
     const order = await orderResponse.json();
@@ -201,7 +201,7 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
 
     const [orderResponse] = await Promise.all([
       page.waitForResponse((r) => r.url().includes('/patients/orders') && r.request().method() === 'POST'),
-      page.getByRole('button', { name: 'Place Order' }).click(),
+      page.getByRole('button', { name: 'Place order' }).click(),
     ]);
     expect(orderResponse.ok()).toBeTruthy();
     const order = (await orderResponse.json()).data;
