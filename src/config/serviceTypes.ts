@@ -34,5 +34,5 @@ export const SERVICE_TILES: ServiceTile[] = [
 // Where each service's "Book" goes. Lab tests, pharmacy and home care have their own flows; doctor and
 // hospital use the appointment booking screen. Services not on Vizito yet have no route.
 export const serviceRoute = (id: string): string => ({
-  pharmacy: '/pharmacy-orders/new', diagnostic: '/lab-tests', homecare: '/home-care', doctor: '/find-doctors', hospital: '/booking?service=hospital', bloodbank: '/find-blood',
+  pharmacy: '/pharmacy-orders/new', diagnostic: '/lab-tests', homecare: '/home-care', doctor: '/find-doctors', hospital: '/booking?service=hospital', bloodbank: '/find-blood', equipment: '/equipment-rental',
 } as Record<string, string>)[id] || '/healthcare-services';

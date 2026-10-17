@@ -156,7 +156,7 @@ export default function HealthcareServicesScreen() {
             const sel = activeCategory === svc.id;
             return (
               <button key={svc.id} type="button" role="radio" aria-checked={sel} disabled={!svc.available}
-                onClick={() => { setActiveCategory(svc.id); setProviderSearch(''); }}
+                onClick={() => { if (svc.id === 'equipment' || svc.id === 'bloodbank') { navigate(serviceRoute(svc.id)); return; } setActiveCategory(svc.id); setProviderSearch(''); }}
                 className={`min-h-[92px] text-left rounded-2xl border p-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55 ${sel ? 'border-teal-700 bg-orange-50/70 shadow-sm ring-1 ring-orange-200' : 'border-slate-200 bg-white hover:border-orange-200 hover:shadow-sm'}`}>
                 <Ic className={`w-5 h-5 ${sel ? 'text-teal-700' : 'text-slate-500'}`} aria-hidden="true" />
                 <span className="block text-xs font-extrabold text-slate-900 mt-1.5 leading-tight">{svc.name}</span>

@@ -35,6 +35,19 @@ import OrderDetailScreen from '../presentation/modules/pharmacy/OrderDetailScree
 import FamilyProfilesScreen from '../presentation/modules/family/FamilyProfilesScreen';
 import ReviewsScreen from '../presentation/modules/reviews/ReviewsScreen';
 
+// Medical Equipment Rental Module Screens
+import {
+  EquipmentCatalogueScreen,
+  EquipmentDetailScreen,
+  EquipmentCheckoutScreen,
+  EquipmentOrderDetailScreen,
+  EquipmentOrderConfirmationScreen,
+  MyRentalOrdersScreen,
+  DeliveryTrackingScreen,
+  ActiveRentalsScreen,
+  ReturnSchedulingScreen,
+} from '../presentation/modules/equipment';
+
 import { useRole } from '../store/role/RoleContext';
 
 // Session guard
@@ -150,7 +163,20 @@ const AppNavigator = () => {
         <Route path="/request-blood" element={<RequestBloodScreen />} />
         <Route path="/blood-requests" element={<MyBloodRequestsScreen />} />
         <Route path="/donate-blood" element={<DonateBloodScreen />} />
-        <Route path="/equipment-rentals" element={<UniversalBookingScreen />} />
+        {/* Medical Equipment Rental Module */}
+        <Route path="/equipment-rental" element={<EquipmentCatalogueScreen />} />
+        <Route path="/equipment-rentals" element={<Navigate to="/equipment-rental" replace />} />
+        <Route path="/equipment-rental/:id" element={<EquipmentDetailScreen />} />
+        <Route path="/equipment-rental/item/:id" element={<EquipmentDetailScreen />} />
+        <Route path="/equipment-rental/checkout" element={<EquipmentCheckoutScreen />} />
+        <Route path="/equipment-rental/orders" element={<MyRentalOrdersScreen />} />
+        <Route path="/equipment-rental/my-rentals" element={<MyRentalOrdersScreen />} />
+        <Route path="/equipment-rental/orders/:id" element={<EquipmentOrderDetailScreen />} />
+        <Route path="/equipment-rental/orders/:id/confirmation" element={<EquipmentOrderConfirmationScreen />} />
+        <Route path="/equipment-rental/confirmation/:id" element={<EquipmentOrderConfirmationScreen />} />
+        <Route path="/equipment-rental/orders/:id/track" element={<DeliveryTrackingScreen />} />
+        <Route path="/equipment-rental/active" element={<ActiveRentalsScreen />} />
+        <Route path="/equipment-rental/returns" element={<ReturnSchedulingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />
         <Route path="/reviews" element={<ReviewsScreen />} />

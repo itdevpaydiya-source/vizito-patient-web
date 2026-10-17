@@ -13,7 +13,7 @@ import {
   Settings,
   LogOut,
   Sparkles,
-  Pill, FlaskConical, Home, Stethoscope, Droplets, HeartHandshake } from 'lucide-react';
+  Pill, FlaskConical, Home, Stethoscope, Droplets, HeartHandshake, Package } from 'lucide-react';
 import { useLanguage } from '../../store/language/LanguageContext';
 import logoImg from '../../assets/vizito_logo.png';
 
@@ -219,6 +219,22 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         >
           <HeartHandshake className="w-4 h-4 shrink-0" />
           <span>{t('Donate Blood')}</span>
+        </NavLink>
+
+        {/* Equipment rentals */}
+        <NavLink
+          to="/equipment-rental"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${
+              isActive || location.pathname.startsWith('/equipment-rental')
+                ? 'bg-[#FFF5EB] text-[#C26532] shadow-2xs border border-[#FDE3CF]'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            }`
+          }
+        >
+          <Package className="w-4 h-4 shrink-0" />
+          <span>{t('Equipment Rentals')}</span>
         </NavLink>
 
         {/* 5. Ratings & Reviews */}
