@@ -188,6 +188,8 @@ export interface PatientAddress {
   contactName?: string | null;
   contactPhone?: string | null;
   pin?: { lat: number; lng: number } | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export const getAddressesApi = async (): Promise<PatientAddress[]> => {
@@ -211,6 +213,8 @@ export const getAddressesApi = async (): Promise<PatientAddress[]> => {
     contactName: a.contactName ?? null,
     contactPhone: a.contactPhone ?? null,
     pin: a.latitude != null && a.longitude != null && Number(a.latitude) !== 0 ? { lat: Number(a.latitude), lng: Number(a.longitude) } : null,
+    latitude: a.latitude != null && Number.isFinite(Number(a.latitude)) ? Number(a.latitude) : null,
+    longitude: a.longitude != null && Number.isFinite(Number(a.longitude)) ? Number(a.longitude) : null,
   }));
 };
 

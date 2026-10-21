@@ -205,6 +205,12 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           <span>{t('Blood Requests')}</span>
         </NavLink>
 
+        <NavLink to="/ambulance-trips" onClick={onClose}
+          className={({ isActive }) => `flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all text-xs font-bold ${isActive ? 'bg-rose-50 text-rose-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+          <HeartPulse className="w-4 h-4 shrink-0" />
+          <span>{t('Ambulance Trips')}</span>
+        </NavLink>
+
         {/* Donate blood (Blood Bank) */}
         <NavLink
           to="/donate-blood"

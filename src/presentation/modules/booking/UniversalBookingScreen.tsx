@@ -697,6 +697,7 @@ export default function UniversalBookingScreen() {
 
   // Blood Bank has its own screen (Find Blood).
   if (!appointmentEnabled && serviceId === 'bloodbank') return <Navigate to="/find-blood" replace />;
+  if (!appointmentEnabled && serviceId === 'ambulance') return <Navigate to="/book-ambulance" replace />;
 
   // ---- Honest gate for non-appointment services ----
   if (!appointmentEnabled) {
