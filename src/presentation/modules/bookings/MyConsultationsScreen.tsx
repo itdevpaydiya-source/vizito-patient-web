@@ -59,7 +59,18 @@ function declinedBy(b: { cancelledBy?: string | null; status?: string }): 'docto
 }
 function displayStatus(b: { cancelledBy?: string | null; status: string }): string {
   const d = declinedBy(b);
-  return d ? `Declined by ${d}` : statusLabel(b.status);
+  if (d) return `Declined by ${d}`;
+  return awaitingClinic(b as DisplayBooking) ? 'Awaiting clinic confirmation' : statusLabel(b.status);
+}
+
+// Past its time (2.5 h after the start) but the clinic hasn't recorded the outcome yet: never shown as
+// upcoming; the doctor's side flags it "Needs closure" (nothing is changed automatically).
+function awaitingClinic(b: DisplayBooking): boolean {
+  if (b.tab !== 'active' && b.tab !== 'upcoming') return false;
+  const s = String(b.appointmentStatus || b.status || '').toUpperCase();
+  if (!['SCHEDULED', 'CONFIRMED', 'PENDING', 'CHECKED_IN', 'IN_PROGRESS'].includes(s)) return false;
+  const at = startsAt(b);
+  return !!at && Date.now() > at.getTime() + 150 * 60000;
 }
 
 function statusBadgeClass(status: string): string {
@@ -221,7 +232,7 @@ export default function MyConsultationsScreen() {
       const data = await getDashboardApi();
       const combined: DisplayBooking[] = [
         ...data.active.map((b) => ({ ...b, tab: 'active' as TabKey })),
-        ...data.upcoming.map((b) => ({ ...b, tab: 'upcoming' as TabKey })),
+        ...data.upcoming.map((b) => { const x = { ...b, tab: 'upcoming' as TabKey }; return awaitingClinic(x as DisplayBooking) ? { ...x, tab: 'active' as TabKey } : x; }),
         ...data.history.map((b) => {
           const s = (b.status || '').toUpperCase();
           const tab: TabKey = s.includes('CANCEL') ? 'cancelled' : 'completed';
@@ -286,8 +297,13 @@ export default function MyConsultationsScreen() {
       setReviews(await getMyReviewsApi());
       setReviewComment('');
       setReviewRating(5);
-    } catch {
-      alert('Could not submit your review. Please try again.');
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      if (/already reviewed/i.test(String(m))) {
+        // Already reviewed (e.g. from another tab): show the saved review instead of the form.
+        setReviews(await getMyReviewsApi().catch(() => reviews));
+        alert('You have already reviewed this visit.');
+      } else alert(m || 'Could not submit your review. Please try again.');
     } finally {
       setReviewSubmitting(false);
     }

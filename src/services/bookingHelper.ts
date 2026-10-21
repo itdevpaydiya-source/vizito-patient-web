@@ -72,6 +72,8 @@ export interface AvailableSlot {
   end_time: string;
   facility_id: number | null;
   fee: number | null;
+  /** What a video consultation in this slot costs (doctor or department video fee). */
+  video_fee?: number | null;
   // Resolved from the facility's own catalogue record (same source as its pricing above) — a doctor
   // can hold slots at more than one clinic, so this is per-slot, not a single fixed "doctor's clinic".
   // No resolved city/state name exists anywhere in the backend today (catalogue only stores city_id/

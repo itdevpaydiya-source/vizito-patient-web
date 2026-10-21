@@ -626,8 +626,8 @@ function DoctorBookingModal({ doctor, onClose, onSuccess, initialMode, forName, 
                 </div>
               )}
 
-              {/* Keep policy accessible without letting it compete with the booking choices. */}
-              <details className="group rounded-2xl border border-slate-200 bg-white p-3.5">
+              {/* The refund policy must be seen before paying (P0 audit): open by default, collapsible. */}
+              <details open className="group rounded-2xl border border-slate-200 bg-white p-3.5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-bold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 rounded-lg">
                   <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-orange-700" />Cancellation &amp; refund policy</span>
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">View details <ChevronRight className="w-4 h-4 transition-transform group-open:rotate-90" /></span>

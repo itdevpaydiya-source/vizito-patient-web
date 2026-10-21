@@ -67,6 +67,22 @@ export interface PharmacyRequestItem {
   reject_reason: string | null;
   order_id: string | null;   // non-null once converted to an Order — blocks a second Order
   created_at: string;
+  // The pharmacy's priced quote (quote_items: JSON list of PharmacyQuoteLine).
+  quote_items?: string | null;
+  quote_total?: string | null;
+  quoted_at?: string | null;
+  quote_valid_until?: string | null;
+  quote_note?: string | null;
+}
+
+export interface PharmacyQuoteLine {
+  prescribed_name: string;
+  available: boolean;
+  item_name?: string;
+  quantity?: number;
+  unit_price?: number;
+  amount?: number;
+  note?: string;
 }
 
 export type OrderStatus =
