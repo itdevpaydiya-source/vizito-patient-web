@@ -300,7 +300,8 @@ export default function UniversalBookingScreen() {
   // .total_amount` is what will actually be charged (backend-resolved, see PatientBookingService)
   // and takes over as the amount shown — no client-side discount is ever applied to it.
   // Never an invented fee: unknown until the provider's own fee is known (the backend sets the real amount).
-  const rawConsultationFee: number | null = selectedSlot?.fee ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? null;
+  // Video is priced at the video fee (the slot carries both), so the fee shown is the fee charged.
+  const rawConsultationFee: number | null = (consultType === 'Video' ? selectedSlot?.video_fee ?? selectedSlot?.fee : selectedSlot?.fee) ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? null;
   const payableTotal = createdBooking ? Number(createdBooking.total_amount) : Number(rawConsultationFee ?? 0);
 
   // Derived (never stored) so the Clinic/Branch display and the slots grid can never disagree or go
@@ -346,6 +347,7 @@ export default function UniversalBookingScreen() {
               end_time: formatMins(m + step),
               facility_id: raw[i].facility_id,
               fee: raw[i].fee,
+              video_fee: raw[i].video_fee,
               facility_name: raw[i].facility_name,
               facility_type: raw[i].facility_type,
               facility_address: raw[i].facility_address,
@@ -1607,7 +1609,7 @@ export default function UniversalBookingScreen() {
               <p className="text-xs font-bold text-slate-800 truncate">{bookingDoctorName}{selectedSlot ? ` · ${formatSlotTime(selectedSlot.start_time)}` : ''}</p>
               <p className="text-[11px] text-slate-500 truncate">
                 {selectedDate}{selectedFamily ? ` · for ${selectedFamily.name}` : ' · for Myself'}
-                {selectedSlot?.fee != null ? ` · ₹${selectedSlot.fee}` : ''}
+                {rawConsultationFee != null ? ` · ₹${rawConsultationFee}` : ''}
               </p>
             </div>
             <button

@@ -4,7 +4,8 @@ import IllustratedEmpty from '../../components/illustrations/IllustratedEmpty';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Pill, Clock, AlertCircle, RotateCcw, ChevronRight, Plus, XCircle, CheckCircle2, Truck, Store, Stethoscope } from 'lucide-react';
 import { getMyOrdersApi } from '../../../services/pharmacyOrderHelper';
-import { getPharmacyRequestsApi, cancelPharmacyRequestApi } from '../../../services/pharmacyOrderHelper';
+import { getPharmacyRequestsApi, cancelPharmacyRequestApi, createRxOrderApi } from '../../../services/pharmacyOrderHelper';
+import type { PharmacyQuoteLine } from '../../../services/types';
 import { getPrescriptionsApi, getProvidersApi, type PatientPrescription } from '../../../services/patientHelper';
 import { orderEndedBy, type PatientOrder, type PharmacyRequestItem, type OrderStatus } from '../../../services/types';
 
@@ -25,6 +26,7 @@ const orderStatusMeta: Record<OrderStatus, { label: string; className: string }>
 const requestStatusMeta: Record<string, { label: string; className: string; icon: React.ElementType }> = {
   Requested: { label: 'Waiting for pharmacy', className: 'bg-amber-50 text-amber-700', icon: Clock },
   Accepted: { label: 'Accepted — build your order', className: 'bg-emerald-50 text-emerald-700', icon: CheckCircle2 },
+  Quoted: { label: 'Quote ready — please review', className: 'bg-sky-50 text-sky-800', icon: CheckCircle2 },
   Rejected: { label: 'Declined by pharmacy', className: 'bg-rose-50 text-rose-600', icon: XCircle },
   Expired: { label: 'No response in time', className: 'bg-slate-100 text-slate-500', icon: Clock },
   Cancelled: { label: 'Cancelled', className: 'bg-slate-100 text-slate-500', icon: XCircle },
@@ -69,6 +71,23 @@ export default function PharmacyOrdersScreen() {
   useEffect(() => { load(); }, [load]);
 
   const setTab = (t: Tab) => setSearchParams(t === 'requests' ? { tab: 'requests' } : {});
+
+  // Confirming a quote orders exactly what the pharmacy quoted, collected and paid at the shop.
+  const [confirmingQuote, setConfirmingQuote] = useState<{ id: string; pharmacy: string; total: number } | null>(null);
+  const [placing, setPlacing] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const placeQuotedOrder = async () => {
+    if (!confirmingQuote) return;
+    setPlacing(true); setQuoteError(null);
+    try {
+      const order: any = await createRxOrderApi({ pharmacy_request_id: confirmingQuote.id, fulfillment_type: 'PICKUP', payment_method: 'CASH', items: [] } as any);
+      setConfirmingQuote(null);
+      navigate(order?.id ? `/pharmacy-orders/${order.id}` : '/pharmacy-orders');
+    } catch (e: any) {
+      const m = e?.response?.data?.message;
+      setQuoteError(Array.isArray(m) ? m.join(', ') : m || 'Could not place the order. Please try again.');
+    } finally { setPlacing(false); }
+  };
 
   const handleCancelRequest = async (id: string) => {
     setCancellingId(id);
@@ -209,7 +228,10 @@ export default function PharmacyOrdersScreen() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
           {requests.map((r, index) => {
-            const meta = requestStatusMeta[r.status] || { label: r.status, className: 'bg-slate-100 text-slate-600', icon: Clock };
+            const quoteLines: PharmacyQuoteLine[] = (() => { try { return r.quote_items ? JSON.parse(r.quote_items) : []; } catch { return []; } })();
+            const hasQuote = r.status === 'Accepted' && !r.order_id && quoteLines.length > 0;
+            const quoteExpired = hasQuote && !!r.quote_valid_until && new Date(r.quote_valid_until).getTime() < Date.now();
+            const meta = (hasQuote ? requestStatusMeta.Quoted : requestStatusMeta[r.status]) || { label: r.status, className: 'bg-slate-100 text-slate-600', icon: Clock };
             const Icon = meta.icon;
             const prescription = prescriptionsById.get(r.prescription_id);
             const [firstMed, ...restMeds] = prescription?.medicines || [];
@@ -245,6 +267,23 @@ export default function PharmacyOrdersScreen() {
                   </div>
                   {prescription?.diagnosis && <p className="text-xs text-slate-500 mt-2 line-clamp-2"><span className="font-bold text-slate-600">For:</span> {prescription.diagnosis}</p>}
                   {r.reject_reason && <p className="text-xs text-rose-700 mt-2 rounded-lg bg-rose-50 border border-rose-100 px-3 py-2">{r.reject_reason}</p>}
+                  {hasQuote && (
+                    <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/50 p-3 text-xs" data-testid="patient-quote">
+                      <p className="font-bold text-slate-800 mb-1.5">{pharmacyName}'s quote</p>
+                      <ul className="space-y-1">
+                        {quoteLines.map((l, i) => (
+                          <li key={i} className="flex justify-between gap-2">
+                            {l.available
+                              ? <><span className="text-slate-700"><b>{l.item_name}</b> × {l.quantity}<span className="block text-[10px] text-slate-500">for {l.prescribed_name}</span></span><span className="font-semibold tabular-nums text-slate-800">₹{Number(l.amount || 0).toFixed(2)}</span></>
+                              : <span className="text-rose-700"><b>{l.prescribed_name}</b>: not available{l.note ? ` (${l.note})` : ''}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 pt-2 border-t border-sky-200 flex justify-between font-bold text-slate-900"><span>Total</span><span className="tabular-nums">₹{Number(r.quote_total || 0).toFixed(2)}</span></p>
+                      {r.quote_note && <p className="mt-1 text-slate-600">Note: {r.quote_note}</p>}
+                      <p className={`mt-1 ${quoteExpired ? 'text-rose-700 font-semibold' : 'text-slate-500'}`}>{quoteExpired ? 'This quote has expired. Ask the pharmacy for an updated one, or choose another pharmacy.' : `Valid until ${new Date(r.quote_valid_until!).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}`}</p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col min-[420px]:flex-row min-[420px]:items-center justify-end gap-2 min-h-[3.25rem]">
                   {r.status === 'Requested' && (
@@ -256,7 +295,19 @@ export default function PharmacyOrdersScreen() {
                       {cancellingId === r.id ? 'Cancelling...' : 'Cancel request'}
                     </button>
                   )}
-                  {r.status === 'Accepted' && !r.order_id && (
+                  {hasQuote && (
+                    <>
+                      <button onClick={() => handleCancelRequest(r.id)} disabled={cancellingId === r.id}
+                        className="w-full min-[420px]:w-auto text-xs font-bold text-rose-700 border border-rose-200 bg-white hover:bg-rose-50 px-3.5 py-2 rounded-xl disabled:opacity-50">
+                        {cancellingId === r.id ? 'Declining...' : 'Decline quote'}
+                      </button>
+                      <button onClick={() => { setQuoteError(null); setConfirmingQuote({ id: r.id, pharmacy: pharmacyName, total: Number(r.quote_total || 0) }); }} disabled={quoteExpired}
+                        className="w-full min-[420px]:w-auto text-xs font-bold text-white bg-orange-800 hover:bg-orange-900 px-4 py-2.5 rounded-xl shadow-sm disabled:opacity-50">
+                        Confirm order
+                      </button>
+                    </>
+                  )}
+                  {r.status === 'Accepted' && !r.order_id && !hasQuote && (
                     <button
                       onClick={() => navigate(`/pharmacy-orders/new?pharmacyRequestId=${r.id}`)}
                       className="w-full min-[420px]:w-auto text-xs font-bold text-white bg-orange-800 hover:bg-orange-900 px-4 py-2.5 rounded-xl shadow-sm motion-safe:transition-colors motion-reduce:transition-none"
@@ -278,6 +329,24 @@ export default function PharmacyOrdersScreen() {
               </motion.article>
             );
           })}
+        </div>
+      )}
+      {confirmingQuote && (
+        <div role="dialog" aria-modal="true" aria-labelledby="confirm-quote-title" className="fixed inset-0 z-50 bg-slate-900/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-xl">
+            <h2 id="confirm-quote-title" className="text-lg font-black text-slate-900">Order from {confirmingQuote.pharmacy}?</h2>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+              <p className="flex justify-between"><span>Total</span><b className="tabular-nums">₹{confirmingQuote.total.toFixed(2)}</b></p>
+              <p className="flex justify-between"><span>Collect</span><b>At the pharmacy</b></p>
+              <p className="flex justify-between"><span>Pay</span><b>At the shop (cash or UPI)</b></p>
+            </div>
+            <p className="text-xs text-slate-500">The pharmacy packs exactly the items in its quote. Items marked not available aren't included.</p>
+            {quoteError && <p role="alert" className="text-xs font-semibold text-rose-700">{quoteError}</p>}
+            <div className="flex flex-col-reverse sm:flex-row gap-2">
+              <button type="button" disabled={placing} onClick={() => setConfirmingQuote(null)} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700">Back</button>
+              <button type="button" disabled={placing} onClick={placeQuotedOrder} className="flex-1 px-4 py-3 rounded-xl bg-orange-800 hover:bg-orange-900 text-white text-sm font-bold disabled:opacity-60">{placing ? 'Placing order…' : 'Place order'}</button>
+            </div>
+          </div>
         </div>
       )}
     </motion.div>

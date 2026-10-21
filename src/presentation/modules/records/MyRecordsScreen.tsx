@@ -33,6 +33,9 @@ export default function MyRecordsScreen() {
   const [selected, setSelected] = useState<PatientPrescription | null>(null);
   const [sendingRx, setSendingRx] = useState<PatientPrescription | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Picking a pharmacy only proposes it; nothing is shared until the patient confirms (DPDP: clear notice).
+  const [confirmPharmacy, setConfirmPharmacy] = useState<ProviderItem | null>(null);
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -49,14 +52,18 @@ export default function MyRecordsScreen() {
   const handleSendToPharmacy = async (pharmacy: ProviderItem) => {
     if (!sendingRx) return;
     setSendError(null);
+    setSending(true);
     try {
       await createPharmacyRequestApi(sendingRx.id, pharmacy.id);
+      setConfirmPharmacy(null);
       setSendingRx(null);
       // Track status from here on out — same "My Requests" list the direct-order path uses.
       navigate('/pharmacy-orders?tab=requests');
     } catch (e: any) {
       const msg = e?.response?.data?.message || 'Unable to send this prescription to the pharmacy. Please try again.';
       setSendError(Array.isArray(msg) ? msg.join(', ') : String(msg));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -196,7 +203,7 @@ export default function MyRecordsScreen() {
                 <button onClick={() => setSelected(rx)} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-800 hover:bg-orange-900 text-white font-bold text-xs shadow-sm motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none hover:shadow-md">
                   <Eye className="w-4 h-4" /> View
                 </button>
-                {canSendToPharmacy(rx.pharmacy_status) && (
+                {canSendToPharmacy(rx.pharmacy_status) && rx.medicines.length > 0 && (
                   <button
                     onClick={() => { setSendError(null); setSendingRx(rx); }}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-orange-200 text-orange-900 hover:bg-orange-50 font-bold text-xs motion-safe:transition-colors motion-reduce:transition-none"
@@ -212,12 +219,37 @@ export default function MyRecordsScreen() {
 
       {selected && <PrescriptionPreview rx={selected} onClose={() => setSelected(null)} />}
 
-      {sendingRx && (
+      {sendingRx && !confirmPharmacy && (
         <SelectPharmacyModal
           title="Send Prescription to Pharmacy"
-          onSelect={handleSendToPharmacy}
+          onSelect={(p) => { setSendError(null); setConfirmPharmacy(p); }}
           onClose={() => setSendingRx(null)}
         />
+      )}
+
+      {sendingRx && confirmPharmacy && (
+        <div role="dialog" aria-modal="true" aria-labelledby="share-rx-title" className="fixed inset-0 z-50 bg-slate-900/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-xl">
+            <div>
+              <h2 id="share-rx-title" className="text-lg font-black text-slate-900">Share this prescription with {confirmPharmacy.name}?</h2>
+              {confirmPharmacy.address && <p className="text-xs text-slate-500 mt-0.5">{confirmPharmacy.address}</p>}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-bold text-slate-800 mb-1">The pharmacy will see</p>
+              <ul className="list-disc pl-5 space-y-0.5 text-[13px]">
+                <li>Your name, age, sex and mobile number</li>
+                <li>Doctor's name and registration number</li>
+                <li>Diagnosis{sendingRx.diagnosis ? `: ${sendingRx.diagnosis}` : ''}</li>
+                <li>Medicines: {sendingRx.medicines.map((m) => m.name).filter(Boolean).join(', ')}</li>
+              </ul>
+            </div>
+            <p className="text-xs text-slate-500">They use it only to check stock and fill this prescription. You can cancel the request until the pharmacy answers.</p>
+            <div className="flex flex-col-reverse sm:flex-row gap-2">
+              <button type="button" disabled={sending} onClick={() => setConfirmPharmacy(null)} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700">Choose another pharmacy</button>
+              <button type="button" disabled={sending} onClick={() => handleSendToPharmacy(confirmPharmacy)} className="flex-1 px-4 py-3 rounded-xl bg-orange-800 hover:bg-orange-900 text-white text-sm font-bold disabled:opacity-60">{sending ? 'Sending…' : 'Share and send'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {sendError && (
