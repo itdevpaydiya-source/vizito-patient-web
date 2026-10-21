@@ -15,6 +15,15 @@ import {
 import logoImg from '../../../assets/vizito_logo.png';
 import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
 import { validateMobile, validateEmail } from '../../../utils/validators/india';
+import {
+  validateIdentifier,
+  detectIdentifier,
+  extractMobileDigits,
+  normalizeMobile,
+  isValidIndianMobile,
+  isValidEmail,
+  IDENTIFIER_MESSAGES,
+} from '../../../utils/identifier';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 
 interface AuthModuleProps {
@@ -70,6 +79,9 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [identifierError, setIdentifierError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [pasteNote, setPasteNote] = useState('');
 
   // OTP States
   const [otp, setOtp] = useState('');
@@ -146,23 +158,48 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
   const classifyIdentifier = (raw: string): ClassifiedIdentifier | null => {
     const trimmed = raw.trim();
     if (!trimmed) {
-      setErrorMessage('Please enter your mobile number or email');
+      setIdentifierError(IDENTIFIER_MESSAGES.REQUIRED);
+      setErrorMessage(IDENTIFIER_MESSAGES.REQUIRED);
       return null;
     }
-    if (isEmailIdentifier(trimmed)) {
-      const emailRes = validateEmail(trimmed);
-      if (!emailRes.ok) {
-        setErrorMessage(emailRes.message);
-        return null;
+    const valRes = validateIdentifier(trimmed);
+    if (!valRes.isValid) {
+      setIdentifierError(valRes.error || IDENTIFIER_MESSAGES.REQUIRED);
+      setErrorMessage(valRes.error || IDENTIFIER_MESSAGES.REQUIRED);
+      return null;
+    }
+    setIdentifierError('');
+    return { type: valRes.type === 'email' ? 'email' : 'mobile', value: valRes.normalized };
+  };
+
+  const handleIdentifierPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+    const kind = detectIdentifier(text);
+    if (kind === 'mobile') {
+      const digits = extractMobileDigits(text);
+      if (digits.length > 10) {
+        e.preventDefault();
+        const clipped = digits.slice(-10);
+        setIdentifier(clipped);
+        setPasteNote('Pasted mobile number clipped to 10 digits.');
+        setIdentifierError('');
+        setErrorMessage('');
       }
-      return { type: 'email', value: emailRes.value };
     }
-    const mobRes = validateMobile(trimmed);
-    if (!mobRes.ok) {
-      setErrorMessage(trimmed ? mobRes.message : 'Please enter a valid mobile number or email address');
-      return null;
+  };
+
+  const handleIdentifierBlur = () => {
+    if (!identifier.trim()) {
+      setIdentifierError('');
+      return;
     }
-    return { type: 'mobile', value: mobRes.value };
+    const res = validateIdentifier(identifier);
+    if (!res.isValid) {
+      setIdentifierError(res.error || '');
+    } else {
+      setIdentifierError('');
+    }
   };
 
   const syncIdentifierState = (classified: ClassifiedIdentifier) => {
@@ -275,9 +312,11 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     syncIdentifierState(classified);
 
     if (!password) {
+      setPasswordError('Password is required');
       setErrorMessage('Password is required');
       return;
     }
+    setPasswordError('');
 
     setIsSubmitting(true);
     try {
@@ -381,31 +420,32 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     setErrorMessage('');
     setSuccessMessage('');
 
+    let targetValue = recoveryIdentifier.trim();
     if (recoveryType === 'mobile') {
-      const mRes = validateMobile(recoveryIdentifier);
-      if (!mRes.ok) {
-        setErrorMessage(mRes.message);
+      if (!isValidIndianMobile(targetValue)) {
+        setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
         return;
       }
+      targetValue = normalizeMobile(targetValue);
     }
     if (recoveryType === 'email') {
-      const eRes = validateEmail(recoveryIdentifier);
-      if (!eRes.ok) {
-        setErrorMessage(eRes.message);
+      if (!isValidEmail(targetValue)) {
+        setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
         return;
       }
+      targetValue = targetValue.toLowerCase();
     }
 
     setIsSubmitting(true);
     try {
-      const res = await sendOtpApi(recoveryIdentifier, recoveryType);
+      const res = await sendOtpApi(targetValue, recoveryType);
       // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
       // pre-fill it instead of making the user read it off the API response and retype it.
       const devOtp = res?.dev_otp || res?.otp || '';
       if (devOtp) setRecoveryOtp(String(devOtp));
       setOtpCountdown(300);
       setScreenState('forgot-otp');
-      setSuccessMessage(`Recovery OTP sent to ${recoveryIdentifier}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
+      setSuccessMessage(`Recovery OTP sent to ${targetValue}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || 'Failed to send recovery OTP.');
     } finally {
@@ -572,35 +612,66 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
               >
                 {/* Unified Identifier Input */}
                 <div className="form-group mb-0 text-left">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number or Email</label>
-                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
-                    {isEmailIdentifier(identifier) ? (
+                  <label htmlFor="patient-login-identifier" className="block text-xs font-bold text-slate-700 mb-1">
+                    Mobile Number or Email
+                  </label>
+                  <div
+                    className={`flex items-center border rounded-xl overflow-hidden px-3 bg-white transition-all ${
+                      identifierError
+                        ? 'border-rose-500 ring-2 ring-rose-500/10'
+                        : 'border-slate-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10'
+                    }`}
+                  >
+                    {detectIdentifier(identifier) === 'email' ? (
                       <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                     ) : (
                       <Smartphone className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                     )}
                     <input
+                      id="patient-login-identifier"
+                      name="identifier"
                       type="text"
-                      inputMode="email"
+                      inputMode={detectIdentifier(identifier) === 'email' ? 'email' : 'text'}
                       autoComplete="username"
                       value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      onBlur={() => {
-                        if (identifier.trim()) {
-                          if (isEmailIdentifier(identifier)) {
-                            const eRes = validateEmail(identifier);
-                            if (!eRes.ok) setErrorMessage(eRes.message);
-                          } else {
-                            const mRes = validateMobile(identifier);
-                            if (!mRes.ok) setErrorMessage(mRes.message);
-                          }
-                        }
+                      onChange={(e) => {
+                        setIdentifier(e.target.value);
+                        if (identifierError) setIdentifierError('');
+                        if (pasteNote) setPasteNote('');
                       }}
+                      onPaste={handleIdentifierPaste}
+                      onBlur={handleIdentifierBlur}
                       placeholder="Enter mobile number or email"
+                      aria-invalid={Boolean(identifierError)}
+                      aria-describedby={
+                        identifierError
+                          ? 'patient-identifier-error'
+                          : pasteNote
+                          ? 'patient-identifier-note'
+                          : undefined
+                      }
                       className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
                     />
                   </div>
-                  {authMethod === 'otp' && (
+                  {identifierError && (
+                    <p
+                      id="patient-identifier-error"
+                      role="alert"
+                      className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{identifierError}</span>
+                    </p>
+                  )}
+                  {!identifierError && pasteNote && (
+                    <p
+                      id="patient-identifier-note"
+                      className="text-[11px] font-medium text-amber-600 mt-1"
+                    >
+                      {pasteNote}
+                    </p>
+                  )}
+                  {authMethod === 'otp' && !identifierError && !pasteNote && (
                     <p className="text-[11px] text-slate-400 font-semibold mt-1.5">
                       We will send you a 6-digit OTP to verify it's you
                     </p>
@@ -611,14 +682,24 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                 {authMethod === 'password' && (
                   <div className="form-group mb-0 text-left">
                     <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                    <div className="relative flex items-center border border-slate-200 rounded-xl overflow-hidden px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                    <div
+                      className={`relative flex items-center border rounded-xl overflow-hidden px-3 bg-white transition-all ${
+                        passwordError
+                          ? 'border-rose-500 ring-2 ring-rose-500/10'
+                          : 'border-slate-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10'
+                      }`}
+                    >
                       <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="current-password"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (passwordError) setPasswordError('');
+                        }}
                         placeholder="Enter your password"
+                        aria-invalid={Boolean(passwordError)}
                         className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 pr-10"
                       />
                       <button
@@ -629,6 +710,12 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    {passwordError && (
+                      <p role="alert" className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{passwordError}</span>
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -809,9 +896,8 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                         value={recoveryIdentifier}
                         onChange={(e) => setRecoveryIdentifier(e.target.value.replace(/\D/g, ''))}
                         onBlur={() => {
-                          if (recoveryIdentifier.trim()) {
-                            const mRes = validateMobile(recoveryIdentifier);
-                            if (!mRes.ok) setErrorMessage(mRes.message);
+                          if (recoveryIdentifier.trim() && !isValidIndianMobile(recoveryIdentifier)) {
+                            setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
                           }
                         }}
                         placeholder="Enter mobile number"
@@ -831,9 +917,8 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
                         value={recoveryIdentifier}
                         onChange={(e) => setRecoveryIdentifier(e.target.value)}
                         onBlur={() => {
-                          if (recoveryIdentifier.trim()) {
-                            const eRes = validateEmail(recoveryIdentifier);
-                            if (!eRes.ok) setErrorMessage(eRes.message);
+                          if (recoveryIdentifier.trim() && !isValidEmail(recoveryIdentifier)) {
+                            setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
                           }
                         }}
                         placeholder="abc@gmail.com"

@@ -24,12 +24,17 @@ import MapPinPicker from '../../components/location/MapPinPicker';
 import { locateOnce, addressAt, LOCATE_ERROR_TEXT, type LocateError } from '../../../services/location';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE, PASSWORD_RULES } from '../../../utils/passwordPolicy';
 import {
-  validateMobile,
-  validateEmail,
   validatePersonName,
   validateDob,
   validatePinCode,
 } from '../../../utils/validators/india';
+import {
+  isValidIndianMobile,
+  isValidEmail,
+  normalizeMobile,
+  sanitizeMobileInput,
+  IDENTIFIER_MESSAGES,
+} from '../../../utils/identifier';
 
 interface RegistrationModuleProps {
   onBackToLogin?: () => void;
@@ -83,15 +88,7 @@ export default function RegistrationModule({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const derivedAgeLabel = ageLabelFromDob(dateOfBirth || null);
-  // Indian mobile numbers only start with 6-9 — drop any leading digits that don't qualify
-  // instead of accepting an arbitrary digit series that would only fail later at submit time.
-  const sanitizeMobile = (raw: string) => {
-    let digits = raw.replace(/\D/g, '').slice(0, 10);
-    while (digits.length > 0 && !/[6-9]/.test(digits[0])) {
-      digits = digits.slice(1);
-    }
-    return digits;
-  };
+  const sanitizeMobile = (raw: string) => sanitizeMobileInput(raw);
 
   // --- STEP 1: SEND & VERIFY OTP ---
   const handleSendRegistrationOtp = async (e: React.FormEvent) => {
@@ -100,23 +97,21 @@ export default function RegistrationModule({
     setSuccessMessage('');
 
     if (verificationType === 'mobile') {
-      const v = validateMobile(mobileNumber);
-      if (!v.ok) {
-        setErrorMessage(v.message);
+      if (!isValidIndianMobile(mobileNumber)) {
+        setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
         return;
       }
     }
     if (verificationType === 'email') {
-      const v = validateEmail(emailAddress);
-      if (!v.ok) {
-        setErrorMessage(v.message);
+      if (!isValidEmail(emailAddress)) {
+        setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
         return;
       }
     }
 
     setIsSubmitting(true);
     try {
-      const target = verificationType === 'mobile' ? mobileNumber : emailAddress;
+      const target = verificationType === 'mobile' ? normalizeMobile(mobileNumber) : emailAddress.trim().toLowerCase();
       const res = await registerSendOtpApi(target, verificationType);
       // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
       // pre-fill it instead of making the user read it off the API response and retype it.
@@ -124,7 +119,7 @@ export default function RegistrationModule({
       if (devOtp) setOtpCode(String(devOtp));
       setIsOtpSent(true);
       setOtpTimer(300);
-      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + mobileNumber : emailAddress}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
+      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + normalizeMobile(mobileNumber) : emailAddress.trim().toLowerCase()}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
     } catch (err: any) {
       // 409 = the phone/email already belongs to a patient — steer the user to login.
       const status = err?.response?.status;
@@ -146,7 +141,7 @@ export default function RegistrationModule({
 
     setIsSubmitting(true);
     try {
-      const target = verificationType === 'mobile' ? mobileNumber : emailAddress;
+      const target = verificationType === 'mobile' ? normalizeMobile(mobileNumber) : emailAddress.trim().toLowerCase();
       const result = await registerVerifyOtpApi(target, otpCode, verificationType);
       // Store the backend proof for the final registration request only (never as an auth token).
       setRegistrationToken(result?.registration_token || '');
@@ -177,15 +172,12 @@ export default function RegistrationModule({
       if (!dobVal.ok) problems.push(dobVal.message);
     }
     if (verificationType === 'mobile') {
-      const mobVal = validateMobile(mobileNumber);
-      if (!mobVal.ok) problems.push(mobVal.message);
+      if (!isValidIndianMobile(mobileNumber)) problems.push(IDENTIFIER_MESSAGES.MOBILE_INVALID);
     }
     if (verificationType === 'email') {
-      const emailVal = validateEmail(emailAddress);
-      if (!emailVal.ok) problems.push(emailVal.message);
+      if (!isValidEmail(emailAddress)) problems.push(IDENTIFIER_MESSAGES.EMAIL_INVALID);
     } else if (verificationType === 'mobile' && emailAddress.trim()) {
-      const emailVal = validateEmail(emailAddress);
-      if (!emailVal.ok) problems.push(emailVal.message);
+      if (!isValidEmail(emailAddress)) problems.push(IDENTIFIER_MESSAGES.EMAIL_INVALID);
     }
     if (!password) problems.push('Create a password.');
     else if (!isStrongPassword(password)) problems.push(PASSWORD_POLICY_MESSAGE);
@@ -288,8 +280,8 @@ export default function RegistrationModule({
     try {
       const result = await registerPatientApi({
         full_name: fullName,
-        phone: mobileNumber,
-        email: emailAddress || undefined,
+        phone: normalizeMobile(mobileNumber),
+        email: emailAddress ? emailAddress.trim().toLowerCase() : undefined,
         password,
         // Backend-authoritative proof that the phone/email was OTP-verified (Step 1).
         registration_token: registrationToken,
@@ -486,9 +478,8 @@ export default function RegistrationModule({
                           value={mobileNumber}
                           onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
                           onBlur={() => {
-                            if (mobileNumber) {
-                              const v = validateMobile(mobileNumber);
-                              if (!v.ok) setErrorMessage(v.message);
+                            if (mobileNumber && !isValidIndianMobile(mobileNumber)) {
+                              setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
                             }
                           }}
                           placeholder="10-digit mobile number"
@@ -508,9 +499,8 @@ export default function RegistrationModule({
                           value={emailAddress}
                           onChange={(e) => setEmailAddress(e.target.value)}
                           onBlur={() => {
-                            if (emailAddress) {
-                              const v = validateEmail(emailAddress);
-                              if (!v.ok) setErrorMessage(v.message);
+                            if (emailAddress && !isValidEmail(emailAddress)) {
+                              setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
                             }
                           }}
                           placeholder="abc@gmail.com"
@@ -669,9 +659,8 @@ export default function RegistrationModule({
                       value={mobileNumber}
                       onChange={(e) => setMobileNumber(sanitizeMobile(e.target.value))}
                       onBlur={() => {
-                        if (mobileNumber) {
-                          const v = validateMobile(mobileNumber);
-                          if (!v.ok) setErrorMessage(v.message);
+                        if (mobileNumber && !isValidIndianMobile(mobileNumber)) {
+                          setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
                         }
                       }}
                       placeholder="10-digit mobile"
@@ -699,9 +688,8 @@ export default function RegistrationModule({
                     value={emailAddress}
                     onChange={(e) => setEmailAddress(e.target.value)}
                     onBlur={() => {
-                      if (emailAddress) {
-                        const v = validateEmail(emailAddress);
-                        if (!v.ok) setErrorMessage(v.message);
+                      if (emailAddress && !isValidEmail(emailAddress)) {
+                        setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
                       }
                     }}
                     placeholder="sarah@example.com"

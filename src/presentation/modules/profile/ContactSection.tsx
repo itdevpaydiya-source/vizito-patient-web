@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Phone, Mail, ShieldCheck, Pencil } from 'lucide-react';
 import { sendContactOtpApi, verifyContactApi } from '../../../services/patientHelper';
-import { validateMobile, validateEmail } from '../../../utils/validators/india';
+import {
+  isValidIndianMobile,
+  isValidEmail,
+  normalizeMobile,
+  sanitizeMobileInput,
+  IDENTIFIER_MESSAGES,
+} from '../../../utils/identifier';
 
 // Mobile number and email are how the patient signs in and gets booking updates, so changing either
 // sends a code to the NEW number/email first. Nothing changes until the code is entered.
@@ -21,15 +27,15 @@ export default function ContactSection({ phone, email, onChanged, toast }: {
   const start = (w: Which) => { setEditing(w); setValue(''); setSentTo(null); setOtp(''); setErr(null); setDevOtp(null); };
   const msg = (e: any, f: string) => { const m = e?.response?.data?.message; return Array.isArray(m) ? m.join(' ') : m || f; };
   const send = async () => {
+    let v = value.trim();
     if (editing === 'phone') {
-      const mobRes = validateMobile(value);
-      if (!mobRes.ok) { setErr(mobRes.message); return; }
+      if (!isValidIndianMobile(v)) { setErr(IDENTIFIER_MESSAGES.MOBILE_INVALID); return; }
+      v = normalizeMobile(v);
     }
     if (editing === 'email') {
-      const emailRes = validateEmail(value);
-      if (!emailRes.ok) { setErr(emailRes.message); return; }
+      if (!isValidEmail(v)) { setErr(IDENTIFIER_MESSAGES.EMAIL_INVALID); return; }
+      v = v.toLowerCase();
     }
-    const v = editing === 'phone' ? validateMobile(value).value : validateEmail(value).value;
     setBusy(true); setErr(null);
     try { const r = await sendContactOtpApi({ [editing as string]: v }); setSentTo(v); setDevOtp(r.dev_otp || null); }
     catch (e) { setErr(msg(e, 'Could not send the code. Please try again.')); } finally { setBusy(false); }
@@ -59,16 +65,11 @@ export default function ContactSection({ phone, email, onChanged, toast }: {
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
           {!sentTo ? (<>
             <label className="text-[11px] font-bold text-slate-600">New {w === 'phone' ? 'mobile number' : 'email'}</label>
-            <input autoFocus aria-label={`New ${w === 'phone' ? 'mobile number' : 'email'}`} value={value} onChange={(e) => setValue(w === 'phone' ? e.target.value.replace(/[^\d]/g, '').slice(0, 10) : e.target.value)}
+            <input autoFocus aria-label={`New ${w === 'phone' ? 'mobile number' : 'email'}`} value={value} onChange={(e) => setValue(w === 'phone' ? sanitizeMobileInput(e.target.value) : e.target.value)}
               onBlur={() => {
-                if (value) {
-                  if (w === 'phone') {
-                    const m = validateMobile(value);
-                    if (!m.ok) setErr(m.message);
-                  } else {
-                    const em = validateEmail(value);
-                    if (!em.ok) setErr(em.message);
-                  }
+                if (value.trim()) {
+                  if (w === 'phone' && !isValidIndianMobile(value)) setErr(IDENTIFIER_MESSAGES.MOBILE_INVALID);
+                  if (w === 'email' && !isValidEmail(value)) setErr(IDENTIFIER_MESSAGES.EMAIL_INVALID);
                 }
               }}
               inputMode={w === 'phone' ? 'tel' : 'email'} placeholder={w === 'phone' ? '10-digit mobile number' : 'name@example.com'}

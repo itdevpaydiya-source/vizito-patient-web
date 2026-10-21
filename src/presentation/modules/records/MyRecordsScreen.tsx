@@ -237,7 +237,7 @@ export default function MyRecordsScreen() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
               <p className="font-bold text-slate-800 mb-1">The pharmacy will see</p>
               <ul className="list-disc pl-5 space-y-0.5 text-[13px]">
-                <li>Your name, age, sex and mobile number</li>
+                <li>Your name, age, gender and mobile number</li>
                 <li>Doctor's name and registration number</li>
                 <li>Diagnosis{sendingRx.diagnosis ? `: ${sendingRx.diagnosis}` : ''}</li>
                 <li>Medicines: {sendingRx.medicines.map((m) => m.name).filter(Boolean).join(', ')}</li>
