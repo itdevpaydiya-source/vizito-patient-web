@@ -21,6 +21,8 @@ export interface PatientReview {
   provider_name?: string | null;
   consultation_type?: string | null;
   location?: string | null;
+  imageUrl?: string | null;
+  image_url?: string | null;
 }
 
 export interface ProviderReviewSummary {

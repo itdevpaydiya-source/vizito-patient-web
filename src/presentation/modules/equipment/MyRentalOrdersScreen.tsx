@@ -74,16 +74,6 @@ export const MyRentalOrdersScreen: React.FC = () => {
   const tabList = [
     { id: 'all', label: 'All', count: orders.length },
     {
-      id: 'awaiting_confirmation',
-      label: 'Awaiting Confirmation',
-      count: orders.filter((o) => o.status === 'awaiting_confirmation').length,
-    },
-    {
-      id: 'payment_pending',
-      label: 'Payment Pending',
-      count: orders.filter((o) => o.status === 'payment_pending').length,
-    },
-    {
       id: 'confirmed',
       label: 'Confirmed',
       count: orders.filter((o) => o.status === 'confirmed').length,

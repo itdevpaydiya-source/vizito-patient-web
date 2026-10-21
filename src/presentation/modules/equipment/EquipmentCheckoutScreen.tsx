@@ -1013,9 +1013,9 @@ export const EquipmentCheckoutScreen: React.FC = () => {
                 <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
                   <Check className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900">Payment Successful &amp; Order Placed!</h3>
+                <h3 className="text-base font-bold text-slate-900">Payment Successful &amp; Order Confirmed!</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Your payment has been received and your rental order for <strong>{item.name}</strong> has been sent to <strong>{provider.name}</strong>. The partner will accept your order and prepare your equipment for delivery.
+                  Your payment has been received and your rental order for <strong>{item.name}</strong> is confirmed with <strong>{provider.name}</strong>. Your equipment is confirmed and will be dispatched out for delivery.
                 </p>
                 <div className="pt-2">
                   <button

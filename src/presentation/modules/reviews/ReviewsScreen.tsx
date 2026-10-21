@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Star, MessageSquare, AlertCircle, RotateCcw, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Clock } from 'lucide-react';
+import { Star, MessageSquare, AlertCircle, RotateCcw, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Clock, Package } from 'lucide-react';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import { getDashboardApi } from '../../../services/dashboardHelper';
 import { createReviewApi, getMyReviewListApi, type PatientReview } from '../../../services/reviewHelper';
@@ -7,6 +7,7 @@ import { myLabOrdersApi, rateMyLabOrderApi } from '../../../services/labHelper';
 import { getMyOrdersApi, ratePharmacyOrderApi } from '../../../services/pharmacyOrderHelper';
 import { hcMineApi, hcRateApi } from '../../../services/homecareHelper';
 import { getProviderDetailApi } from '../../../services/bookingHelper';
+import { equipmentService } from '../equipment/equipmentService';
 import RateBox from '../../components/RateBox';
 import { KIND_LABEL, type CareKind } from '../../components/reviewKinds';
 
@@ -16,10 +17,11 @@ import { KIND_LABEL, type CareKind } from '../../components/reviewKinds';
 
 interface ToRate {
   key: string; kind: CareKind; provider: string; partnerId: string | null; what: string; where: string | null; when: string | null; forWhom: string | null;
+  imageUrl?: string;
   submit: (rating: number, review: string, tags: string[]) => Promise<unknown>;
 }
 
-const ICON: Record<CareKind, React.ElementType> = { doctor: Stethoscope, hospital: Building2, lab: FlaskConical, pharmacy: Pill, homecare: HeartHandshake };
+const ICON: Record<CareKind, React.ElementType> = { doctor: Stethoscope, hospital: Building2, lab: FlaskConical, pharmacy: Pill, homecare: HeartHandshake, equipment: Package };
 const VISIT: Record<string, string> = { VIDEO_CALL: 'Video consultation', IN_CLINIC: 'In-clinic visit', HOME_VISIT: 'Doctor home visit' };
 const dateText = (d?: string | null) => { if (!d) return null; const x = new Date(d); return Number.isNaN(x.getTime()) ? null : x.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); };
 const ago = (d?: string | null) => {
@@ -28,7 +30,7 @@ const ago = (d?: string | null) => {
 };
 const kindOfReview = (r: PatientReview): CareKind => {
   const t = String(r.consultation_type || '');
-  return /^Lab tests/i.test(t) ? 'lab' : /^Pharmacy order/i.test(t) ? 'pharmacy' : /^Home care/i.test(t) ? 'homecare' : 'doctor';
+  return /^Lab tests/i.test(t) ? 'lab' : /^Pharmacy order/i.test(t) ? 'pharmacy' : /^Home care/i.test(t) ? 'homecare' : /^Equipment/i.test(t) ? 'equipment' : 'doctor';
 };
 const Stars = ({ n }: { n: number }) => (
   <span className="inline-flex" aria-label={`${n} out of 5 stars`}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} className={`w-4 h-4 ${i <= n ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />)}</span>
@@ -47,10 +49,15 @@ export default function ReviewsScreen() {
   const load = useCallback(async (quiet = false) => {
     if (!quiet) { setLoading(true); setError(null); }
     try {
-      const [dash, reviews, labs, pharm, hc] = await Promise.all([
-        getDashboardApi().catch(() => null), getMyReviewListApi(),
-        myLabOrdersApi().catch(() => []), getMyOrdersApi().catch(() => []), hcMineApi().catch(() => []),
+      const [dash, reviewsRaw, labs, pharm, hc, equip] = await Promise.all([
+        getDashboardApi().catch(() => null),
+        getMyReviewListApi().catch(() => []),
+        myLabOrdersApi().catch(() => []),
+        getMyOrdersApi().catch(() => []),
+        hcMineApi().catch(() => []),
+        equipmentService.getMyOrders().catch(() => ({ orders: [] })),
       ]);
+      const reviews = Array.isArray(reviewsRaw) ? [...reviewsRaw] : [];
       const reviewed = new Set(reviews.map((r) => String(r.booking_id)));
       const items: ToRate[] = [];
       for (const b of dash?.history || []) {
@@ -76,6 +83,51 @@ export default function ReviewsScreen() {
           what: `${o.service_name} · visit ${v.seq}${v.professional ? ` by ${v.professional.name} (${v.professional.role_label})` : ''}`, where: null, when: v.completed_at || v.date, forWhom: o.patient_name,
           submit: (r, t, g) => hcRateApi(v.id, r, t, g) });
       }
+      for (const o of equip?.orders || []) {
+        if (o.feedback && o.feedback.rating) {
+          reviews.push({
+            id: `rental-rev-${o.id}`,
+            booking_id: o.orderNumber,
+            doctor_id: null,
+            doctor_name: o.equipmentName,
+            imageUrl: o.equipmentImage,
+            image_url: o.equipmentImage,
+            reviewer_name: o.deliveryAddress?.recipientName || 'You',
+            rating: Number(o.feedback.rating || 5),
+            review: o.feedback.review || null,
+            tags: o.feedback.tags || [],
+            partner_id: o.provider?.id || null,
+            provider_name: o.provider?.businessName || o.provider?.name || 'Equipment Rental Hub',
+            consultation_type: 'Equipment rental',
+            location: o.deliveryAddress?.city || null,
+            status: o.feedback.partner_response ? 'Responded' : 'Pending',
+            partner_response: typeof o.feedback.partner_response === 'object'
+              ? (o.feedback.partner_response?.response_text || o.feedback.partner_response?.responseText)
+              : (o.feedback.partner_response || null),
+            responded_at: o.feedback.partner_response?.date || null,
+            created_at: o.feedback.submitted_at || o.createdAt,
+          });
+        } else if (
+          ['active', 'out_for_delivery', 'delivered', 'return_scheduled', 'return_requested', 'return_inspection_pending', 'completed'].includes(String(o.status).toLowerCase())
+        ) {
+          items.push({
+            key: `e:${o.id}`,
+            kind: 'equipment',
+            provider: o.provider?.businessName || o.provider?.name || 'Equipment Rental Hub',
+            partnerId: o.provider?.id || null,
+            imageUrl: o.equipmentImage,
+            what: `Equipment rental · ${o.equipmentName} (${o.orderNumber})`,
+            where: [o.deliveryAddress?.city, o.deliveryAddress?.pincode].filter(Boolean).join(', ') || null,
+            when: o.createdAt,
+            forWhom: o.deliveryAddress?.recipientName || null,
+            submit: async (r, t, g) => {
+              const res = await equipmentService.submitOrderFeedback(o.orderNumber, { rating: r, review: t, tags: g });
+              if (!res.success) throw new Error(res.message);
+              await load(true);
+            },
+          });
+        }
+      }
       items.sort((a, b) => String(b.when || '').localeCompare(String(a.when || '')));
       setToRate(items); setMine(reviews);
       // Names the bookings don't carry (doctor / pharmacy), looked up once each.
@@ -96,14 +148,14 @@ export default function ReviewsScreen() {
   const list = tab === 'rate' ? toRate : mine;
   const kindOf = (x: any): CareKind => (tab === 'rate' ? x.kind : kindOfReview(x));
   const filtered = useMemo(() => list.filter((x: any) => kind === 'all' || kindOf(x) === kind || (kind === 'doctor' && kindOf(x) === 'hospital')), [list, kind, tab]); // eslint-disable-line react-hooks/exhaustive-deps
-  const kinds: (CareKind | 'all')[] = ['all', 'doctor', 'lab', 'pharmacy', 'homecare'];
+  const kinds: (CareKind | 'all')[] = ['all', 'doctor', 'lab', 'pharmacy', 'homecare', 'equipment'];
   const countOf = (k: CareKind | 'all') => list.filter((x: any) => k === 'all' || kindOf(x) === k || (k === 'doctor' && kindOf(x) === 'hospital')).length;
 
   return (
     <div className="space-y-5 pb-12 w-full">
       <div>
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Ratings & Reviews</h1>
-        <p className="text-sm text-slate-500 mt-1">Rate the care you received from doctors, hospitals, labs, pharmacies and home care. Your reviews help other patients choose, and providers reply here.</p>
+        <p className="text-sm text-slate-500 mt-1">Rate the care you received from doctors, hospitals, labs, pharmacies, home care and equipment rentals. Your reviews help other patients choose, and providers reply here.</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Summary">
@@ -161,7 +213,20 @@ export default function ReviewsScreen() {
               return (
                 <li key={it.key} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
                   <div className="flex items-start gap-3">
-                    <span className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                    {it.imageUrl ? (
+                      <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                        <img
+                          src={it.imageUrl}
+                          alt={it.what}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <span className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-extrabold uppercase tracking-wider text-teal-700">{KIND_LABEL[it.kind]}</p>
                       <h3 className="font-extrabold text-slate-900">{name}</h3>
@@ -174,11 +239,24 @@ export default function ReviewsScreen() {
               );
             }
             const r = x as PatientReview; const k = kindOfReview(r); const Icon = ICON[k];
-            const name = formatDoctorName(r.doctor_name) || r.provider_name || (r.partner_id && names[r.partner_id]) || KIND_LABEL[k];
+            const name = (k === 'equipment' ? (r.doctor_name ? `${r.doctor_name} · ${r.provider_name || 'Equipment Rental'}` : r.provider_name) : formatDoctorName(r.doctor_name)) || r.provider_name || (r.partner_id && names[r.partner_id]) || KIND_LABEL[k];
             return (
               <li key={r.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2">
                 <div className="flex items-start gap-3">
-                  <span className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                  {r.imageUrl ? (
+                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                      <img
+                        src={r.imageUrl}
+                        alt={name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <span className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-extrabold text-slate-900">{name}</h3>

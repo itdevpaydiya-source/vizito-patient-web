@@ -48,6 +48,8 @@ export interface PatientEquipmentItem {
   providerZipcode?: string;
   providerLatitude?: number;
   providerLongitude?: number;
+  providerLogo?: string;
+  providerBanner?: string;
   lowestRentalPrice?: number;
   availableRentals?: PatientEquipmentItem[];
   providerDetails?: RentalProviderProfile;
@@ -84,6 +86,9 @@ export interface RentalProviderProfile {
   securityDepositPolicy?: string;
   booking_window?: number;
   cancellation_window?: number;
+  logo?: string;
+  banner?: string;
+  specialization?: string;
   social_links?: {
     facebook?: string;
     instagram?: string;
@@ -196,6 +201,7 @@ export interface PatientRentalOrder {
   provider?: {
     id?: string;
     name?: string;
+    businessName?: string;
     phone?: string;
     email?: string;
     address?: string;
@@ -215,6 +221,7 @@ export interface PatientRentalOrder {
     review?: string;
     tags?: string[];
     submitted_at?: string;
+    partner_response?: any;
   };
 }
 

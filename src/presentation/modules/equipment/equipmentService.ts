@@ -30,6 +30,34 @@ function resolveImageUrl(path?: string): string {
 }
 
 function mapBackendProductToEquipmentItem(p: any): PatientEquipmentItem {
+  let specs: { label: string; value: string }[] = [];
+  if (p.specifications) {
+    let rawSpecs = p.specifications;
+    if (typeof rawSpecs === 'string') {
+      try {
+        rawSpecs = JSON.parse(rawSpecs);
+      } catch {}
+    }
+    if (Array.isArray(rawSpecs)) {
+      specs = rawSpecs.map((s: any) => {
+        if (typeof s === 'object' && s !== null) {
+          return {
+            label: s.label || s.key || s.name || 'Specification',
+            value: String(s.value ?? s.val ?? ''),
+          };
+        }
+        return { label: 'Feature', value: String(s) };
+      });
+    } else if (typeof rawSpecs === 'object' && rawSpecs !== null) {
+      specs = Object.entries(rawSpecs)
+        .filter(
+          ([label]) =>
+            !['average_rating', 'review_count', 'customer_reviews'].includes(label),
+        )
+        .map(([label, value]) => ({ label, value: String(value) }));
+    }
+  }
+
   return {
     id: String(p.id),
     name: p.name,
@@ -41,14 +69,7 @@ function mapBackendProductToEquipmentItem(p: any): PatientEquipmentItem {
     additionalImages: p.gallery_images || [],
     shortDescription: p.brand ? `${p.brand} ${p.model_number || ''}` : p.name,
     fullDescription: p.description || p.name,
-    specifications: p.specifications
-      ? Object.entries(p.specifications)
-          .filter(
-            ([label]) =>
-              !['average_rating', 'review_count', 'customer_reviews'].includes(label),
-          )
-          .map(([label, value]) => ({ label, value: String(value) }))
-      : [],
+    specifications: specs,
     includedAccessories: p.highlights || [],
     safetyGuidelines: ['Operate strictly per manufacturer instructions.'],
     clinicalUsageNotice: 'Certified clinical equipment sanitized prior to delivery.',
@@ -71,6 +92,13 @@ function mapBackendProductToEquipmentItem(p: any): PatientEquipmentItem {
     providerZipcode: p.provider_zipcode,
     providerLatitude: p.provider_latitude ? Number(p.provider_latitude) : undefined,
     providerLongitude: p.provider_longitude ? Number(p.provider_longitude) : undefined,
+    providerLogo: p.provider_logo ? resolveImageUrl(p.provider_logo) : undefined,
+    providerBanner: p.provider_banner ? resolveImageUrl(p.provider_banner) : undefined,
+    lowestRentalPrice: p.lowest_rental_price != null ? Number(p.lowest_rental_price) : undefined,
+    availableRentals: Array.isArray(p.available_rentals)
+      ? p.available_rentals.map(mapBackendProductToEquipmentItem)
+      : [],
+    providerDetails: p.provider_details,
   };
 }
 
@@ -102,14 +130,12 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
     o.status === 'OUT_FOR_DELIVERY'
   ) {
     status = 'out_for_delivery';
-  } else if (o.status === 'NEW') {
-    status = 'awaiting_confirmation';
-  } else if (o.status === 'ACCEPTED') {
+  } else if (o.status === 'NEW' || o.status === 'ACCEPTED') {
     status = 'confirmed';
   } else if (o.status === 'ACTIVE') {
     status = 'active';
   } else {
-    status = (o.status?.toLowerCase() as RentalOrderStatus) || 'awaiting_confirmation';
+    status = (o.status?.toLowerCase() as RentalOrderStatus) || 'confirmed';
   }
 
   const returnDetails = retSched
@@ -314,7 +340,11 @@ export const equipmentService = {
     try {
       const res = await apiClient.get(`/rental/patient/providers/${encodeURIComponent(providerId)}/profile`);
       if (res.data) {
-        return res.data;
+        return {
+          ...res.data,
+          logo: res.data.logo ? resolveImageUrl(res.data.logo) : '',
+          banner: res.data.banner ? resolveImageUrl(res.data.banner) : '',
+        };
       }
     } catch (err) {
       console.warn(`Failed to load provider profile for id ${providerId}:`, err);

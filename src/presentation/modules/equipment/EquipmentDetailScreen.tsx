@@ -29,38 +29,7 @@ import type { PatientEquipmentItem, RentalProviderProfile } from './types';
 import { equipmentService } from './equipmentService';
 import { getPatientProfileApi } from '../../../services/patientHelper';
 import { calculateAddressDistanceKm, calculateEquipmentDeliveryFee } from './distanceUtils';
-
-const SocialFacebookIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-  </svg>
-);
-
-const SocialInstagramIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-  </svg>
-);
-
-const SocialTwitterIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-  </svg>
-);
-
-const SocialLinkedInIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-  </svg>
-);
-
-const SocialYouTubeIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-  </svg>
-);
+import { PartnerProfileModal } from './PartnerProfileModal';
 
 interface RentalProvider {
   id: string;
@@ -71,7 +40,7 @@ interface RentalProvider {
   reviewCount: number;
   location: string;
   distanceText: string;
-  distanceKm: number;
+  distanceKm: number | null;
   rentalPrice: number;
   deposit: number;
   inStock: boolean;
@@ -79,6 +48,8 @@ interface RentalProvider {
   deliveryType: string;
   deliveryEst: string;
   image: string;
+  logo?: string;
+  banner?: string;
   phone: string;
   email?: string;
   address: string;
@@ -96,8 +67,6 @@ export const EquipmentDetailScreen: React.FC = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [showMoreModal, setShowMoreModal] = useState<boolean>(false);
   const [selectedProviderModal, setSelectedProviderModal] = useState<RentalProvider | null>(null);
-  const [providerProfileData, setProviderProfileData] = useState<RentalProviderProfile | null>(null);
-  const [loadingProviderProfile, setLoadingProviderProfile] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'price_asc' | 'price_desc' | 'distance' | 'rating'>('price_asc');
   const [distanceRadius, setDistanceRadius] = useState<number>(10);
   const [patientAddress, setPatientAddress] = useState<any>(null);
@@ -148,7 +117,14 @@ export const EquipmentDetailScreen: React.FC = () => {
           console.warn('Catalogue match error:', e);
         }
 
-        if (!allMatchingProducts.some((p) => p.id === data.id)) {
+        // Make sure data (with full specifications and description) is stored in allMatchingProducts
+        const existingDataIdx = allMatchingProducts.findIndex((p) => p.id === data.id);
+        if (existingDataIdx >= 0) {
+          allMatchingProducts[existingDataIdx] = {
+            ...allMatchingProducts[existingDataIdx],
+            ...data,
+          };
+        } else {
           allMatchingProducts.push(data);
         }
 
@@ -158,8 +134,21 @@ export const EquipmentDetailScreen: React.FC = () => {
         // Display the lowest price product as the featured product at the top
         const lowestPriceItem = allMatchingProducts[0];
 
+        // Ensure specifications, accessories, and descriptions are never lost
+        const mergedSpecs = (lowestPriceItem.specifications && lowestPriceItem.specifications.length > 0)
+          ? lowestPriceItem.specifications
+          : (data.specifications && data.specifications.length > 0 ? data.specifications : []);
+
+        const mergedAccessories = (lowestPriceItem.includedAccessories && lowestPriceItem.includedAccessories.length > 0)
+          ? lowestPriceItem.includedAccessories
+          : (data.includedAccessories && data.includedAccessories.length > 0 ? data.includedAccessories : []);
+
         setItem({
+          ...data,
           ...lowestPriceItem,
+          specifications: mergedSpecs,
+          includedAccessories: mergedAccessories,
+          fullDescription: lowestPriceItem.fullDescription || data.fullDescription,
           lowestRentalPrice: lowestPriceItem.dailyRate,
           availableRentals: allMatchingProducts,
         });
@@ -253,8 +242,8 @@ export const EquipmentDetailScreen: React.FC = () => {
         }
       );
 
-      const dist = pDist != null ? pDist : (calculatedDistance != null ? calculatedDistance : 0);
-      const distText = dist != null ? `${dist} km away` : 'Address on file';
+      const dist = pDist != null ? pDist : calculatedDistance;
+      const distText = dist != null ? `${dist} km away` : (p.providerLocation || p.providerAddress || 'Address on file');
 
       return {
         id: p.providerId || `prov-${p.id}`,
@@ -273,6 +262,8 @@ export const EquipmentDetailScreen: React.FC = () => {
         deliveryType: 'Doorstep Delivery & Installation',
         deliveryEst: 'Within 24 hours',
         image: p.imageUrl || item.imageUrl || '/equipment/hospital-bed.jpg',
+        logo: p.providerLogo || p.providerDetails?.logo,
+        banner: p.providerBanner || p.providerDetails?.banner,
         phone: providerPhone,
         email: p.providerEmail,
         address: providerAddress,
@@ -285,33 +276,21 @@ export const EquipmentDetailScreen: React.FC = () => {
 
   // Sorted and filtered providers
   const filteredProviders = useMemo(() => {
-    let list = [...providers].filter((p) => p.distanceKm <= distanceRadius);
+    let list = [...providers].filter((p) => p.distanceKm == null || p.distanceKm <= distanceRadius);
     if (sortBy === 'price_asc') {
       list.sort((a, b) => a.rentalPrice - b.rentalPrice);
     } else if (sortBy === 'price_desc') {
       list.sort((a, b) => b.rentalPrice - a.rentalPrice);
     } else if (sortBy === 'distance') {
-      list.sort((a, b) => a.distanceKm - b.distanceKm);
+      list.sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999));
     } else if (sortBy === 'rating') {
       list.sort((a, b) => b.rating - a.rating);
     }
     return list;
   }, [providers, sortBy, distanceRadius]);
 
-  const handleOpenProviderModal = async (provider: RentalProvider) => {
+  const handleOpenProviderModal = (provider: RentalProvider) => {
     setSelectedProviderModal(provider);
-    setProviderProfileData(provider.providerDetails || null);
-    setLoadingProviderProfile(true);
-    try {
-      const prof = await equipmentService.getProviderProfile(provider.id);
-      if (prof) {
-        setProviderProfileData(prof);
-      }
-    } catch (e) {
-      console.warn('Failed to fetch provider profile:', e);
-    } finally {
-      setLoadingProviderProfile(false);
-    }
   };
 
   const handleSelectRental = (provider: RentalProvider) => {
@@ -533,31 +512,78 @@ export const EquipmentDetailScreen: React.FC = () => {
               </button>
             </p>
 
-            {/* 2 Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Metric 1: Lowest Rental Price */}
-              <div className="bg-[#FFFDF9] border border-[#FDE3CF] rounded-xl p-3 flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <Tag className="w-3.5 h-3.5 text-[#C26532] shrink-0" />
-                  <span className="text-[11px] font-medium text-slate-500">Lowest Rental Price</span>
-                </div>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-xl font-black text-slate-900">₹{item.dailyRate}</span>
-                  <span className="text-xs font-bold text-slate-700">/ day</span>
-                </div>
-              </div>
+            {/* 3 Metric Cards */}
+            {(() => {
+              const lowestPrice = filteredProviders.length > 0
+                ? Math.min(...filteredProviders.map((p) => p.rentalPrice))
+                : (item.lowestRentalPrice || item.dailyRate);
 
-              {/* Metric 2: Distance */}
-              <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <MapPin className="w-3.5 h-3.5 text-[#1A73E8] shrink-0" />
-                  <span className="text-[11px] font-medium text-slate-500">Distance from your address</span>
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* Metric 1: Lowest Rental Price */}
+                  <div className="bg-[#FFFDF9] border border-[#FDE3CF] rounded-xl p-3 flex flex-col justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-600">
+                      <Tag className="w-3.5 h-3.5 text-[#C26532] shrink-0" />
+                      <span className="text-[11px] font-medium text-slate-500">Lowest Rental Price</span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="text-xl font-black text-slate-900">₹{lowestPrice}</span>
+                      <span className="text-xs font-bold text-slate-700">/ day</span>
+                    </div>
+                  </div>
+
+                  {/* Metric 2: Refundable Security Deposit */}
+                  <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded-xl p-3 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-[11px] font-medium text-slate-600">Security Deposit</span>
+                      </div>
+                      <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-100/90 border border-emerald-200 px-1.5 py-0.2 rounded">
+                        Refundable
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1">
+                      <span className="text-xl font-black text-slate-900">
+                        ₹{(item.securityDeposit ?? (filteredProviders?.[0]?.deposit || 5000)).toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[10px] font-semibold text-emerald-700">100% back</span>
+                    </div>
+                  </div>
+
+                  {/* Metric 3: Distance */}
+                  <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-3 flex flex-col justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-600">
+                      <MapPin className="w-3.5 h-3.5 text-[#1A73E8] shrink-0" />
+                      <span className="text-[11px] font-medium text-slate-500">Distance from address</span>
+                    </div>
+                    <div className="mt-2">
+                      <span className="text-xl font-black text-slate-900">
+                        {calculatedDistance != null ? `${calculatedDistance} km` : '--'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2">
-                  <span className="text-xl font-black text-slate-900">
-                    {calculatedDistance != null ? `${calculatedDistance} km` : '--'}
+              );
+            })()}
+
+            {/* Informational Message about Security Deposit */}
+            <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-200/90 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 text-xs flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-amber-950">Security Deposit:</span>
+                  <span className="font-black text-amber-900">
+                    ₹{(item.securityDeposit ?? (filteredProviders?.[0]?.deposit || 5000)).toLocaleString('en-IN')}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                    100% Refundable
                   </span>
                 </div>
+                <p className="text-[11.5px] text-amber-900/90 leading-relaxed font-normal">
+                  A refundable security deposit of <strong>₹{(item.securityDeposit ?? (filteredProviders?.[0]?.deposit || 5000)).toLocaleString('en-IN')}</strong> is settled directly with the rental partner upon delivery and return inspection. It is separate from the daily rental price and is not included in the platform checkout total.
+                </p>
               </div>
             </div>
           </div>
@@ -676,22 +702,37 @@ export const EquipmentDetailScreen: React.FC = () => {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
               {/* Left Column: Image + Store Name & Location */}
               <div className="flex items-start gap-4 min-w-[280px]">
-                <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                  <img
-                    src={provider.image}
-                    alt={provider.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
-                    }}
-                  />
+                <div
+                  className="w-20 h-20 rounded-xl overflow-hidden bg-slate-50 border border-slate-200 shrink-0 cursor-pointer hover:opacity-90 transition-opacity flex items-center justify-center p-1.5"
+                  onClick={() => setSelectedProviderModal(provider)}
+                  title="Click to view partner business details, banner and logo"
+                >
+                  {provider.logo ? (
+                    <img
+                      src={provider.logo}
+                      alt={provider.name}
+                      className="w-full h-full object-contain rounded-lg"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-lg bg-amber-50 border border-amber-200/60 flex items-center justify-center text-[#9C4119] font-black text-xl">
+                      {provider.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProviderModal(provider)}
+                      className="text-left font-bold text-slate-900 text-sm sm:text-base hover:text-[#9C4119] hover:underline cursor-pointer transition-colors"
+                      title="Click to view partner business details, banner and logo"
+                    >
                       {provider.name}
-                    </h3>
+                    </button>
                     {provider.verified && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md">
                         <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
@@ -908,374 +949,33 @@ export const EquipmentDetailScreen: React.FC = () => {
         </div>
       )}
 
-      {/* 7. Modal: Verified Provider Business & Social Profile */}
-      {selectedProviderModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5 p-5 sm:p-6 my-auto">
-            {/* Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center text-slate-700 font-bold text-lg">
-                  {selectedProviderModal.image ? (
-                    <img
-                      src={selectedProviderModal.image}
-                      alt={selectedProviderModal.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
-                      }}
-                    />
-                  ) : (
-                    <span>{(providerProfileData?.businessName || selectedProviderModal.name).charAt(0)}</span>
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-900 text-base sm:text-lg">
-                      {providerProfileData?.businessName || selectedProviderModal.name}
-                    </h3>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md">
-                      <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-                      Verified Partner
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
-                    {providerProfileData?.partnerCode && (
-                      <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-semibold text-[11px]">
-                        ID: {providerProfileData.partnerCode}
-                      </span>
-                    )}
-                    {providerProfileData?.ownerName && (
-                      <span>Managed by: <strong className="text-slate-700">{providerProfileData.ownerName}</strong></span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedProviderModal(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {loadingProviderProfile && (
-              <div className="py-1 px-3 bg-sky-50 border border-sky-100 rounded-lg text-sky-700 text-xs flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />
-                Loading latest partner business & social profile...
-              </div>
-            )}
-
-            {/* Quick Badges */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 block text-[11px]">Established</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
-                  {providerProfileData?.establishedYear ? `Year ${providerProfileData.establishedYear}` : 'Verified Partner'}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 block text-[11px]">Delivery Radius</span>
-                <span className="font-bold text-slate-900 mt-0.5 block">
-                  {providerProfileData?.serviceAreaRadius ? `Within ${providerProfileData.serviceAreaRadius} km` : selectedProviderModal.distanceText}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2 sm:col-span-1">
-                <span className="text-slate-400 block text-[11px]">Customer Rating</span>
-                <div className="flex items-center gap-1 font-bold text-slate-900 mt-0.5">
-                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                  <span>{selectedProviderModal.rating && selectedProviderModal.rating > 0 ? selectedProviderModal.rating : '4.8'}</span>
-                  <span className="text-slate-400 font-normal text-[11px]">({selectedProviderModal.reviewCount || 12} reviews)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* About / Business Info */}
-            <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-[#9C4119]" />
-                About Business
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                {providerProfileData?.about ||
-                  `${providerProfileData?.businessName || selectedProviderModal.name} is an authorized Vizito healthcare equipment partner providing certified medical grade beds, mobility devices, and life support apparatus with biomedical inspection and home installation.`}
-              </p>
-            </div>
-
-            {/* Business Contact & Showroom Location */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#9C4119]" />
-                Showroom & Contact Details
-              </h4>
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 space-y-2.5 text-xs">
-                {/* Showroom Address */}
-                <div className="flex items-start gap-2.5 text-slate-700">
-                  <MapPin className="w-4 h-4 text-[#1A73E8] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block text-slate-900">Showroom / Warehouse Address:</span>
-                    <p className="text-slate-600 leading-relaxed mt-0.5">
-                      {providerProfileData?.address || selectedProviderModal.address}
-                      {providerProfileData?.location && !providerProfileData.address?.includes(providerProfileData.location)
-                        ? `, ${providerProfileData.location}`
-                        : ''}
-                      {providerProfileData?.pincode ? ` - ${providerProfileData.pincode}` : ''}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Operating Hours */}
-                <div className="flex items-start gap-2.5 text-slate-700">
-                  <Clock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block text-slate-900">Operating Hours:</span>
-                    <p className="text-slate-600 mt-0.5">{selectedProviderModal.hours}</p>
-                  </div>
-                </div>
-
-                {/* Phone */}
-                {(providerProfileData?.phone || selectedProviderModal.phone) && (
-                  <div className="flex items-start gap-2.5 text-slate-700">
-                    <Phone className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block text-slate-900">Support & Dispatch Helpline:</span>
-                      <a
-                        href={`tel:${providerProfileData?.phone || selectedProviderModal.phone}`}
-                        className="text-emerald-700 font-semibold hover:underline mt-0.5 inline-block"
-                      >
-                        {providerProfileData?.phone || selectedProviderModal.phone}
-                      </a>
-                    </div>
-                  </div>
-                )}
-
-                {/* Email */}
-                {(providerProfileData?.email || selectedProviderModal.email) && (
-                  <div className="flex items-start gap-2.5 text-slate-700">
-                    <Mail className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block text-slate-900">Official Support Email:</span>
-                      <a
-                        href={`mailto:${providerProfileData?.email || selectedProviderModal.email}`}
-                        className="text-sky-700 font-semibold hover:underline mt-0.5 inline-block"
-                      >
-                        {providerProfileData?.email || selectedProviderModal.email}
-                      </a>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Social & Digital Presence */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-[#9C4119]" />
-                Social & Digital Presence
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {/* Website */}
-                {(providerProfileData?.socialLinks?.website || providerProfileData?.website) ? (
-                  <a
-                    href={
-                      (providerProfileData?.socialLinks?.website || providerProfileData?.website)?.startsWith('http')
-                        ? (providerProfileData?.socialLinks?.website || providerProfileData?.website)
-                        : `https://${providerProfileData?.socialLinks?.website || providerProfileData?.website}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200/80 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <Globe className="w-4 h-4 text-sky-600 shrink-0" />
-                      <span className="text-xs font-semibold group-hover:text-slate-900">Website</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-slate-700" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <Globe className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>Website: Pending</span>
-                  </div>
-                )}
-
-                {/* Instagram */}
-                {providerProfileData?.socialLinks?.instagram ? (
-                  <a
-                    href={
-                      providerProfileData.socialLinks.instagram.startsWith('http')
-                        ? providerProfileData.socialLinks.instagram
-                        : `https://instagram.com/${providerProfileData.socialLinks.instagram.replace('@', '')}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-pink-50/60 hover:bg-pink-100/60 rounded-xl border border-pink-200/60 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-pink-700">
-                      <SocialInstagramIcon className="w-4 h-4 text-pink-600 shrink-0" />
-                      <span className="text-xs font-semibold">Instagram</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-pink-400 group-hover:text-pink-700" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <SocialInstagramIcon className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>Instagram</span>
-                  </div>
-                )}
-
-                {/* Facebook */}
-                {providerProfileData?.socialLinks?.facebook ? (
-                  <a
-                    href={
-                      providerProfileData.socialLinks.facebook.startsWith('http')
-                        ? providerProfileData.socialLinks.facebook
-                        : `https://facebook.com/${providerProfileData.socialLinks.facebook}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-blue-50/60 hover:bg-blue-100/60 rounded-xl border border-blue-200/60 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-blue-700">
-                      <SocialFacebookIcon className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span className="text-xs font-semibold">Facebook</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-blue-400 group-hover:text-blue-700" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <SocialFacebookIcon className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>Facebook</span>
-                  </div>
-                )}
-
-                {/* LinkedIn */}
-                {providerProfileData?.socialLinks?.linkedin ? (
-                  <a
-                    href={
-                      providerProfileData.socialLinks.linkedin.startsWith('http')
-                        ? providerProfileData.socialLinks.linkedin
-                        : `https://linkedin.com/in/${providerProfileData.socialLinks.linkedin}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-sky-50/60 hover:bg-sky-100/60 rounded-xl border border-sky-200/60 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-sky-700">
-                      <SocialLinkedInIcon className="w-4 h-4 text-sky-600 shrink-0" />
-                      <span className="text-xs font-semibold">LinkedIn</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-sky-400 group-hover:text-sky-700" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <SocialLinkedInIcon className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>LinkedIn</span>
-                  </div>
-                )}
-
-                {/* Twitter / X */}
-                {providerProfileData?.socialLinks?.twitter ? (
-                  <a
-                    href={
-                      providerProfileData.socialLinks.twitter.startsWith('http')
-                        ? providerProfileData.socialLinks.twitter
-                        : `https://x.com/${providerProfileData.socialLinks.twitter.replace('@', '')}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-slate-100 hover:bg-slate-200/80 rounded-xl border border-slate-200 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-slate-900">
-                      <SocialTwitterIcon className="w-4 h-4 text-slate-900 shrink-0" />
-                      <span className="text-xs font-semibold">X / Twitter</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-slate-900" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <SocialTwitterIcon className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>Twitter</span>
-                  </div>
-                )}
-
-                {/* YouTube */}
-                {providerProfileData?.socialLinks?.youtube ? (
-                  <a
-                    href={
-                      providerProfileData.socialLinks.youtube.startsWith('http')
-                        ? providerProfileData.socialLinks.youtube
-                        : `https://youtube.com/@${providerProfileData.socialLinks.youtube}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2.5 bg-rose-50/60 hover:bg-rose-100/60 rounded-xl border border-rose-200/60 flex items-center justify-between group transition-colors"
-                  >
-                    <div className="flex items-center gap-2 text-rose-700">
-                      <SocialYouTubeIcon className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span className="text-xs font-semibold">YouTube</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-rose-400 group-hover:text-rose-700" />
-                  </a>
-                ) : (
-                  <div className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center gap-2 text-slate-400 text-xs">
-                    <SocialYouTubeIcon className="w-4 h-4 text-slate-300 shrink-0" />
-                    <span>YouTube</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Hygiene & Security Deposit Policies */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-              <div className="p-3 bg-emerald-50 border border-emerald-200/70 rounded-xl space-y-1">
-                <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-700 shrink-0" /> Hygiene & Sanitization
-                </span>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  {providerProfileData?.hygieneStandards ||
-                    'Clinical grade multi-point disinfection and UV-C sterilization performed before every dispatch.'}
-                </p>
-              </div>
-
-              <div className="p-3 bg-amber-50 border border-amber-200/70 rounded-xl space-y-1">
-                <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" /> Deposit Policy
-                </span>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  {providerProfileData?.securityDepositPolicy ||
-                    '100% refundable upon equipment pickup and condition verification.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedProviderModal(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const prov = selectedProviderModal;
-                  setSelectedProviderModal(null);
-                  handleSelectRental(prov);
-                }}
-                className="flex-1 py-2.5 bg-[#9C4119] hover:bg-[#853512] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
-              >
-                <span>Select This Rental (₹{selectedProviderModal.rentalPrice}/day)</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 7. Modal: Verified Provider Business & Social Profile with distinct Banner & Logo */}
+      <PartnerProfileModal
+        isOpen={Boolean(selectedProviderModal)}
+        onClose={() => setSelectedProviderModal(null)}
+        partner={
+          selectedProviderModal
+            ? {
+                providerId: selectedProviderModal.id,
+                name: selectedProviderModal.name,
+                logo: selectedProviderModal.logo,
+                banner: selectedProviderModal.banner,
+                address: selectedProviderModal.address,
+                location: selectedProviderModal.location,
+                phone: selectedProviderModal.phone,
+                email: selectedProviderModal.email,
+                rating: selectedProviderModal.rating,
+                reviewCount: selectedProviderModal.reviewCount,
+                rentalPrice: selectedProviderModal.rentalPrice,
+              }
+            : null
+        }
+        onSelectRental={
+          selectedProviderModal
+            ? () => handleSelectRental(selectedProviderModal)
+            : undefined
+        }
+      />
     </div>
   );
 };
