@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import VisitLocation from '../../components/location/VisitLocation';
 import { getBranchesApi, type Branch } from '../../../services/bookingHelper';
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Calendar, Clock, MapPin, X, Sparkles, RotateCcw, AlertCircle, FileText, CheckCircle2, Star, MessageSquare,
   Stethoscope, Building2, Receipt, CreditCard, Users, Phone, Copy, Check, Hourglass, Ban, LifeBuoy, CalendarClock,
@@ -183,6 +183,8 @@ const paidOnline = (b: DisplayBooking) =>
 
 export default function MyConsultationsScreen() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const openOnLoad = useRef<string | null>(params.get('open'));
   const reduceMotion = useReducedMotion() ?? false;
 
   const [activeTab, setActiveTab] = useState<TabKey>('active');
@@ -240,6 +242,18 @@ export default function MyConsultationsScreen() {
         }),
       ];
       setBookings(combined);
+      // A notification links here with ?open=<booking id>. Open that booking now that the list is in
+      // (lab and home-care bookings are handed on to their own screens by openBooking). An id that is
+      // not in the patient's list is ignored. The parameter is dropped either way, once. It is dropped
+      // BEFORE opening: openBooking may navigate to another screen (lab, home care), and a later
+      // setParams would override that navigation and strand the patient on this page.
+      const wanted = openOnLoad.current;
+      if (wanted) {
+        openOnLoad.current = null;
+        setParams((p) => { const n = new URLSearchParams(p); n.delete('open'); return n; }, { replace: true });
+        const target = combined.find((b) => b.id === wanted);
+        if (target) openBooking(target);
+      }
       if (!tabChosen.current) {
         tabChosen.current = true;
         const first = (['active', 'upcoming', 'completed', 'cancelled'] as TabKey[]).find((t) => combined.some((b) => b.tab === t));
@@ -252,6 +266,10 @@ export default function MyConsultationsScreen() {
     } finally {
       setIsLoading(false);
     }
+    // openBooking and setParams only matter on the first load (openOnLoad is cleared after it) and
+    // use nothing but state setters, so they are deliberately not dependencies: listing them would
+    // re-create load on every render and refetch in a loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { load(); }, [load]);

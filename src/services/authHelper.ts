@@ -74,3 +74,28 @@ export const verifyOtpApi = async (identifier: string, otp: string, type: 'mobil
   const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.VERIFY_OTP, payload);
   return response.data;
 };
+
+// Password reset (patient-scoped): request a reset code, check it without using it up, then set the new password.
+export const forgotPasswordApi = async (identifier: string, type: 'mobile' | 'email') => {
+  const payload = type === 'mobile' ? { phone: identifier } : { email: identifier };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.FORGOT_PASSWORD, payload);
+  return response.data;
+};
+
+export const verifyForgotPasswordOtpApi = async (identifier: string, otp: string, type: 'mobile' | 'email') => {
+  const payload = type === 'mobile' ? { phone: identifier, otp } : { email: identifier, otp };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.FORGOT_PASSWORD_VERIFY, payload);
+  return response.data;
+};
+
+export const resetPasswordApi = async (
+  identifier: string,
+  otp: string,
+  newPassword: string,
+  type: 'mobile' | 'email',
+) => {
+  const payload =
+    type === 'mobile' ? { phone: identifier, otp, newPassword } : { email: identifier, otp, newPassword };
+  const response = await apiClient.post(ENDPOINTS.PATIENT_AUTH.RESET_PASSWORD, payload);
+  return response.data;
+};

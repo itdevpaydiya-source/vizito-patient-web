@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useLanguage, type Language } from '../../../store/language/LanguageContext';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
+import { changePasswordApi } from '../../../services/patientHelper';
 
 export const SUPPORTED_LANGUAGES: { id: Language | string; label: string; native: string }[] = [
   { id: 'en', label: 'English', native: 'English' },
@@ -48,6 +49,7 @@ export default function SettingsScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // 4. Logout Modal State
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -83,7 +85,7 @@ export default function SettingsScreen() {
   };
 
   // Change Password Submit handler
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
 
@@ -100,11 +102,20 @@ export default function SettingsScreen() {
       return;
     }
 
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setShowPasswordSection(false);
-    showToast('Password updated successfully.');
+    setSavingPassword(true);
+    try {
+      await changePasswordApi(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordSection(false);
+      showToast('Password updated successfully.');
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      setPasswordError(Array.isArray(msg) ? msg.join(', ') : msg || 'Failed to change password.');
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   // Logout handler
@@ -283,7 +294,7 @@ export default function SettingsScreen() {
                       required
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password (min 6 characters)"
+                      placeholder="Enter new password (min 8 characters)"
                       className="w-full p-3 rounded-xl font-bold text-sm text-slate-800 border border-slate-200 bg-slate-50 focus:outline-none focus:border-teal-500"
                     />
                   </div>
@@ -313,9 +324,10 @@ export default function SettingsScreen() {
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all"
+                      disabled={savingPassword}
+                      className="px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-md transition-all disabled:opacity-60"
                     >
-                      Update Password
+                      {savingPassword ? 'Updating...' : 'Update Password'}
                     </button>
                   </div>
                 </form>

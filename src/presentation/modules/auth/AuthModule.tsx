@@ -13,7 +13,15 @@ import {
   UserPlus, Stethoscope, Pill, Users, ShieldCheck
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
-import { loginPatientApi, sendOtpApi, verifyOtpApi, googlePatientApi } from '../../../services/authHelper';
+import {
+  loginPatientApi,
+  sendOtpApi,
+  verifyOtpApi,
+  googlePatientApi,
+  forgotPasswordApi,
+  verifyForgotPasswordOtpApi,
+  resetPasswordApi,
+} from '../../../services/authHelper';
 import { validateMobile, validateEmail } from '../../../utils/validators/india';
 import {
   validateIdentifier,
@@ -438,7 +446,9 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
 
     setIsSubmitting(true);
     try {
-      const res = await sendOtpApi(targetValue, recoveryType);
+      const res = await forgotPasswordApi(targetValue, recoveryType);
+      // Keep the exact (normalised) value the code was sent to, so verify and reset use the same contact.
+      setRecoveryIdentifier(targetValue);
       // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
       // pre-fill it instead of making the user read it off the API response and retype it.
       const devOtp = res?.dev_otp || res?.otp || '';
@@ -462,7 +472,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     }
     setIsSubmitting(true);
     try {
-      await verifyOtpApi(recoveryIdentifier, recoveryOtp, recoveryType as 'mobile' | 'email');
+      await verifyForgotPasswordOtpApi(recoveryIdentifier, recoveryOtp, recoveryType);
       setScreenState('forgot-reset');
       setSuccessMessage('');
     } catch (err: any) {
@@ -472,7 +482,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
     }
   };
 
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -486,8 +496,17 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       return;
     }
 
-    setScreenState('forgot-success');
-    setSuccessMessage('');
+    setIsSubmitting(true);
+    try {
+      await resetPasswordApi(recoveryIdentifier, recoveryOtp, newPassword, recoveryType);
+      setScreenState('forgot-success');
+      setSuccessMessage('');
+    } catch (err) {
+      const message = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
+      setErrorMessage(Array.isArray(message) ? message.join(' ') : message || 'Could not reset the password. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
