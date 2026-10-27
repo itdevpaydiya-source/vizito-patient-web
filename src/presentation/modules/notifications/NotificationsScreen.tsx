@@ -34,7 +34,7 @@ const destination = (category: string, targetId?: string): string | null => {
   if (c === 'pharmacy') return '/pharmacy-orders?tab=requests'; // a prescription request
   if (c.includes('pharmacy') || c.includes('order')) return '/pharmacy-orders';
   if (c.includes('review') || c.includes('rating')) return '/reviews';
-  if (c.includes('appoint') || c.includes('booking')) return '/my-consultations';
+  if (c.includes('appoint') || c.includes('booking')) return targetId ? `/my-consultations?open=${encodeURIComponent(targetId)}` : '/my-consultations';
   return null;
 };
 
