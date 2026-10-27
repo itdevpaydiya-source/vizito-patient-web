@@ -1,0 +1,30 @@
+import {expect,type APIRequestContext} from '@playwright/test';
+import {registerProviderAccount,lettersFor} from '../../../vizito-partner-main/e2e/helpers/providerAccount';
+import {createTestPatient} from './testAccount';
+import {body,localDate} from './bookingScreenFixtures';
+const API='http://localhost:3000';
+export async function homecareVisitsFixture(request:APIRequestContext){
+ const u=Date.now(),tag=lettersFor(u),patient=await createTestPatient(request),P={Authorization:`Bearer ${patient.token}`};
+ const reg=await registerProviderAccount(request,API,{full_name:`QA Care Owner ${tag}`,phone:`8${String(u).slice(-9)}`,email:`qa-care-${u}@vizito.test`,date_of_birth:'1980-01-01',gender:'female',provider_type_id:8,password:'PlaywrightTest123!',organizationName:`QA Home Care ${tag}`});
+ const A={Authorization:`Bearer ${reg.access_token}`},aid=reg.current_account.partner_id;
+ const get=(path:string,headers=P)=>request.get(`${API}${path}`,{headers}).then(body);
+ const post=(path:string,data:any={},headers=P)=>request.post(`${API}${path}`,{headers,data}).then(body);
+ const setup=await get('/home-care/setup',A),template=setup.templates.find((t:any)=>t.name==='Wound dressing');expect(template).toBeTruthy();await post('/home-care/services',template,A);
+ await body(await request.put(`${API}/home-care/settings`,{headers:A,data:{pincodes:'500081',day_open:'00:00',day_close:'23:30',about:'Local UI verification agency only.',emergency_phone:`8${String(u).slice(-9)}`}}));
+ const email=`qa-care-nurse-${u}@vizito.test`;
+ await post('/home-care/staff',{full_name:`QA Nurse ${tag}`,email,phone:`7${String(u).slice(-9)}`,gender:'FEMALE',role:'hc_nurse',qualification:'GNM (General Nursing & Midwifery)',registration_number:`QA-${u}`,council:'Telangana State Nursing Council',experience_years:5,languages:'English',weekly:{days:[0,1,2,3,4,5,6],from:'00:00',to:'23:30'},credentials_checked:true},A);
+ await post('/hospital-staff',{full_name:`QA Nurse ${tag}`,email,phone:`7${String(u).slice(-9)}`,password:'StaffPass123!',role:'hc_nurse'},A);
+ await post(`/partners/${aid}/submit`,{},A);
+ const ops=await post('/auth/ops/login',{email:'ops.support@vizito.test',password:'OpsSupport123!'});await post(`/partners/ops/${aid}/review`,{action:'Approve'},{Authorization:`Bearer ${ops.access_token}`});
+ const login=await post('/auth/login',{identifier:email,email,password:'StaffPass123!'}),N={Authorization:`Bearer ${login.access_token}`};
+ const cat=await get('/home-care/catalogue?pincode=500081'),svc=cat.services.find((s:any)=>s.agency.id===aid);expect(svc).toBeTruthy();
+ const now=new Date(Date.now()+150*60000),today=now.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}),time=now.toLocaleTimeString('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});
+ const base={service_id:svc.id,sessions:1,start_date:localDate(2),start_time:'09:00',address:{line:'QA local care address',city:'Hyderabad',pincode:'500081',landmark:'QA care landmark',pin:{lat:17.44,lng:78.38}},care_needs:'Local UI verification only.',payment_mode:'CASH'};
+ const created=await post('/home-care/orders',{...base,sessions:2}),upcoming=await get(`/home-care/orders/${created.id}`),cancelled=await post('/home-care/orders',{...base,start_date:localDate(5)});await post(`/home-care/orders/${cancelled.id}/cancel`,{reason:'Local QA cancelled state'});
+ let ongoing=await post('/home-care/orders',{...base,start_date:today,start_time:time,payment_mode:'UPI',payment:{payment_method:'UPI',upi_id:'qa-care@upi'}});
+ const candidates=await get(`/home-care/visits/${ongoing.visits[0].id}/candidates`,A),staff=candidates.candidates.find((s:any)=>s.email===email||s.full_name===`QA Nurse ${tag}`);expect(staff).toBeTruthy();
+ await body(await request.put(`${API}/home-care/staff/${staff.id}/trust-badges`,{headers:A,data:{training_certificate:`QA training ${u}`}}));
+ await post(`/home-care/visits/${ongoing.visits[0].id}/assign`,{staff_id:staff.id,mode:'CONFIRMED',all_remaining:true},A);
+ ongoing=await get(`/home-care/orders/${ongoing.id}`);await post(`/home-care/visits/${ongoing.visits[0].id}/on-the-way`,{},N);
+ return {patient,P,A,N,get,post,upcoming,cancelled,ongoing,staff,aid,setup};
+}

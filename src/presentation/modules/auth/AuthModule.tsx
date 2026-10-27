@@ -249,7 +249,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       setOtpSent(true);
       setOtpCountdown(300);
       setScreenState('otp-verify');
-      setSuccessMessage(`OTP sent to ${displayValue}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
+      setSuccessMessage(`OTP sent to ${displayValue}.${devOtp ? ` Test mode: your code is ${devOtp}` : ''}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -445,7 +445,7 @@ export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModu
       if (devOtp) setRecoveryOtp(String(devOtp));
       setOtpCountdown(300);
       setScreenState('forgot-otp');
-      setSuccessMessage(`Recovery OTP sent to ${targetValue}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
+      setSuccessMessage(`Recovery OTP sent to ${targetValue}.${devOtp ? ` Test mode: your code is ${devOtp}` : ''}`);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || 'Failed to send recovery OTP.');
     } finally {

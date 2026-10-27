@@ -1,5 +1,6 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   CheckCircle2,
   Package,
@@ -24,11 +25,14 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [order, setOrder] = useState<PatientRentalOrder | null>(null);
+  const location = useLocation();
+  const returned = location.state?.order as PatientRentalOrder | undefined;
+  const [order, setOrder] = useState<PatientRentalOrder | null>(returned && returned.id === id ? returned : null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (returned && returned.id === id) { setOrder(returned); setLoading(false); return; }
+    if (!id) { setLoading(false); return; }
     setLoading(true);
     equipmentService
       .getOrderById(id)
@@ -40,7 +44,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
         console.error('Failed to load confirmed order:', err);
         setLoading(false);
       });
-  }, [id]);
+  }, [id, returned]);
 
   if (loading) {
     return (
@@ -60,14 +64,14 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
           <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
           <h2 className="text-lg font-bold text-slate-900">Order Confirmation Unavailable</h2>
           <p className="text-xs text-slate-500">
-            No verified rental order record exists for reference "{id}".
+            We could not load this rental order. Try opening it from My orders.
           </p>
           <button
             type="button"
-            onClick={() => navigate('/equipment-rental')}
+            onClick={() => navigate('/equipment-rental/orders')}
             className="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition-colors"
           >
-            Browse Equipment Catalogue
+            My orders
           </button>
         </div>
       </div>
@@ -92,7 +96,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
       case 'successful':
         return <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold">Payment Completed</span>;
       case 'pending':
-        return <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold">Payment Pending Authorization</span>;
+        return <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold">Pay on delivery</span>;
       case 'failed':
         return <span className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg text-xs font-bold">Payment Failed</span>;
       default:
@@ -136,13 +140,14 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
 
           <div>
             <span className="text-xs font-extrabold text-teal-800 uppercase tracking-widest block">
-              Equipment Rental Confirmed
+              Equipment rental
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
-              Order {order.orderNumber}
+              Rental order placed
             </h1>
+            <p className="text-sm font-bold text-slate-900">Order {order.orderNumber}</p>
             <p className="text-xs text-slate-500 font-medium mt-1">
-              Registered with Vizito Medical Equipment Depot on{' '}
+              Placed on{' '}
               {new Date(order.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
             </p>
           </div>
@@ -162,12 +167,9 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
             </h2>
 
             <div className="flex items-start gap-4">
-              <img
-                src={order.equipmentImage || '/equipment/hospital-bed.jpg'}
-                alt={order.equipmentName}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                }}
+              <MediaImage kind="equipment" category={order.mediaCategory}
+                src={order.equipmentImage}
+                name={order.equipmentName}
                 className="w-20 h-20 rounded-xl object-cover border border-slate-200 shrink-0"
               />
               <div className="space-y-1">
@@ -203,7 +205,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
               </span>
               <p className="text-xs font-semibold text-slate-900">{order.deliveryAddress.recipientName} ({order.deliveryAddress.phone})</p>
               <p className="text-xs text-slate-600 mt-0.5">
-                {order.deliveryAddress.addressLine}, {order.deliveryAddress.city} - {order.deliveryAddress.pincode}
+                {[order.deliveryAddress.addressLine, order.deliveryAddress.city, order.deliveryAddress.pincode].filter(Boolean).join(', ')}
               </p>
             </div>
           </div>
@@ -222,13 +224,13 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-cyan-700" /> Logistics & Setup Fee
+                    <Truck className="w-3.5 h-3.5 text-cyan-700" /> Delivery fee
                   </span>
                   <span className="font-bold text-slate-900">₹{order.deliveryFee}</span>
                 </div>
                 <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
                   <div>
-                    <span className="font-extrabold text-slate-900 block">Total Order Value</span>
+                    <span className="font-extrabold text-slate-900 block">Amount payable on delivery:</span>
                     <span className="text-[10px] text-slate-400">Excludes security deposit</span>
                   </div>
                   <span className="text-xl font-black text-teal-800">
@@ -237,6 +239,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                 </div>
               </div>
 
+              <p className="text-sm font-bold text-slate-700">Nothing charged online.</p>
               {/* Informational Security Deposit Notice */}
               <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-amber-900">
@@ -250,12 +253,10 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
             {/* Next Steps Card */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-3">
               <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
-                Next Steps in Supported Workflow
+                Next steps
               </h3>
               <div className="space-y-2 text-xs text-slate-600">
-                <p>1. <strong>Clinical Sterilization:</strong> Our bioengineers chemically sanitize and calibrate this device.</p>
-                <p>2. <strong>Doorstep Delivery:</strong> Technician delivers and performs on-site test and demonstration.</p>
-                <p>3. <strong>Return Collection:</strong> When your term ends, request return pickup for depot quarantine and inspection.</p>
+                <p>Follow the provider's updates in My orders for delivery and return arrangements.</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 pt-3">
@@ -264,15 +265,9 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                   onClick={() => navigate(`/equipment-rental/orders/${order.id}/track`)}
                   className="flex-1 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition-colors text-center shadow-2xs"
                 >
-                  Track Handover Fleet
+                  Track delivery
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/equipment-rental/orders')}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors text-center"
-                >
-                  View All Orders
-                </button>
+                <Link to="/equipment-rental/orders" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors text-center">My orders</Link>
               </div>
             </div>
           </div>

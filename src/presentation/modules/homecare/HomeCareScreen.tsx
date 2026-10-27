@@ -1,16 +1,17 @@
+import LocationBar from '../../components/location/LocationBar';
+import HomeCareJourney from './HomeCareJourney';
+import {Toast} from '../../components/motion/Motion';
 import { useCallback, useEffect, useState } from 'react';
 import HomePinField from '../../components/location/HomePinField';
-import ServiceVisual from '../../components/illustrations/ServiceVisual';
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import HomeCareAgencyBook, { BookedNote } from './HomeCareAgency';
 import { DoctorReferrals, referralTab } from './HomeCareCare';
 import type { HcReferral } from '../../../services/homecareHelper';
-import HomeCareMine from './HomeCareMine';
+import HomeCareVisits from './HomeCareVisits';
 import LongTermEnquiryModal from './components/LongTermEnquiryModal';
 import { TAB_OF, hcCoverageApi, type HcCategory, type HcOrder, type HcEnquiry } from '../../../services/homecareHelper';
 import { useSearchParams } from 'react-router-dom';
-import { motion, useReducedMotion } from 'motion/react';
 import {
   Home,
   Sun,
@@ -74,7 +75,6 @@ const CATEGORY: Record<string, HcCategory> = { nursing: 'NURSING', physio: 'PHYS
 // Home care: nurses, physiotherapists and caregivers from registered agencies, a doctor's home visit,
 // and everything booked — who is coming, visit codes, what was done at each visit.
 export default function HomeCareScreen() {
-  const reduceMotion = useReducedMotion() ?? false;
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab') as HcTab | null;
   const rawTrack = params.get('track') as HcTrack | null;
@@ -135,21 +135,22 @@ export default function HomeCareScreen() {
     setEnquiryModalOpen(true);
   };
 
+  if (params.get('tab') === 'mine') return <HomeCareVisits onBookAgain={handleBookAgain} doctorVisits={<Mine/>}/>;
+  if(!['doctor'].includes(tab)) return <HomeCareJourney referral={referral} prefill={rebookOrder} onDoctor={()=>setParams({tab:'doctor'})} onReferral={r=>{setReferral(r);setParams({tab:referralTab(r)});}}/>;
+
   return (
-    <motion.div
-      initial={reduceMotion ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: reduceMotion ? 0 : 0.26, ease: 'easeOut' }}
-      className="w-full space-y-6 pb-12"
-    >
+    <div className="w-full space-y-6 pb-12">
+      <LocationBar compact purpose="find home care near you"/>
       {/* Header */}
-      <header className="grid sm:grid-cols-[1fr_260px] gap-5 items-center">
-        <div>
-          <p className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-orange-800 mb-1.5"><span className="w-1.5 h-1.5 rounded-full bg-orange-600" /> Care at home</p>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Support and care, at home</h1>
-          <p className="text-sm text-slate-600 max-w-2xl mt-1.5">Find trusted nursing, physiotherapy, caregiver support, or a doctor visit for you and your family.</p>
+      <header className="relative isolate min-h-[190px] overflow-hidden rounded-3xl border border-orange-100 bg-gradient-to-r from-orange-50 via-amber-50 to-white px-5 py-5 sm:px-7 sm:py-6">
+        <div className="absolute inset-y-0 right-0 z-0 hidden w-[58%] sm:block"><div className="absolute inset-0 z-10 bg-gradient-to-r from-orange-50 via-orange-50/70 to-transparent" /><img src="/images/healthcare/services/homecare.webp" alt="" className="h-full w-full object-cover object-center" /></div>
+        <div className="relative z-20 max-w-2xl">
+          <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-orange-800">Quality care at home</p>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Trusted healthcare services<br className="hidden sm:block" /> in the comfort of <span className="text-orange-700">your home</span></h1>
+          <p className="mt-1.5 max-w-xl text-sm text-slate-600">Professional nursing, physiotherapy, caregiver support, and doctor visits — at your doorstep.</p>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-700"><span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-600" />Verified care providers</span><span className="inline-flex items-center gap-1.5"><UserCheck className="h-4 w-4 text-sky-600" />Support for your family</span><span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-blue-600" />Flexible visits</span></div>
         </div>
-        <ServiceVisual id="homecare" className="hidden sm:block h-36 rounded-2xl" />
+        {tab !== 'mine' && <button type="button" onClick={() => { setReferral(null); setRebookOrder(null); setTrack('single'); setParams({ tab: 'doctor' }, { replace: true }); }} className="absolute bottom-4 right-4 z-20 hidden rounded-xl border border-orange-200 bg-white/95 px-4 py-2 text-xs font-bold text-orange-800 shadow-sm hover:bg-orange-50 lg:inline-flex lg:items-center lg:gap-2"><PhoneCall className="h-4 w-4" />Request a doctor visit<ArrowRight className="h-4 w-4" /></button>}
       </header>
 
       {/* Main Track Switcher (Two Clear Tracks + My Bookings) */}
@@ -243,22 +244,7 @@ export default function HomeCareScreen() {
         </span>
       </p>
 
-      {/* VIEW 1: MY BOOKINGS & ENQUIRIES */}
-      {tab === 'mine' ? (
-        <div className="space-y-6">
-          <section className="space-y-3">
-            <HomeCareMine
-              openId={params.get('open')}
-              onBookAgain={handleBookAgain}
-              onBrowseCare={() => { setTrack('single'); setReferral(null); setParams({ tab: 'nursing' }, { replace: true }); }}
-            />
-          </section>
-          <section className="space-y-3 pt-4 border-t border-slate-200">
-            <h2 className="text-sm font-black text-slate-800">Doctor home visits</h2>
-            <Mine />
-          </section>
-        </div>
-      ) : track === 'longterm' ? (
+      {track === 'longterm' ? (
         /* VIEW 2: LONG-TERM CARE (12 h / 24 h) TRACK */
         <div className="space-y-8" data-testid="longterm-care-view">
           {/* Hero Banner */}
@@ -677,7 +663,7 @@ export default function HomeCareScreen() {
             </div>
           </div>
           {/* Sub-Tabs for Single Visits */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5" role="tablist" aria-label="Single visit services">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4" role="tablist" aria-label="Single visit services">
             {TABS.filter((t) => t.id !== 'mine').map((t) => {
               const Icon = t.icon;
               const on = tab === t.id;
@@ -691,17 +677,15 @@ export default function HomeCareScreen() {
                     setBooked(null);
                     setTab(t.id);
                   }}
-                  className={`text-left rounded-2xl border p-3 transition ${
+                  className={`flex min-h-[112px] items-center gap-3 overflow-hidden rounded-2xl border p-2.5 text-left transition ${
                     on
-                      ? 'bg-orange-800 border-orange-800 text-white shadow-sm'
+                      ? 'bg-orange-50 border-orange-300 text-slate-900 shadow-sm'
                       : 'bg-white border-slate-200 text-slate-800 hover:border-orange-300 hover:shadow-sm'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${on ? 'text-white' : 'text-orange-800'}`} />
-                  <span className="block text-sm font-black mt-1.5">{t.label}</span>
-                  <span className={`block text-[11px] leading-snug mt-0.5 ${on ? 'text-teal-50' : 'text-slate-500'}`}>
-                    {t.hint}
-                  </span>
+                  <img src={t.id === 'physio' ? '/images/healthcare/services/physiotherapy.svg' : t.id === 'doctor' ? '/images/healthcare/services/doctor.webp' : '/images/healthcare/services/homecare.webp'} alt="" aria-hidden="true" className="h-[88px] w-[78px] shrink-0 rounded-xl bg-white object-cover" />
+                  <span className="min-w-0 flex-1"><span className="block text-sm font-black">{t.label === 'Nursing' ? 'Nursing care' : t.label === 'Caregivers' ? 'Caregiver support' : t.label}</span><span className="mt-1 block text-[11px] leading-snug text-slate-500">{t.hint}</span></span>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center self-end rounded-full ${on ? 'bg-orange-700 text-white' : 'bg-orange-50 text-orange-700'}`}><Icon className="h-4 w-4" /></span>
                 </button>
               );
             })}
@@ -761,21 +745,9 @@ export default function HomeCareScreen() {
         />
       )}
 
-      {/* Enquiry Feedback Toast */}
-      {enquiryFeedback && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-bold animate-in fade-in slide-in-from-bottom-3">
-          <CheckCircle2 className="w-5 h-5 text-teal-400 shrink-0" />
-          <span>{enquiryFeedback}</span>
-          <button
-            type="button"
-            onClick={() => setEnquiryFeedback(null)}
-            className="ml-2 text-slate-400 hover:text-white"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-    </motion.div>
+      {enquiryFeedback&&<Toast onClose={()=>setEnquiryFeedback(null)}>{enquiryFeedback}</Toast>}
+
+    </div>
   );
 }
 

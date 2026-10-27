@@ -1,3 +1,5 @@
+import {providerDistance} from '../../components/ProviderCard';
+import {SuccessCheck} from '../../components/motion/Motion';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchArea, nearest, formatDistance, metresBetween } from '../../../services/location';
 import LocationBar from '../../components/location/LocationBar';
@@ -7,9 +9,8 @@ import CancellationRefundPolicy from '../../components/CancellationRefundPolicy'
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import { personNameInput } from '../../../utils/inputFilters';
 import { useSearchParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { motion, useReducedMotion } from 'motion/react';
 import {
-  ArrowLeft, Building2, MapPin, Users, Calendar, Clock, CheckCircle2,
+  ArrowLeft, Building2, MapPin, Users, Calendar, Clock,
   AlertCircle, RotateCcw, ChevronRight, CalendarClock, Check, Star, MessageSquare,
   CreditCard, Smartphone, ShieldCheck, Lock, DollarSign, Wallet, Building, Receipt, FlaskConical, XCircle,
   Search, X, Stethoscope
@@ -69,7 +70,6 @@ const SectionTitle = ({ icon: Icon, children }: { icon: any; children: React.Rea
 export default function UniversalBookingScreen() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const reduceMotion = useReducedMotion() ?? false;
 
   const { pathname } = useLocation();
   const ROUTE_SERVICE: Record<string, string> = {
@@ -179,7 +179,8 @@ export default function UniversalBookingScreen() {
   // Distance: each hospital/clinic to its nearest confirmed branch pin, from the patient's chosen area.
   const area = useSearchArea();
   const [nearFirst, setNearFirst] = React.useState(false);
-  const distOf = React.useCallback((p: ProviderItem) => (p.org ? nearest(area, p.org.locations) : null), [area]);
+  React.useEffect(()=>setNearFirst(!!area),[area]);
+  const distOf = React.useCallback((p: ProviderItem) => providerDistance(p,area), [area]);
 
   // Strongest matches first: the exact name, then names starting with / containing the search.
   const rankedProviders = React.useMemo(() => {
@@ -301,7 +302,8 @@ export default function UniversalBookingScreen() {
   // and takes over as the amount shown — no client-side discount is ever applied to it.
   // Never an invented fee: unknown until the provider's own fee is known (the backend sets the real amount).
   // Video is priced at the video fee (the slot carries both), so the fee shown is the fee charged.
-  const rawConsultationFee: number | null = (consultType === 'Video' ? selectedSlot?.video_fee ?? selectedSlot?.fee : selectedSlot?.fee) ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? null;
+  const branchFee = isHospital ? (consultType === 'Video' ? selectedDepartment?.online_fee : selectedDepartment?.in_person_fee) : null;
+  const rawConsultationFee: number | null = branchFee ?? (consultType === 'Video' ? selectedSlot?.video_fee ?? selectedSlot?.fee : selectedSlot?.fee) ?? (consultType === 'Video' ? providerDetail?.doctor?.video_consultation_fee : providerDetail?.doctor?.in_clinic_fee) ?? null;
   const payableTotal = createdBooking ? Number(createdBooking.total_amount) : Number(rawConsultationFee ?? 0);
 
   // Derived (never stored) so the Clinic/Branch display and the slots grid can never disagree or go
@@ -560,6 +562,29 @@ export default function UniversalBookingScreen() {
     loadSlots(doc.doctor_partner_id, selectedDate, selectedBranch?.facility_id);
   };
 
+  // Book again preserves the actual hospital/branch/department and chooses the same doctor
+  // from that day's live availability. It never restores an expired slot.
+  const repeatBranchOpened = React.useRef(false);
+  useEffect(() => {
+    const id = searchParams.get('facility');
+    if (!isHospital || !searchParams.get('doctor') || !id || !selectedProvider || repeatBranchOpened.current) return;
+    const branch = branches.find(b => String(b.facility_id) === id);
+    if (branch) { repeatBranchOpened.current = true; void enterBranch(branch, selectedProvider.id); }
+  }, [branches, selectedProvider, isHospital, enterBranch, searchParams]);
+  const repeatDepartmentOpened = React.useRef(false);
+  useEffect(() => {
+    const name = searchParams.get('department');
+    if (!isHospital || !searchParams.get('doctor') || !selectedBranch || !departments.length || repeatDepartmentOpened.current) return;
+    const department = departments.find(d => d.name === name);
+    if (department) { repeatDepartmentOpened.current = true; void chooseDepartment(department); }
+  }, [departments, selectedBranch, isHospital, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = searchParams.get('doctor');
+    if (!isHospital || !id || !hospitalDateConfirmed || selectedDoctor || doctorsLoading) return;
+    const doctor = doctors.find(d => d.doctor_partner_id === id);
+    if (doctor) pickDoctor(doctor);
+  }, [doctors, doctorsLoading, hospitalDateConfirmed, selectedDoctor, isHospital, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const changeDate = (date: string) => {
     setSelectedDate(date);
     if (bookingDoctorPartnerId) loadSlots(bookingDoctorPartnerId, date, isHospital ? selectedBranch?.facility_id : undefined);
@@ -723,11 +748,8 @@ export default function UniversalBookingScreen() {
   const pageNum = page === 'provider' ? 1 : page === 'booking' ? 2 : page === 'payment' ? 3 : 3;
 
   return (
-    <motion.div
+    <div
       className="min-h-screen bg-[#FAF7F4] py-5 sm:py-7"
-      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
     >
       <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-28">
         <div className="flex items-center justify-between gap-3">
@@ -1312,7 +1334,7 @@ export default function UniversalBookingScreen() {
             {/* This is a simulated payment experience — no real gateway (Razorpay/Stripe) is wired
                 in yet. Said plainly rather than left to be inferred from working card numbers. */}
             <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-800">
-              <FlaskConical className="w-3.5 h-3.5 shrink-0" /> Simulated payment for demonstration — no real charge will be made.
+              <FlaskConical className="w-3.5 h-3.5 shrink-0" /> Demonstration payment — no real charge will be made.
             </div>
 
             {/* Payment declined — stays on this page so the patient can correct details and retry
@@ -1544,7 +1566,7 @@ export default function UniversalBookingScreen() {
         {/* ===================== PAGE 4: CONFIRMATION ===================== */}
         {page === 'confirmation' && createdBooking && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-8 text-center space-y-5">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mx-auto"><CheckCircle2 className="w-9 h-9" /></div>
+            <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mx-auto"><SuccessCheck payment={paymentMode!=='CASH'&&createdBooking?.payment_status==='PAID'}/></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900">Appointment Confirmed!</h2>
               <p className="text-xs text-slate-500 font-medium mt-1">Show the booking reference below at the reception. You can print the receipt or add the visit to your calendar.</p>
@@ -1560,9 +1582,6 @@ export default function UniversalBookingScreen() {
               <div className="flex justify-between"><span className="text-slate-500">Amount {paymentMode === 'CASH' ? 'Due' : 'Paid'}</span><span className="font-black text-slate-900 text-sm">₹{Number(createdBooking.total_amount)}</span></div>
               {paymentResult && (
                 <>
-                  {paymentMode !== 'CASH' && paymentResult.reference_id && (
-                    <div className="flex justify-between"><span className="text-slate-500">Transaction Ref (simulated)</span><span className="font-mono font-bold text-slate-700 text-[11px]">{paymentResult.reference_id}</span></div>
-                  )}
                   <div className="flex justify-between">
                     <span className="text-slate-500">Payment Status</span>
                     <span className={`font-bold ${paymentMode === 'CASH' || createdBooking.payment_status === 'PENDING' || paymentResult.payment_status === 'PENDING' ? 'text-amber-600' : 'text-emerald-600'}`}>
@@ -1656,7 +1675,7 @@ export default function UniversalBookingScreen() {
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 

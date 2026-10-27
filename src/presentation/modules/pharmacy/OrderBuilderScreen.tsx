@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Search, Plus, Minus, Trash2, AlertCircle, Store, Truck, Wallet, Banknote, X, Pill } from 'lucide-react';
+import { ArrowLeft, Search, Plus, Minus, Trash2, AlertCircle, Store, Truck, Wallet, Banknote, X, Pill, ChevronRight, FileText, ShoppingCart, Headphones, BadgeHelp } from 'lucide-react';
 import {
   getPharmacyRequestsApi, createRxOrderApi, createDirectOrderApi,
   searchMedicinesApi, type MedicineSearchResult, type OrderCartLine,
@@ -8,6 +8,13 @@ import {
 import { getPrescriptionsApi, getAddressesApi, type PatientAddress } from '../../../services/patientHelper';
 import type { PharmacyRequestItem, OrderFulfillmentType } from '../../../services/types';
 import type { PaymentMethod } from '../../../services/bookingHelper';
+import { addBasketMedicine, changeBasketQuantity, quantityProblem } from './medicineBasket';
+import { usePharmacyBaskets } from '../../../services/PharmacyBasketContext';
+import ResumeOrderCard from './ResumeOrderCard';
+import MedicineBrowser from './MedicineBrowser';
+import ReviewOrder, { ReviewSteps } from './ReviewOrder';
+import FulfillmentScreen, { FulfillmentSteps } from './FulfillmentScreen';
+import { basketSubtotal } from './medicineBasket';
 import SelectPharmacyModal from './SelectPharmacyModal';
 import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import { OrderSteps, PharmacyCard, PharmacyDirectory, PrescriptionsReady, TrustStrip } from './OrderStart';
@@ -48,18 +55,26 @@ export default function OrderBuilderScreen() {
   const [rxLines, setRxLines] = useState<RxLine[]>([]);
 
   // Direct mode state
+  const savedBaskets = usePharmacyBaskets();
   const [pharmacyId, setPharmacyId] = useState<string | null>(preselectedPharmacyId);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  useEffect(() => { if (reviewOpen) { document.querySelector('main')?.scrollTo({ top: 0 }); document.getElementById('review-heading')?.focus(); } }, [reviewOpen, checkoutOpen]);
   const [pharmacy, setPharmacy] = useState<ProviderItem | null>(null);
   useEffect(() => {
     if (!pharmacyId || pharmacy?.id === pharmacyId) return;
     getProvidersApi('pharmacy').then((list) => setPharmacy(list.find((p) => p.id === pharmacyId) || null)).catch(() => undefined);
   }, [pharmacyId, pharmacy?.id]);
-  const choose = (p: ProviderItem) => { setPharmacy(p); setPharmacyId(p.id); setCart([]); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [medQuery, setMedQuery] = useState('');
-  const [medResults, setMedResults] = useState<MedicineSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const choose = (p: ProviderItem) => { setPharmacy(p); setPharmacyId(p.id); setReviewOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const cart = pharmacyId ? savedBaskets.baskets[pharmacyId]?.lines || [] : [];
+  const cartRef = useRef<CartLine[]>(cart);
+  cartRef.current = cart;
+  const setCart = (lines: CartLine[]) => {
+    if (!pharmacyId || !savedBaskets.update(pharmacyId, lines)) return false;
+    cartRef.current = lines;
+    return true;
+  };
 
   // Shared confirm-step state
   const [fulfillmentType, setFulfillmentType] = useState<OrderFulfillmentType>('PICKUP');
@@ -99,18 +114,6 @@ export default function OrderBuilderScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Medicine search for direct-mode cart building
-  useEffect(() => {
-    if (isRxMode || !medQuery.trim()) { setMedResults([]); return; }
-    setSearching(true);
-    const t = setTimeout(async () => {
-      try { setMedResults(await searchMedicinesApi(medQuery)); }
-      catch { setMedResults([]); }
-      finally { setSearching(false); }
-    }, 350);
-    return () => clearTimeout(t);
-  }, [medQuery, isRxMode]);
-
   const matchRxLine = (index: number, medicine: MedicineSearchResult) => {
     setRxLines((prev) => prev.map((l, i) => (i === index ? { ...l, matched: medicine } : l)));
   };
@@ -118,18 +121,17 @@ export default function OrderBuilderScreen() {
     setRxLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantity: Math.max(1, quantity) } : l)));
   };
 
-  const addToCart = (medicine: MedicineSearchResult) => {
-    if (medicine.requires_prescription && !isRxMode) return;
-    setCart((prev) => {
-      const existing = prev.find((l) => l.medicine.id === medicine.id);
-      if (existing) return prev.map((l) => (l.medicine.id === medicine.id ? { ...l, quantity: l.quantity + 1 } : l));
-      return [...prev, { medicine, quantity: 1 }];
-    });
-    setMedQuery(''); setMedResults([]);
+  const addToCart = (medicine: MedicineSearchResult, quantity = 1): number => {
+    if (pharmacy?.pause) return 0;
+    const result = addBasketMedicine(cartRef.current, medicine, quantity);
+    if (result.error) return 0;
+    if (!setCart(result.lines)) return 0;
+    return quantity;
   };
-  const setCartQuantity = (medicineId: string, quantity: number) => {
-    if (quantity <= 0) { setCart((prev) => prev.filter((l) => l.medicine.id !== medicineId)); return; }
-    setCart((prev) => prev.map((l) => (l.medicine.id === medicineId ? { ...l, quantity } : l)));
+  const setCartQuantity = (medicineId: string, quantity: number): boolean => {
+    const result = changeBasketQuantity(cartRef.current, medicineId, quantity);
+    if (result.error) return false;
+    return setCart(result.lines);
   };
 
   const items: OrderCartLine[] = useMemo(() => {
@@ -140,13 +142,12 @@ export default function OrderBuilderScreen() {
   }, [isRxMode, rxLines, cart]);
 
   const estimatedTotal = useMemo(() => {
-    if (isRxMode) return rxLines.reduce((sum, l) => sum + (l.matched ? l.matched.mrp * l.quantity : 0), 0);
-    return cart.reduce((sum, l) => sum + l.medicine.mrp * l.quantity, 0);
+    return basketSubtotal(isRxMode ? rxLines.filter(l => l.matched).map(l => ({ medicine: l.matched!, quantity: l.quantity })) : cart);
   }, [isRxMode, rxLines, cart]);
 
   const hasUnmatchedRequiredLines = isRxMode && rxLines.some((l) => !l.matched);
   const hasDirectRxItem = !isRxMode && cart.some((l) => l.medicine.requires_prescription);
-  const canSubmit = items.length > 0 && !hasDirectRxItem && !!pharmacyId && (fulfillmentType === 'PICKUP' || !!deliveryAddressId);
+  const canSubmit = !submitting && estimatedTotal !== null && !hasUnmatchedRequiredLines && (isRxMode || (!savedBaskets.loading && !savedBaskets.saving && !savedBaskets.error)) && items.length > 0 && (isRxMode || cart.every(l => !quantityProblem(l.medicine, l.quantity))) && !hasDirectRxItem && !!pharmacyId && (fulfillmentType === 'PICKUP' || !!deliveryAddressId);
 
   const handleSubmit = async () => {
     if (!canSubmit || !pharmacyId || hasDirectRxItem) return;
@@ -166,6 +167,7 @@ export default function OrderBuilderScreen() {
       const order = isRxMode
         ? await createRxOrderApi({ ...base, pharmacy_request_id: pharmacyRequestId! })
         : await createDirectOrderApi({ ...base, pharmacy_partner_id: pharmacyId });
+      if (!isRxMode && pharmacyId) { savedBaskets.update(pharmacyId, []); await savedBaskets.flush(); }
       navigate(`/pharmacy-orders/${order.id}`);
     } catch (e: any) {
       const msg = e?.response?.data?.message || 'Unable to create this order. Please try again.';
@@ -194,19 +196,19 @@ export default function OrderBuilderScreen() {
 
   return (
     <div className="w-full space-y-5 pb-28">
-      <button onClick={() => navigate('/pharmacy-orders')} className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900">
-        <ArrowLeft className="w-4 h-4" /> Pharmacy orders
-      </button>
+      {(savedBaskets.loading || savedBaskets.saving) && <p role="status" className="text-xs text-slate-500">{savedBaskets.loading ? 'Loading saved baskets...' : 'Saving basket...'}</p>}
+      {savedBaskets.error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{savedBaskets.error} <button type="button" onClick={() => void savedBaskets.reload()} className="ml-2 font-bold underline">Reload saved baskets</button></div>}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-500"><button onClick={() => navigate('/dashboard')} className="inline-flex items-center gap-1 hover:text-slate-800"><ArrowLeft className="h-3.5 w-3.5" />Home</button><ChevronRight className="h-3 w-3" /><button onClick={() => navigate('/pharmacy-orders')} className="hover:text-slate-800">Pharmacy Orders</button><ChevronRight className="h-3 w-3" /><span className="font-semibold text-slate-800">{checkoutOpen && reviewOpen ? 'Fulfillment' : reviewOpen ? 'Review order' : 'Order medicines'}</span></nav>
 
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+      <header className={`flex flex-col gap-4 ${!isRxMode && reviewOpen && checkoutOpen ? '' : 'lg:flex-row lg:items-end lg:justify-between'}`}>
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5"><span className="w-10 h-10 rounded-xl bg-[#FDF7F1] text-[#B45F28] grid place-items-center"><Pill className="w-5 h-5" /></span>{isRxMode ? 'Confirm your prescription order' : 'Order medicines'}</h1>
-          <p className="text-sm text-slate-500 mt-1.5">{isRxMode ? 'Match each prescribed medicine to the pharmacy’s stock and confirm quantities.' : 'From a licensed pharmacy near you: send your prescription, or add medicines yourself.'}</p>
+          <h1 id="review-heading" tabIndex={-1} className="outline-none text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5">{isRxMode ? 'Confirm your prescription order' : reviewOpen && checkoutOpen ? 'Fulfillment' : reviewOpen ? 'Review order' : pharmacyId ? 'Add medicines' : 'Order medicines'}</h1>
+          <p className="text-sm text-slate-500 mt-1.5">{isRxMode ? 'Match each prescribed medicine to the pharmacy’s stock and confirm quantities.' : reviewOpen && checkoutOpen ? 'Choose pickup or delivery, then select how to pay.' : reviewOpen ? 'Confirm your pharmacy, medicines and estimated costs before continuing.' : pharmacyId ? 'Choose medicines from your selected pharmacy or send an existing prescription.' : 'Find a nearby pharmacy, send your prescription or add medicines directly.'}</p>
         </div>
-        {!isRxMode && <OrderSteps step={!pharmacyId ? 1 : items.length === 0 ? 2 : 3} />}
+        {!isRxMode && (reviewOpen && checkoutOpen ? <FulfillmentSteps /> : reviewOpen ? <ReviewSteps /> : <OrderSteps step={!pharmacyId ? 1 : 2} />)}
       </header>
 
-      {pharmacyId && (
+      {pharmacyId && isRxMode && (
         <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[220px]">{pharmacy ? <PharmacyCard p={pharmacy} compact /> : <p className="text-sm font-bold text-slate-700">{'Your pharmacy'}</p>}</div>
           {!isRxMode && <button type="button" onClick={() => { setPharmacyId(null); setPharmacy(null); setCart([]); }} className="text-xs font-bold text-[#B45F28] hover:underline">Change pharmacy</button>}
@@ -215,12 +217,28 @@ export default function OrderBuilderScreen() {
 
       {!pharmacyId && !isRxMode && (
         <>
-          <TrustStrip />
-          <PrescriptionsReady pharmacy={null} onPickPharmacy={() => document.getElementById('ph-dir')?.scrollIntoView({ behavior: 'smooth' })} />
-          <PharmacyDirectory onChoose={choose} />
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0 space-y-3">
+              <TrustStrip />
+              <PharmacyDirectory onChoose={choose} />
+              <PrescriptionsReady pharmacy={null} onPickPharmacy={() => document.getElementById('ph-dir')?.scrollIntoView({ behavior: 'smooth' })} />
+            </div>
+            <aside className="space-y-4" aria-label="Order guidance">
+              {savedBaskets.loading ? <p role="status" className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-500">Loading baskets...</p> : Object.values(savedBaskets.baskets).some(b => b.lines.length) ? Object.values(savedBaskets.baskets).filter(b => b.lines.length).map(b => <ResumeOrderCard key={b.pharmacyId} basket={b} persisted={savedBaskets.isPersisted(b.pharmacyId)} disabled={savedBaskets.saving || !!savedBaskets.error} onResume={() => { setPharmacyId(b.pharmacyId); setPharmacy(null); setReviewOpen(false); }} onDiscard={() => savedBaskets.update(b.pharmacyId, [])} />) : <section className="rounded-2xl border border-slate-200 bg-white p-4"><h2 className="text-sm font-bold text-[#101d48]">Your order</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">{savedBaskets.error ? 'Baskets could not be loaded. Reload them using the message above.' : 'Choose a pharmacy and add medicines to start an order.'}</p></section>}
+              <section className="rounded-2xl border border-[#e4ebf4] bg-white p-4">
+                <h2 className="flex items-center gap-3 text-sm font-extrabold text-[#101d48]"><span className="grid h-8 w-8 place-items-center rounded-lg bg-orange-50 text-orange-600"><BadgeHelp className="h-5 w-5" /></span>How it works?</h2>
+                <ol className="mt-4 space-y-5 text-xs leading-relaxed text-[#6880a6]">
+                  <li className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-50 text-xl font-bold text-orange-700">1</span><span><b className="text-[#101d48]">Choose a pharmacy</b><br /><span className="mt-1 block">Select a nearby pharmacy. Review its license details when provided.</span></span></li>
+                  <li className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-50 text-xl font-bold text-blue-800">2</span><span><b className="text-[#101d48]">Add medicines</b><br /><span className="mt-1 block">Send an existing prescription or add medicines directly.</span></span></li>
+                  <li className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-xl font-bold text-emerald-600">3</span><span><b className="text-[#101d48]">Review & place order</b><br /><span className="mt-1 block">Confirm your order and choose an available pickup or delivery option.</span></span></li>
+                </ol>
+              </section>
+              <section className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600"><Headphones className="h-6 w-6" /></span><div><h2 className="text-xs font-extrabold text-[#101d48]">Need help with your order?</h2><p className="mt-2 text-xs leading-relaxed text-[#6880a6]">Our support team is here to help with prescriptions, orders or delivery.</p></div></div><button type="button" onClick={() => navigate('/help')} className="mt-3 inline-flex items-center gap-3 rounded-xl border border-orange-400 bg-white px-3 py-2 text-xs font-semibold text-orange-700">Contact support <ChevronRight className="h-4 w-4" /></button></section>
+              <section className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-600"><FileText className="h-6 w-6" /></span><div><h2 className="text-sm font-extrabold text-[#101d48] underline">Upload a prescription</h2><p className="mt-2 text-xs leading-relaxed text-[#6880a6]">Prescription upload is not available. You can send an existing prescription from your medical records.</p><button type="button" disabled className="mt-3 inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 disabled:cursor-not-allowed disabled:opacity-60">Upload prescription <ChevronRight className="h-4 w-4" /></button><button type="button" onClick={() => navigate('/my-records')} className="mt-2 block text-xs font-semibold text-blue-800 underline">View existing prescriptions</button></div></div></section>
+            </aside>
+          </div>
         </>
       )}
-      {pharmacyId && !isRxMode && cart.length === 0 && <PrescriptionsReady pharmacy={pharmacy} onPickPharmacy={() => undefined} />}
 
       {pharmacyId && isRxMode && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
@@ -277,98 +295,15 @@ export default function OrderBuilderScreen() {
         </div>
       )}
 
-      {pharmacyId && !isRxMode && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              value={medQuery}
-              onChange={(e) => setMedQuery(e.target.value)}
-              aria-label="Search medicines" placeholder="Search a medicine, e.g. Paracetamol 650, Dolo, Cetirizine"
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
-            />
-            {searching && <div className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />}
-          </div>
-          {medResults.length > 0 && (
-            <div className="border border-slate-100 rounded-xl divide-y divide-slate-100 overflow-hidden">
-              {medResults.map((m) => {
-                const rxBlocked = m.requires_prescription && !isRxMode;
-                if (rxBlocked) {
-                  return (
-                    <div key={m.id} className="p-3 bg-amber-50/50 flex flex-col gap-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">
-                            {m.medicine_name} <span className="text-slate-400 font-medium">{m.strength}{m.strength_unit}</span>
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-slate-400">₹{m.mrp.toFixed(2)}</span>
-                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Rx required</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-2.5 bg-white border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-sm">
-                        <p className="text-xs text-amber-900 font-medium leading-relaxed">
-                          Needs a doctor's prescription — send your prescription to a pharmacy
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => navigate('/my-records')}
-                          className="px-3 py-1.5 bg-[#B45F28] hover:bg-[#9A4F20] text-white rounded-lg text-xs font-bold shrink-0 shadow-sm transition"
-                        >
-                          Send to pharmacy
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
-                return (
-                  <button key={m.id} type="button" onClick={() => addToCart(m)} className="w-full flex items-center justify-between gap-3 p-3 hover:bg-slate-50 text-left">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">{m.medicine_name} <span className="text-slate-400 font-medium">{m.strength}{m.strength_unit}</span></p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] text-slate-400">₹{m.mrp.toFixed(2)}</span>
-                        {m.requires_prescription && <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Rx required</span>}
-                      </div>
-                    </div>
-                    <Plus className="w-4 h-4 text-teal-600 shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {cart.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Your cart · {cart.reduce((n, l) => n + l.quantity, 0)} item{cart.reduce((n, l) => n + l.quantity, 0) === 1 ? '' : 's'}</span>
-              {hasDirectRxItem && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-900 shadow-sm">
-                  <p className="font-semibold">Needs a doctor's prescription — send your prescription to a pharmacy</p>
-                  <button type="button" onClick={() => navigate('/my-records')} className="px-3 py-1.5 bg-[#B45F28] hover:bg-[#9A4F20] text-white rounded-lg text-xs font-bold shrink-0">Send to pharmacy</button>
-                </div>
-              )}
-              {cart.map((l) => (
-                <div key={l.medicine.id} className="flex items-center justify-between gap-3 bg-slate-50 rounded-xl p-2.5">
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{l.medicine.medicine_name}</p>
-                    <p className="text-[10px] text-slate-400">₹{l.medicine.mrp.toFixed(2)} each</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => setCartQuantity(l.medicine.id, l.quantity - 1)} className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center"><Minus className="w-3 h-3" /></button>
-                    <span className="text-xs font-bold w-4 text-center">{l.quantity}</span>
-                    <button onClick={() => setCartQuantity(l.medicine.id, l.quantity + 1)} className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center"><Plus className="w-3 h-3" /></button>
-                    <button onClick={() => setCartQuantity(l.medicine.id, 0)} className="text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {cart.length === 0 && !medQuery && <p className="text-xs text-slate-500 text-center py-4">Search above to add medicines. Medicines marked <b className="text-amber-700">Rx</b> need a prescription; the pharmacist checks it before handing them over.</p>}
-          {medQuery.trim().length >= 2 && !searching && medResults.length === 0 && <p className="text-xs text-slate-500 text-center py-3">No medicine matches “{medQuery.trim()}”. Check the spelling or try the generic name.</p>}
-        </div>
-      )}
+      {pharmacyId && !isRxMode && !reviewOpen && <MedicineBrowser key={pharmacyId} pharmacyId={pharmacyId} pharmacy={pharmacy} cart={cart} onBasketOpen={() => setReviewOpen(false)} onReview={() => { setCheckoutOpen(false); setReviewOpen(true); window.scrollTo({ top: 0 }); }} onAdd={addToCart} onQuantity={setCartQuantity} onChange={() => setPickerOpen(true)} />}
 
-      {pharmacyId && items.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+      {pharmacyId && !isRxMode && reviewOpen && !checkoutOpen && <ReviewOrder onQuantity={setCartQuantity} onPrescription={() => navigate('/my-records')} pharmacy={pharmacy} lines={cart} busy={savedBaskets.loading || savedBaskets.saving || !!savedBaskets.error} onEdit={() => setReviewOpen(false)} onChange={() => { setReviewOpen(false); setPharmacyId(null); setPharmacy(null); }} onContinue={() => setCheckoutOpen(true)} />}
+
+      {pharmacyId && !isRxMode && reviewOpen && checkoutOpen && <FulfillmentScreen fulfillmentType={fulfillmentType} onFulfillment={setFulfillmentType} addresses={addresses} deliveryAddressId={deliveryAddressId} onAddress={setDeliveryAddressId} payChoice={payChoice} onPayment={setPayChoice} canSubmit={canSubmit} onSubmit={handleSubmit} pharmacy={pharmacy} lines={cart} busy={savedBaskets.loading || savedBaskets.saving} error={submitError || savedBaskets.error} onEdit={() => { setCheckoutOpen(false); setReviewOpen(false); }} onChange={() => { setCheckoutOpen(false); setReviewOpen(false); setPharmacyId(null); setPharmacy(null); }} onBack={() => setCheckoutOpen(false)} onPrescription={() => navigate('/my-records')} />}
+
+      {pharmacyId && items.length > 0 && isRxMode && (
+        <div id="pharmacy-checkout" tabIndex={-1} className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+          {!isRxMode && <button onClick={() => setCheckoutOpen(false)} className="text-sm font-semibold text-blue-700 underline">Back to review order</button>}
           <div>
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Fulfillment</span>
             <div className="grid grid-cols-2 gap-3">
@@ -410,7 +345,7 @@ export default function OrderBuilderScreen() {
 
           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
             <span className="text-xs font-bold text-slate-500">Estimated total</span>
-            <span className="text-lg font-black text-slate-800">₹{estimatedTotal.toFixed(2)}</span>
+            <span className="text-lg font-black text-slate-800">₹{estimatedTotal === null ? 'Price not provided' : estimatedTotal.toFixed(2)}</span>
           </div>
           <p className="text-[10px] text-slate-400 -mt-2">Final pricing and availability are confirmed by the pharmacy when you place the order.</p>
 

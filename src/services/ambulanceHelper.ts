@@ -11,8 +11,13 @@ export const termsText = (t?: FeeTerms | null) => !t || (!t.dispatch_cancel_fee 
     'Vizito reviews every fee before it is charged and can waive it. No fee if the operator cancels.'].filter(Boolean).join(' ');
 export interface AmbulanceOperator { partner_id: string; name: string; phone: string | null; vehicle_types: OperatorType[] }
 export interface MyTrip {
+  cancel_unavailable_reason?: string | null;
+  crew?: {name:string;role:string;qualification:string|null}[];
+  vehicle_model?: string|null;
+  equipment?: string[];
+  fare_breakdown?: {kind:'FINAL'|'ESTIMATE';base:number;included_km:number;distance_km:number;extra_km:number;per_km:number;distance_charge:number;waiting_minutes:number;waiting_charge:number;night_charge:number;total:number|null;note:string|null}|null;
   fare_cap?: { base_fare: number; included_km: number; per_km: number; waiting_per_15_min: number } | null;
-  id: string; trip_number: string; status: string; status_label: string; status_reason: string | null; operator: { partner_id: string; name: string | null; phone: string | null };
+  id: string; trip_number: string; status: string; status_label: string; status_reason: string | null; operator: { partner_id: string; name: string | null; phone: string | null; address?:string|null;latitude?:number|null;longitude?:number|null;image_url?:string|null;rating?:number|null;review_count?:number };
   patient_name: string | null; vehicle_type: string; vehicle_type_label: string; scheduled_at: string; pickup_address: string; drop_address: string;
   mobility: string; mobility_label: string; attendants: number; fare: { base_fare: number; included_km: number; per_km: number; waiting_per_15_min: number };
   estimated_fare: number | null; estimated_km: number | null; vehicle_registration: string | null; driver_name: string | null;

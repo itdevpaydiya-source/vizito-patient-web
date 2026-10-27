@@ -1,3 +1,4 @@
+import ServiceLocationDialog from '../../components/location/ServiceLocationDialog';
 import React, { useState } from 'react';
 import { personNameInput } from '../../../utils/inputFilters';
 import {
@@ -21,7 +22,7 @@ import {
 import { registerPatientApi, registerSendOtpApi, registerVerifyOtpApi } from '../../../services/authHelper';
 import { ageFromDob, ageLabelFromDob } from '../../../services/familyHelper';
 import MapPinPicker from '../../components/location/MapPinPicker';
-import { locateOnce, addressAt, LOCATE_ERROR_TEXT, type LocateError } from '../../../services/location';
+import { addressAt, type SearchArea, LOCATE_ERROR_TEXT, type LocateError } from '../../../services/location';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE, PASSWORD_RULES } from '../../../utils/passwordPolicy';
 import {
   validatePersonName,
@@ -80,6 +81,7 @@ export default function RegistrationModule({
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationDialogOpen,setLocationDialogOpen]=useState(false);
   const [isAddressSaved, setIsAddressSaved] = useState(false);
 
   // General Status & Errors
@@ -119,7 +121,7 @@ export default function RegistrationModule({
       if (devOtp) setOtpCode(String(devOtp));
       setIsOtpSent(true);
       setOtpTimer(300);
-      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + normalizeMobile(mobileNumber) : emailAddress.trim().toLowerCase()}.${devOtp ? ' (Auto-filled for testing)' : ''}`);
+      setSuccessMessage(`OTP sent to ${verificationType === 'mobile' ? '+91 ' + normalizeMobile(mobileNumber) : emailAddress.trim().toLowerCase()}.${devOtp ? ` Test mode: your code is ${devOtp}` : ''}`);
     } catch (err: any) {
       // 409 = the phone/email already belongs to a patient — steer the user to login.
       const status = err?.response?.status;
@@ -192,12 +194,12 @@ export default function RegistrationModule({
   };
 
   // --- STEP 3: ADDRESS AUTOMATIC CAPTURE & MANUAL ENTRY ---
-  const handleAutoCaptureAddress = async () => {
+  const handleAutoCaptureAddress = async (here:SearchArea|null) => {
+    if(!here){setLatitude(undefined);setLongitude(undefined);return;}
     setErrorMessage('');
     setSuccessMessage('');
     setIsDetectingLocation(true);
     try {
-      const here = await locateOnce(true);
       setLatitude(here.lat);
       setLongitude(here.lng);
       // A laptop without GPS reports a Wi-Fi / internet-provider position that can be kilometres off.
@@ -796,7 +798,7 @@ export default function RegistrationModule({
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button
                   type="button"
-                  onClick={handleAutoCaptureAddress}
+                  onClick={()=>setLocationDialogOpen(true)}
                   disabled={isDetectingLocation}
                   className="p-3.5 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
                 >
@@ -1003,6 +1005,7 @@ export default function RegistrationModule({
         </div>
 
       </div>
+      {locationDialogOpen&&<ServiceLocationDialog context="address" initialArea={null} onClose={()=>setLocationDialogOpen(false)} onApply={a=>void handleAutoCaptureAddress(a)}/>}
     </div>
   );
 }

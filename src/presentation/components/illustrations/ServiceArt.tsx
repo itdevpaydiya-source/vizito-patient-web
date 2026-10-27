@@ -115,6 +115,21 @@ const scenes: Record<string, { label: string; art: React.ReactNode }> = {
       <Plus x={66} y={70} s={14} c={P.sageDark} />
     </>),
   },
+  bloodbank: {
+    label: 'Blood donation and blood availability',
+    art: (<>
+      {/* blood bag */}
+      <path d="M133 48 H187 V59 H180 V116 Q180 128 168 132 H152 Q140 128 140 116 V59 H133 Z" fill={P.white} stroke={P.brown} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d="M142 88 H178 V115 Q178 127 166 130 H154 Q142 127 142 115 Z" fill="#E98B82" />
+      <path d="M160 94 C155 101 151 104 151 110 A9 9 0 0 0 169 110 C169 104 165 101 160 94 Z" fill="#C83E3E" />
+      <path d="M151 48 V39 H169 V48 M158 39 V30 H162 V39" fill="none" stroke={P.brown} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M150 132 V143 H170" fill="none" stroke={P.orange} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="205" cy="110" r="25" fill={P.white} stroke={P.line} strokeWidth="2" />
+      <path d="M205 94 C198 103 194 107 194 114 A11 11 0 0 0 216 114 C216 107 212 103 205 94 Z" fill="#C83E3E" />
+      <Plus x={93} y={70} s={16} c={P.sageDark} />
+      <path d="M86 120 H117 M102 105 V135" stroke={P.orange} strokeWidth="3" strokeLinecap="round" />
+    </>),
+  },
   equipment: {
     label: 'Medical equipment',
     art: (<>
@@ -139,7 +154,7 @@ const scenes: Record<string, { label: string; art: React.ReactNode }> = {
   },
 };
 
-/** The illustration for a service (doctor, hospital, homecare, ambulance, pharmacy, diagnostic, equipment) or "empty". */
+/** The illustration for a service (including blood bank) or "empty". */
 const ServiceArt: React.FC<{ id: string; className?: string; muted?: boolean }> = ({ id, className, muted }) => {
   const scene = scenes[id] || scenes.empty;
   return (

@@ -1,3 +1,4 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -166,12 +167,9 @@ export const ActiveRentalsScreen: React.FC = () => {
                 {/* Upper Details Row */}
                 <div className="flex items-start gap-5">
                   <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 shrink-0">
-                    <img
-                      src={order.equipmentImage || '/equipment/hospital-bed.jpg'}
-                      alt={order.equipmentName}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                      }}
+                    <MediaImage kind="equipment" category={order.mediaCategory}
+                      src={order.equipmentImage}
+                      name={order.equipmentName}
                       className="w-full h-full object-cover"
                     />
                   </div>

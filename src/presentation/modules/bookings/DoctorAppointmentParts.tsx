@@ -1,0 +1,4 @@
+import {Star,Video} from 'lucide-react';
+import {appointmentTimestamp,type DoctorBooking} from './doctorAppointmentsData';
+export function DoctorRating({booking:b}:{booking:DoctorBooking}){const d=b.provider?.doctor;return d?.rating!=null&&Number(d.review_count)>0?<span className="doctor-rating"><Star aria-hidden="true"/>{d.rating.toFixed(1)} <span>({d.review_count} reviews)</span></span>:null;}
+export function DoctorVideoInfo({booking:b}:{booking:DoctorBooking}){const v=b.visit?.video;return v?<div className="doctor-call-info"><Video/><div><p>{v.message}</p><p><strong>Expected call: </strong>{v.call_expected_from?appointmentTimestamp(v.call_expected_from):'Not provided'}{v.call_expected_until&&` – ${appointmentTimestamp(v.call_expected_until)}`}</p>{v.mode_used&&<p>Consultation mode: {v.mode_used}</p>}</div></div>:null;}

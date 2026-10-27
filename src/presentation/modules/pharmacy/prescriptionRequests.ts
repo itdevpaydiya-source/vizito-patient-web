@@ -1,0 +1,8 @@
+import type {PharmacyRequestItem,PharmacyQuoteLine} from '../../../services/types';
+export const quoteLines = (r:PharmacyRequestItem):PharmacyQuoteLine[]|null => {if(!r.quote_items)return [];try{const rows=JSON.parse(r.quote_items);if(!Array.isArray(rows)||rows.some(l=>!l||typeof l.prescribed_name!=='string'||typeof l.available!=='boolean'))return null;return rows;}catch{return null;}};
+export const requestGroup=(r:PharmacyRequestItem)=>r.order_id?'closed':r.status==='Accepted'?'attention':r.status==='Requested'?'waiting':'closed';
+export const quoteExpired=(r:PharmacyRequestItem,now=Date.now())=>!!r.quote_valid_until&&Number.isFinite(Date.parse(r.quote_valid_until))&&Date.parse(r.quote_valid_until)<now;
+export const requestLabel=(r:PharmacyRequestItem)=>r.order_id?'Ordered':r.status==='Accepted'&&(r.quote_items||'').trim()&&quoteLines(r)?.length?'Quote ready':({Requested:'Waiting for pharmacy',Accepted:'Accepted',Rejected:'Declined by pharmacy',Cancelled:'Cancelled',Expired:'Expired'}[r.status]||r.status);
+export const requestDate=(value:string|null|undefined)=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):null;
+export const differentProduct=(line:PharmacyQuoteLine)=>!!line.item_name&&line.item_name.trim().toLowerCase()!==line.prescribed_name.trim().toLowerCase();
+export const canResendRequest=(r:PharmacyRequestItem,all:PharmacyRequestItem[])=>!r.order_id&&['Rejected','Cancelled','Expired'].includes(r.status)&&!all.some(other=>other.id!==r.id&&other.prescription_id===r.prescription_id&&!other.order_id&&['Requested','Accepted'].includes(other.status));

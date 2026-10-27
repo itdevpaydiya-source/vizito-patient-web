@@ -110,7 +110,7 @@ export default MyAmbulanceTripsScreen;
 
 // Scheduled bookings not yet accepted by a driver (and recent ones nobody accepted). Never shown as confirmed:
 // once a driver accepts, the booking appears in the trip list below as a normal trip.
-function AwaitingDriver({ highlight }: { highlight: string | null }) {
+export function AwaitingDriver({ highlight }: { highlight: string | null }) {
   const [rows, setRows] = useState<ScheduledBooking[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const load = useCallback(async () => { try { setRows(await myScheduledApi()); } catch { setRows([]); } }, []);
@@ -144,7 +144,7 @@ function AwaitingDriver({ highlight }: { highlight: string | null }) {
 }
 
 // Pay the final fare online after the trip (shown only when Vizito has enabled online payment for ambulance trips).
-function PayOnline({ trip, onPaid }: { trip: MyTrip; onPaid: (t: MyTrip) => void }) {
+export function PayOnline({ trip, onPaid }: { trip: MyTrip; onPaid: (t: MyTrip) => void }) {
   const [method, setMethod] = useState('UPI');
   const [upi, setUpi] = useState('');
   const [busy, setBusy] = useState(false);
@@ -166,3 +166,4 @@ function PayOnline({ trip, onPaid }: { trip: MyTrip; onPaid: (t: MyTrip) => void
     </section>
   );
 }
+

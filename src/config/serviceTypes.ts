@@ -31,8 +31,8 @@ export const SERVICE_TILES: ServiceTile[] = [
   { id: 'bloodbank', name: 'Find Blood',                shortDesc: 'Blood availability at verified blood banks', iconName: 'Droplets', emoji: '🩸', tileClass: 'bg-rose-50 text-rose-600 border-rose-100', available: true },
 ];
 
-// Where each service's "Book" goes. Lab tests, pharmacy and home care have their own flows; doctor and
-// hospital use the appointment booking screen. Services not on Vizito yet have no route.
+// Where each service's "Book" goes. Hospital browsing has a directory; selecting a provider opens
+// the existing branch and appointment flow. Services not on Vizito yet have no route.
 export const serviceRoute = (id: string): string => ({
-  pharmacy: '/pharmacy-orders/new', diagnostic: '/lab-tests', homecare: '/home-care', doctor: '/find-doctors', hospital: '/booking?service=hospital', bloodbank: '/find-blood', equipment: '/equipment-rental', ambulance: '/book-ambulance',
+  pharmacy: '/pharmacy-orders/new', diagnostic: '/lab-tests', homecare: '/home-care', doctor: '/find-doctors', hospital: '/find-hospitals', bloodbank: '/find-blood', equipment: '/equipment-rental', ambulance: '/book-ambulance',
 } as Record<string, string>)[id] || '/healthcare-services';

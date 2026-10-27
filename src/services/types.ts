@@ -6,6 +6,10 @@
 // exposes provider identity only; richer fields (rating, fee, image, availability) are intentionally
 // absent until a backend contract provides them.
 export interface ProviderItem {
+  hospital?: HospitalFacts | null;
+  gender?: string|null;
+  languagesList?: string[];
+  nextAvailable?: {date:string;time:string;facility_id:number|null}|null;
   id: string;              // Partner.id (uuid)
   serviceId: string;       // the service category the search was scoped to (may be empty)
   name: string;            // business_name
@@ -29,8 +33,26 @@ export interface ProviderItem {
   rating?: { average: number; count: number } | null;
   // The provider has paused new bookings/orders (emergency, leave, rush). Shown, not bookable.
   pause?: ProviderPause | null;
+  licenseStatus?: string | null;
+  businessHours?: { day: string; open_time: string | null; close_time: string | null; is_closed: boolean }[];
   // Hospitals / clinics: where they are, what they run and who consults there.
   org?: OrgSummary | null;
+}
+
+export interface HospitalFacts {
+  about: string | null;
+  year_established: number | null;
+  bed_count: number | null;
+  facilities: { id: string; name: string }[];
+  emergency_24x7: boolean | null;
+  emergency_contact: string | null;
+  cashless_available: boolean | null;
+  insurers: { id: string; name: string; cashless: boolean }[];
+  accreditations: { name: string; cert_no: string | null; valid_until: string | null; verification_status: 'VERIFIED' | 'DECLARED' | 'EXPIRED' | 'INCOMPLETE' }[];
+  opd_hours: { day: string; open: string | null; close: string | null; is_closed: boolean }[];
+  timezone: string;
+  arrival_desk: string | null;
+  virtual_tour: { url: string; media_type: 'embed' | 'video' } | null;
 }
 
 export interface OrgSummary {
@@ -76,6 +98,7 @@ export interface PharmacyRequestItem {
 }
 
 export interface PharmacyQuoteLine {
+  medicine_id?: string;
   prescribed_name: string;
   available: boolean;
   item_name?: string;
@@ -95,6 +118,12 @@ export type OrderPaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUND_PENDING
 export type OrderFulfillmentType = 'PICKUP' | 'DELIVERY';
 
 export interface OrderItemMedicine {
+  image_url?: string | null;
+  strength?: string | null;
+  strength_unit?: string | null;
+  dosage_form?: string | null;
+  packaging_type?: string | null;
+  units_per_pack?: number | null;
   id: string;
   medicine_name: string;
   requires_prescription: boolean;
@@ -111,6 +140,15 @@ export interface OrderItemLine {
 }
 
 export interface PatientOrder {
+  timeline?: {code:string;label:string;state:"completed"|"current"|"pending";occurred_at:string|null}[];
+  payments?: {amount:number|string;method:string;paid_at:string|null;transaction_number:string|null;status:"PAID"|"REFUND_PENDING"|"REFUNDED"}[];
+  invoice_number?: string|null;
+  delivery_fee?: number;
+  discount_amount?: number;
+  pickup_code?: string|null;
+  can_cancel?: boolean;
+  cancel_unavailable_reason?: string|null;
+  cancel_refund_note?: string|null;
   id: string;
   pharmacy_partner_id: string;
   pharmacy_request_id: string | null; // null = direct/OTC order
@@ -131,6 +169,7 @@ export interface PatientOrder {
   patient_id?: string;
   // Who ended a cancelled order: 'SYSTEM' when the pharmacy didn't answer in time, the patient's
   // own id when they cancelled, anyone else = the pharmacy declined.
+  cancelled_at?: string | null;
   cancelled_by?: string | null;
   cancellation_reason?: string | null;
 }

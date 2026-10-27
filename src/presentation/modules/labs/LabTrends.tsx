@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import LabTrendsEmpty from './LabTrendsEmpty';
 import { TrendingUp } from 'lucide-react';
 import { labTrendsApi, labError, type TrendParam } from '../../../services/labHelper';
 
@@ -23,7 +24,7 @@ export default function LabTrends() {
 
   if (err) return <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>;
   if (!data) return <p className="text-sm text-slate-400">Loading…</p>;
-  if (!data.parameters.length) return <p className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">Your results appear here once a lab releases a report, so you can see how each value changes over time.</p>;
+  if (!data.parameters.length) return <LabTrendsEmpty />;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
@@ -43,7 +44,7 @@ export default function LabTrends() {
   );
 }
 
-function TrendCard({ p }: { p: TrendParam }) {
+export function TrendCard({ p }: { p: TrendParam }) {
   const W = 560, Hh = 200, pad = { l: 44, r: 16, t: 14, b: 30 };
   const vals = p.points.map((x) => x.value);
   const last = p.points[p.points.length - 1];
@@ -63,7 +64,7 @@ function TrendCard({ p }: { p: TrendParam }) {
         <p className="text-sm"><span className="font-black tabular-nums">{last.value}</span> {p.unit} latest{change !== null && <span className={`ml-2 text-xs font-bold ${change === 0 ? 'text-slate-500' : 'text-slate-700'}`}>{change > 0 ? '▲' : change < 0 ? '▼' : '='} {Math.abs(Math.round(change * 100) / 100)} since last test</span>}</p>
       </div>
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full min-w-[420px]" role="img" aria-label={`${p.name} over time: ${p.points.map((pt) => `${day(pt.date)} ${pt.value}`).join(', ')}`}>
+        <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label={`${p.name} over time: ${p.points.map((pt) => `${day(pt.date)} ${pt.value}`).join(', ')}`}>
           {lo !== null && hi !== null && <rect x={pad.l} y={y(hi)} width={W - pad.l - pad.r} height={Math.max(1, y(lo) - y(hi))} fill="#14b8a6" opacity="0.12" />}
           {ticks.map((t) => <g key={t}><line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" /><text x={pad.l - 6} y={y(t) + 4} textAnchor="end" fontSize="10" fill="#64748b">{Math.round(t * 10) / 10}</text></g>)}
           <polyline fill="none" stroke="#0f766e" strokeWidth="2" points={p.points.map((pt, i) => `${x(i)},${y(pt.value)}`).join(' ')} />

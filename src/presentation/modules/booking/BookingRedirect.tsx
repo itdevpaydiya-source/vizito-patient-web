@@ -8,16 +8,20 @@ import UniversalBookingScreen from './UniversalBookingScreen';
  *   - lab / diagnostic -> /lab-tests
  *   - home care -> /home-care
  *   - pharmacy -> /pharmacy-orders/new
- * - Preserves /booking?service=hospital or clinic rendering UniversalBookingScreen
- *   so hospital booking tests continue to pass.
+ * - Redirects hospital/clinic booking links into the existing hospital journey
+ *   while preserving direct booking intent.
  */
 export default function BookingRedirect() {
   const [params] = useSearchParams();
   const service = (params.get('service') || '').toLowerCase();
   const provider = params.get('provider') || params.get('doctor') || params.get('partnerId');
+  if (service === 'hospital' || service === 'clinic') {
+    const query = provider ? new URLSearchParams({provider, book:'1'}).toString() : '';
+    return <Navigate to={'/find-hospitals' + (query ? '?' + query : '')} replace />;
+  }
 
-  // Hospital & Clinic booking, or direct doctor booking with a specific provider, continues through UniversalBookingScreen
-  if (service === 'hospital' || service === 'clinic' || (service === 'doctor' && provider)) {
+  // Existing doctor links retain their current booking implementation.
+  if (service === 'doctor' && provider) {
     return <UniversalBookingScreen />;
   }
 

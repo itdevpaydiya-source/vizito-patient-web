@@ -1,0 +1,4 @@
+import {expect,type Page} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
+export const bookingsShots='artifacts/bookings-lab-reference';
+export async function bookingShots(page:Page,name:string){await mkdir(bookingsShots,{recursive:true});for(const width of [1440,390]){await page.setViewportSize({width,height:1000});if(width===390)await expect.poll(()=>page.getByRole('complementary',{name:'Main navigation'}).evaluate(el=>el.getBoundingClientRect().right)).toBeLessThanOrEqual(0);await expect.poll(()=>page.locator('main').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.locator('main').evaluate(el=>{el.scrollTop=0;});await page.screenshot({path:`${bookingsShots}/${name}-${width}.png`});if(name.includes('detail')&&await page.locator('.lab-detail-page').count())await page.locator('.lab-detail-page').screenshot({path:`${bookingsShots}/${name}-full-${width}.png`});}await page.setViewportSize({width:1440,height:1000});}

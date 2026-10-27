@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchArea, metresBetween, formatDistance } from '../../../services/location';
+import BusinessImage from '../../components/BusinessImage';
 import LocationBar from '../../components/location/LocationBar';
 import { X, Search, AlertCircle, RotateCcw, Building2, ChevronRight } from 'lucide-react';
 import { getProvidersApi } from '../../../services/patientHelper';
@@ -12,9 +13,10 @@ import { pauseText, type ProviderItem } from '../../../services/types';
 // else this data is shown).
 const SelectPharmacyModal: React.FC<{
   title?: string;
+  excludedPharmacyIds?: string[];
   onSelect: (pharmacy: ProviderItem) => void;
   onClose: () => void;
-}> = ({ title = 'Select a Pharmacy', onSelect, onClose }) => {
+}> = ({ title = 'Select a Pharmacy', onSelect, onClose, excludedPharmacyIds = [] }) => {
   const [search, setSearch] = useState('');
   const [pharmacies, setPharmacies] = useState<ProviderItem[]>([]);
   const area = useSearchArea();
@@ -38,14 +40,16 @@ const SelectPharmacyModal: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const initialsOf = (name: string) => name.trim().split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{const node=dialog.current;const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;node?.showModal();return()=>{node?.close();previous?.focus({preventScroll:true});};},[]);
+  const visiblePharmacies=pharmacies.filter(p=>!excludedPharmacyIds.includes(p.id));
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <dialog ref={dialog} aria-label={title} onCancel={e=>{e.preventDefault();onClose();}} className="m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 text-slate-900 backdrop:bg-slate-900/40"><div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
           <h3 className="font-black text-slate-800 text-sm">{title}</h3>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+          <button aria-label="Close pharmacy selection" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-4 shrink-0">
@@ -75,7 +79,7 @@ const SelectPharmacyModal: React.FC<{
                 <RotateCcw className="w-3.5 h-3.5" /> Retry
               </button>
             </div>
-          ) : pharmacies.length === 0 ? (
+          ) : visiblePharmacies.length === 0 ? (
             <div className="py-14 text-center space-y-1">
               <Building2 className="w-8 h-8 text-slate-300 mx-auto" />
               <p className="text-slate-500 font-semibold text-xs">No pharmacies found.</p>
@@ -83,16 +87,14 @@ const SelectPharmacyModal: React.FC<{
           ) : (
             <div className="space-y-2">
               <LocationBar compact purpose="see the nearest pharmacies first" />
-              {(area ? [...pharmacies].sort((a, b) => (a.storePin ? metresBetween(area, a.storePin) : Infinity) - (b.storePin ? metresBetween(area, b.storePin) : Infinity)) : pharmacies).map((p) => (
+              {(area ? [...visiblePharmacies].sort((a, b) => (a.storePin ? metresBetween(area, a.storePin) : Infinity) - (b.storePin ? metresBetween(area, b.storePin) : Infinity)) : visiblePharmacies).map((p) => (
                 <button
                   key={p.id}
                   onClick={() => onSelect(p)}
                   disabled={!!p.pause}
                   className="w-full flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/30 transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-transparent"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-xs shrink-0">
-                    {initialsOf(p.name)}
-                  </div>
+                  <BusinessImage key={`${p.id}:${p.logo || ''}`} p={{ ...p, partnerType: 'pharmacy' }} className="h-10 w-10 shrink-0 rounded-xl" />
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-800 text-sm truncate">{p.name}</p>
                     {p.address
@@ -108,7 +110,7 @@ const SelectPharmacyModal: React.FC<{
           )}
         </div>
       </div>
-    </div>
+    </div></dialog>
   );
 };
 

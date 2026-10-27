@@ -2,13 +2,13 @@ import { test, expect, type Page } from '@playwright/test';
 import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { createTestDoctorWithAvailability, type TestDoctor } from './helpers/testDoctor';
 
-// Current flow: find the doctor in the list and choose Book Appointment, then pick tomorrow's date
+// Current flow: find the doctor in the list and choose Book appointment, then pick tomorrow's date
 // (the test doctor's real availability) and a real generated slot.
 async function goToTomorrowAndSelectDoctor(page: Page, doctorName: string, slotTime: string): Promise<void> {
-  await expect(page.getByRole('heading', { name: /Find Doctors & Clinics/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Find Doctors/ })).toBeVisible();
   await page.getByPlaceholder(/Search by doctor/).fill(doctorName);
-  const card = page.locator('div.rounded-2xl', { hasText: doctorName }).filter({ has: page.getByRole('button', { name: /Book Appointment/ }) }).first();
-  await card.getByRole('button', { name: /Book Appointment/ }).click();
+  const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: new RegExp(doctorName) }) });
+  await card.getByRole('button', { name: /Book appointment/ }).click();
 
   await page.getByRole('button', { name: 'Tomorrow' }).click();
   await page.getByRole('button', { name: slotTime }).click();

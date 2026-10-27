@@ -1,0 +1,54 @@
+.lab-selection-layout {display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start;color:#101d48}
+.lab-selection-card {min-width:0;background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px}
+.lab-selection-card h2 {font-size:17px;font-weight:800;margin:0}
+.lab-selection-search {display:flex;align-items:center;gap:10px;border:1px solid #e2e8f0;border-radius:12px;padding:11px 13px;background:#f8fafc;color:#64748b}
+.lab-selection-search input {min-width:0;width:100%;background:transparent;font-size:14px;outline:none}
+.lab-selection-search:focus-within {outline:2px solid #ea580c;outline-offset:2px}
+.lab-selection-categories {display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 22px}
+.lab-selection-categories button {border:1px solid #e2e8f0;border-radius:24px;padding:8px 12px;font-size:12px;font-weight:600}
+.lab-selection-categories button[aria-pressed=true] {background:#fff7ed;border-color:#f97316;color:#c2410c}
+.lab-selection-list-heading p,.lab-selection-pricing p,.lab-selection-message {font-size:13px;color:#64748b;line-height:1.6;margin-top:6px}
+.lab-selection-list {margin-top:14px;list-style:none;padding:0}
+.lab-selection-list>li {border:1px solid #e2e8f0;border-radius:12px;padding:11px 13px;margin-top:5px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.lab-selection-test {display:flex;align-items:center;gap:12px;flex:1;min-width:180px;cursor:pointer}
+.lab-selection-test input {accent-color:#ea580c;width:18px;height:18px;flex-shrink:0}
+.lab-selection-icon {display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;border-radius:13px;background:#fff1f2;color:#f43f5e}
+.lab-selection-test-copy {min-width:0;display:flex;flex-direction:column;gap:4px;font-size:14px;overflow-wrap:anywhere}
+.lab-selection-test-copy>span,.lab-selection-test-copy small {font-size:12px;color:#64748b;line-height:1.5}
+.lab-selection-details {font-size:12px;color:#c2410c}
+.lab-selection-details summary {cursor:pointer;text-decoration:underline;font-weight:600}
+.lab-selection-details[open] {width:100%}.lab-selection-details>div {padding:10px;color:#475569;line-height:1.6}
+.lab-selection-summary {position:sticky;top:20px;border-color:#dce5f1;box-shadow:0 3px 12px #101d4805}.lab-selection-summary header {display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:8px}
+.lab-selection-summary header button {font-size:12px;color:#c2410c;text-decoration:underline;white-space:nowrap}
+.lab-selection-summary ul {list-style:none;padding:0;margin:12px 0}.lab-selection-summary li {display:flex;align-items:center;gap:10px;padding:15px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.lab-selection-summary li>strong {flex:1;min-width:0;overflow-wrap:anywhere}.lab-selection-summary li>svg {flex-shrink:0;color:#3b82f6}.lab-selection-summary li>button {padding:7px;color:#64748b}
+.lab-selection-pricing {border-top:1px solid #e2e8f0;margin-top:16px;padding-top:16px;font-size:14px}
+.lab-selection-continue {display:flex;justify-content:center;align-items:center;gap:8px;margin-top:18px;padding:13px 16px;width:100%;background:#ea580c;color:white;border-radius:11px;font-weight:700;font-size:13px}
+.lab-selection-continue:disabled {opacity:.45;cursor:not-allowed}
+.lab-selection-guidance {margin-top:22px;padding:16px;background:#eff6ff;border:1px solid #dbeafe;border-radius:12px}.lab-selection-guidance h3 {font-size:14px;font-weight:700}.lab-selection-guidance p {display:flex;align-items:start;gap:8px;font-size:12px;color:#475569;margin-top:10px;line-height:1.5}.lab-selection-guidance svg {flex-shrink:0}
+.lab-selection-help {display:flex;gap:8px;align-items:center;font-size:13px;color:#c2410c;margin-top:16px}
+.lab-selection-layout button:focus-visible,.lab-selection-layout summary:focus-visible,.lab-selection-layout a:focus-visible {outline:2px solid #ea580c;outline-offset:3px}
+.lab-booking-progress {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:16px;background:white;border:1px solid #e2e8f0;border-radius:16px;list-style:none}
+.lab-booking-progress li {display:flex;align-items:start;gap:10px;min-width:0;font-size:13px;color:#475569}.lab-booking-progress li>span {display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:50%;background:#f1f5f9;font-weight:700}.lab-booking-progress li[aria-current=step]>span {background:#ea580c;color:white}.lab-booking-progress small {display:block;font-size:11px;margin-top:3px;color:#64748b}
+.lab-catalogue-tabs {display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid #e2e8f0;padding-bottom:0}.lab-catalogue-tabs button {padding:10px 16px;border-bottom:2px solid transparent;font-size:13px;font-weight:700}.lab-catalogue-tabs button[aria-pressed=true] {border-color:#ea580c;color:#c2410c}
+.lab-selection-toolbar {display:flex;align-items:center;gap:12px}.lab-selection-toolbar .lab-selection-search {flex:1;min-width:0;padding:9px 12px}
+.lab-selection-toolbar>select {max-width:180px;min-width:0;border:1px solid #e2e8f0;border-radius:20px;background:white;padding:9px 12px;font-size:12px;font-weight:600;color:#101d48}
+.lab-selection-list-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lab-selection-sort {display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b}.lab-selection-sort select {min-width:0;background:white;color:#475569;padding:6px 0}
+.lab-selection-tags {display:flex;flex-wrap:wrap;gap:5px}.lab-selection-tags span {background:#f4f7fc;border:1px solid #e6edf6;border-radius:16px;padding:1px 7px;font-size:11px}
+.lab-selection-summary-icon {display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;background:#fff1f2;border-radius:12px;color:#f43f5e}
+.lab-selection-support {display:flex;align-items:flex-start;gap:12px;margin-top:16px;padding:16px;border:1px solid #ffedd5;border-radius:12px;background:#fffaf5}.lab-selection-support>svg {flex-shrink:0;color:#ea580c}.lab-selection-support h3 {font-size:14px;font-weight:700}.lab-selection-support p {font-size:12px;color:#64748b;line-height:1.5;margin-top:5px}.lab-selection-support a {margin-top:10px;text-decoration:underline;font-weight:700}
+.lab-selection-layout select:focus-visible {outline:2px solid #ea580c;outline-offset:3px}
+@media(max-width:1100px){.lab-selection-layout {grid-template-columns:minmax(0,1fr) 280px}}
+@media(max-width:1023px){.lab-selection-layout {grid-template-columns:minmax(0,1fr)}.lab-selection-summary {position:static}.lab-booking-progress {grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.lab-selection-card {padding:15px}.lab-booking-progress {gap:14px 8px;padding:12px}.lab-booking-progress li {font-size:12px}.lab-selection-icon {width:34px;height:34px}}
+@media(max-width:600px){.lab-selection-toolbar {flex-wrap:wrap}.lab-selection-toolbar .lab-selection-search {flex-basis:100%}.lab-selection-toolbar>select {max-width:100%;width:100%}.lab-selection-list-heading {align-items:flex-start}.lab-selection-test {min-width:0;flex-basis:100%}.lab-selection-details {margin-left:30px}}
+.lab-selection-mobile-bar {position:fixed;bottom:0;left:0;right:0;z-index:45;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #e2e8f0;background:white;box-shadow:0 -4px 20px #101d4810}
+.lab-selection-mobile-bar .lab-selection-continue {margin:0;flex:1;min-width:0;font-size:12px;padding:12px 10px}
+.lab-selection-count {flex-shrink:0;color:#101d48;font-size:12px;font-weight:700;text-decoration:underline;min-height:44px}
+.lab-selection-has-bar {padding-bottom:86px}
+.lab-selection-sheet {position:fixed;inset:auto 0 0;width:100%;max-width:640px;max-height:85dvh;margin:0 auto;border:1px solid #e2e8f0;border-radius:20px 20px 0 0;padding:0 0 env(safe-area-inset-bottom);overflow-y:auto;color:#101d48;background:white}
+.lab-selection-sheet::backdrop {background:#101d4860}
+.lab-selection-sheet .lab-selection-summary {border:0;box-shadow:none;border-radius:0;padding-top:0}
+.lab-selection-sheet-close {display:flex;justify-content:flex-end;padding:8px 12px}.lab-selection-sheet-close button {padding:10px;border-radius:10px}
+@media(max-width:1023px){.lab-selection-toolbar>select {display:none}.lab-selection-categories {flex-wrap:nowrap;overflow-x:auto;padding:3px 2px 8px;margin-bottom:14px}.lab-selection-categories button {flex-shrink:0;white-space:nowrap}}

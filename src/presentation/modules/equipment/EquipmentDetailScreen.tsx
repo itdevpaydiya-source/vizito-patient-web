@@ -1,3 +1,4 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -261,7 +262,7 @@ export const EquipmentDetailScreen: React.FC = () => {
         availableStock: p.availableStock,
         deliveryType: 'Doorstep Delivery & Installation',
         deliveryEst: 'Within 24 hours',
-        image: p.imageUrl || item.imageUrl || '/equipment/hospital-bed.jpg',
+        image: p.imageUrl || item.imageUrl,
         logo: p.providerLogo || p.providerDetails?.logo,
         banner: p.providerBanner || p.providerDetails?.banner,
         phone: providerPhone,
@@ -403,13 +404,10 @@ export const EquipmentDetailScreen: React.FC = () => {
           <div className="lg:col-span-4 space-y-3">
             {/* Main Showcase Image */}
             <div className="h-56 sm:h-64 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-              <img
+              <MediaImage kind="equipment" category={item.mediaCategory}
                 src={activeMainImage}
-                alt={item.name}
+                name={item.name}
                 className="w-full h-full object-cover transition-all duration-300"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                }}
               />
             </div>
 
@@ -424,13 +422,10 @@ export const EquipmentDetailScreen: React.FC = () => {
                     selectedImageIndex === idx ? 'border-[#C26532] shadow-xs' : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <img
+                  <MediaImage kind="equipment" category={item.mediaCategory}
                     src={thumb}
-                    alt={`${item.name} thumbnail ${idx + 1}`}
+                    name={`${item.name} thumbnail ${idx + 1}`}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                    }}
                   />
                 </button>
               ))}
@@ -707,20 +702,11 @@ export const EquipmentDetailScreen: React.FC = () => {
                   onClick={() => setSelectedProviderModal(provider)}
                   title="Click to view partner business details, banner and logo"
                 >
-                  {provider.logo ? (
-                    <img
+                  <MediaImage kind="business" businessType="equipment"
                       src={provider.logo}
-                      alt={provider.name}
+                      name={provider.name}
                       className="w-full h-full object-contain rounded-lg"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/equipment/store-1.jpg';
-                      }}
                     />
-                  ) : (
-                    <div className="w-full h-full rounded-lg bg-amber-50 border border-amber-200/60 flex items-center justify-center text-[#9C4119] font-black text-xl">
-                      {provider.name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-1">

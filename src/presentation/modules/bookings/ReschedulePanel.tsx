@@ -39,7 +39,7 @@ const ReschedulePanel: React.FC<{
   return (
     <div className="rounded-2xl border border-sky-200 bg-sky-50/50 p-4 space-y-3" role="group" aria-label="Reschedule this visit">
       <p className="text-sm font-extrabold text-slate-900 flex items-center gap-2"><CalendarClock className="w-4 h-4 text-sky-700" /> Choose a new time</p>
-      <p className="text-xs text-slate-600">Same doctor{booking.branchName ? ` at ${booking.branchName}` : ''}. Your payment moves with the visit. You can reschedule up to 2 times.</p>
+      <p className="text-xs text-slate-600">Same doctor{booking.branchName ? ` at ${booking.branchName}` : ''}. Your payment moves with the visit.{booking.visit?.reschedules_left != null && ` Changes remaining: ${booking.visit.reschedules_left}.`}</p>
       <div className="flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Day">
         {days.map((d) => (
           <button key={d} type="button" role="radio" aria-checked={day === d} onClick={() => setDay(d)}

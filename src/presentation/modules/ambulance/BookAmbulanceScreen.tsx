@@ -1,5 +1,10 @@
+import {useSearchArea} from '../../../services/location';
+import {getProvidersApi} from '../../../services/patientHelper';
+import type {ProviderItem} from '../../../services/types';
+import {providerDistance} from '../../components/ProviderCard';
+import LocationBar from '../../components/location/LocationBar';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Ambulance, PhoneCall } from 'lucide-react';
 import { ambulanceError, ambulanceOperatorsApi, bookAmbulanceApi, MOBILITY, newIdempotencyKey, routeEstimateApi, rupees, scheduledAvailableApi, termsText, type AmbulanceOperator, type RouteEstimate, type ScheduledAvailability } from '../../../services/ambulanceHelper';
 import ScheduledBookingForm from './ScheduledBookingForm';
@@ -12,6 +17,9 @@ const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${p
 
 const BookAmbulanceScreen = () => {
   const navigate = useNavigate();
+  const area=useSearchArea(),[providerPins,setProviderPins]=useState<ProviderItem[]>([]);
+  useEffect(()=>{getProvidersApi('ambulance').then(setProviderPins).catch(()=>setProviderPins([]));},[]);
+  const operatorDistance=(id:string)=>{const p=providerPins.find(p=>p.id===id);return p?providerDistance(p,area)?.metres??Infinity:Infinity;};
   const [ops, setOps] = useState<AmbulanceOperator[] | null>(null);
   const [family, setFamily] = useState<PatientFamilyMember[]>([]);
   const [f, setF] = useState({ forWho: '', type: '', operator: '', when: localInput(new Date(Date.now() + 3 * 3600000)), pickup: '', drop: '', mobility: '', attendants: '1', notes: '', phone: '' });
@@ -34,7 +42,7 @@ const BookAmbulanceScreen = () => {
     for (const o of ops || []) for (const t of o.vehicle_types) m.set(t.vehicle_type, t.vehicle_type_label);
     return [...m.entries()];
   }, [ops]);
-  const offering = (ops || []).filter((o) => o.vehicle_types.some((t) => t.vehicle_type === f.type));
+  const offering = (ops || []).filter((o) => o.vehicle_types.some((t) => t.vehicle_type === f.type)).sort((a,b)=>area?operatorDistance(a.partner_id)-operatorDistance(b.partner_id):0);
   const chosen = offering.find((o) => o.partner_id === f.operator)?.vehicle_types.find((t) => t.vehicle_type === f.type);
   const set = (p: Partial<typeof f>) => { setErr(null); setF({ ...f, ...p }); };
   // Driving estimate from Google Maps only (never a straight line or a guessed distance).
@@ -57,14 +65,14 @@ const BookAmbulanceScreen = () => {
   };
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-6 space-y-4">
+    <div className="max-w-xl mx-auto px-4 py-6 space-y-4"><LocationBar compact purpose="find ambulance services near you"/>
       <div>
         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2"><Ambulance className="w-6 h-6 text-rose-600" /> Book an ambulance</h1>
         <p className="text-sm text-slate-500 mt-1">For planned trips — hospital discharge, transfers, dialysis, scans. Book at least an hour ahead.</p>
       </div>
-      <a href="tel:108" role="note" className="flex items-center gap-3 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-900">
-        <PhoneCall className="w-6 h-6 shrink-0" /><span><b className="block text-base">Emergency? Call 108 now.</b><span className="text-sm">Don't use this form for an emergency. Need one soon? Use <b>Urgent ambulance</b> below as well as 108.</span></span>
-      </a>
+      <div role="note" className="flex items-center gap-3 rounded-2xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-900">
+        <PhoneCall className="w-6 h-6 shrink-0" /><span><b className="block text-base">Emergency? Call <a href="tel:108" className="underline">108</a> now.</b><span className="text-sm">Don't use this form for an emergency. Need one soon? Use <Link to="/urgent-ambulance" className="underline font-bold">Urgent ambulance</Link> as well as 108.</span></span>
+      </div>
       {auto === undefined ? <p className="text-sm text-slate-400">Loading…</p>
         : auto && !chooseOperator ? <ScheduledBookingForm info={auto} onChooseOperator={() => setChooseOperator(true)} />
         : !ops ? <p className="text-sm text-slate-400">Loading…</p> : !ops.length ? (
@@ -78,7 +86,7 @@ const BookAmbulanceScreen = () => {
             </select>
           </label>
           <label className="block text-xs font-bold text-slate-700">Vehicle type
-            <select aria-label="Vehicle type" value={f.type} onChange={(e) => set({ type: e.target.value, operator: '' })} className={`${sel} mt-1`}>
+            <select aria-label="Vehicle type" value={f.type} onChange={(e) => set({ type: e.target.value, operator: (() => { const available = (ops || []).filter(o => o.vehicle_types.some(t => t.vehicle_type === e.target.value)); return available.length === 1 ? available[0].partner_id : ''; })() })} className={`${sel} mt-1`}>
               <option value="">Choose</option>{types.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
             </select>
           </label>
@@ -110,6 +118,7 @@ const BookAmbulanceScreen = () => {
           <label className="block text-xs font-bold text-slate-700">Note for the crew (optional)<input maxLength={300} aria-label="Note for the crew" value={f.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="e.g. 3rd floor, no lift" className={`${sel} mt-1`} /></label>
           {err && <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>}
           <button onClick={submit} disabled={busy || !f.type || !f.operator} className="w-full rounded-xl bg-rose-600 py-3 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Booking…' : 'Book ambulance'}</button>
+          {f.type && !f.operator && <p className="text-xs text-slate-500">Choose an operator</p>}
           <p className="text-xs text-slate-500">The operator confirms the booking and then tells you the vehicle and driver. You can cancel for free until the vehicle sets off.</p>
         </section>
       )}
@@ -118,3 +127,4 @@ const BookAmbulanceScreen = () => {
 };
 
 export default BookAmbulanceScreen;
+

@@ -34,9 +34,10 @@ test('patient cancels a paid booking and is refunded', async ({ page, request })
 
   await loginAsTestPatient(page, patient);
   await page.goto('/my-consultations');
-  // Opens on Upcoming (the only non-empty tab), card shows the doctor.
-  await expect(page.getByRole('button', { name: /Upcoming/ })).toHaveClass(/bg-slate-900/);
-  const card = page.getByText(booking.booking_number).locator('xpath=ancestor::div[contains(@class,"cursor-pointer")][1]');
+  // Choose Upcoming from the redesigned Bookings tabs, then open the real booking.
+  await page.getByRole('button', { name: /^Upcoming \d+$/ }).click();
+  await expect(page.getByRole('button', { name: /^Upcoming \d+$/ })).toHaveAttribute('aria-pressed', 'true');
+  const card = page.getByRole('button', { name: /View details for/ }).filter({ hasText: booking.booking_number });
   await expect(card).toContainText('Dr. PW Booking Test Doctor');
   await card.click();
 
@@ -50,7 +51,7 @@ test('patient cancels a paid booking and is refunded', async ({ page, request })
   await panel.getByRole('button', { name: 'Yes, cancel booking' }).click();
 
   await expect(page.getByRole('status')).toContainText(`${booking.booking_number} is cancelled. A test refund of ₹650 is recorded`);
-  await expect(page.getByRole('button', { name: /Cancelled/ })).toHaveClass(/bg-slate-900/);
+  await expect(page.getByRole('button', { name: /^Cancelled \d+$/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(`Ref: ${booking.booking_number}`)).toBeVisible();
   if (shots) await page.screenshot({ path: `${shots}/cancel_done.png` });
 

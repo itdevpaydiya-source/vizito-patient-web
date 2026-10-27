@@ -1,0 +1,11 @@
+import {describe,it,expect} from 'vitest';
+import {quoteLines,quoteExpired,requestGroup,requestLabel,requestDate,differentProduct,canResendRequest} from './prescriptionRequests';
+import type {PharmacyRequestItem} from '../../../services/types';
+const r={id:'r1',prescription_id:'rx1',pharmacy_partner_id:'p1',status:'Requested',order_id:null} as PharmacyRequestItem;
+describe('prescription request lifecycle presentation',()=>{
+ it('groups actual statuses and gives linked orders precedence',()=>{expect(requestGroup(r)).toBe('waiting');expect(requestGroup({...r,status:'Accepted'})).toBe('attention');for(const status of ['Cancelled','Rejected','Expired'] as const)expect(requestGroup({...r,status})).toBe('closed');const ordered={...r,status:'Accepted' as const,order_id:'o1'};expect(requestGroup(ordered)).toBe('closed');expect(requestLabel(ordered)).toBe('Ordered');});
+ it('distinguishes quote expiry from request expiry and tolerates absent dates',()=>{const q={...r,status:'Accepted' as const,quote_items:JSON.stringify([{prescribed_name:'M',available:false}]),quote_valid_until:'2020-01-01'};expect(quoteExpired(q)).toBe(true);expect(requestLabel(q)).toBe('Quote ready');expect(quoteExpired({...q,quote_valid_until:null})).toBe(false);expect(requestDate(undefined)).toBeNull();expect(requestDate('bad')).toBeNull();});
+ it('rejects malformed quotes instead of fabricating lines or prices',()=>{for(const quote_items of ['bad','{}','[null]'])expect(quoteLines({...r,quote_items})).toBeNull();expect(quoteLines(r)).toEqual([]);});
+ it('avoids duplicated medicine descriptions but identifies alternatives',()=>{expect(differentProduct({prescribed_name:' Amox 500 MG ',item_name:'amox 500 mg',available:true})).toBe(false);expect(differentProduct({prescribed_name:'Amox 500 mg',item_name:'Different brand',available:true})).toBe(true);});
+ it('resends closed prescriptions only when no other live request or linked order exists',()=>{const rejected={...r,status:'Rejected' as const};expect(canResendRequest(rejected,[rejected])).toBe(true);expect(canResendRequest(rejected,[rejected,{...r,id:'r2'}])).toBe(false);expect(canResendRequest({...rejected,order_id:'o1'},[rejected])).toBe(false);});
+});

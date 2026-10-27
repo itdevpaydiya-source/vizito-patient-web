@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5174,
+    // Playwright downloads can be exclusively locked on Windows; they are not app sources.
+    watch: { ignored: ['**/artifacts/**', '**/test-results/**', '**/playwright-report/**'] },
     allowedHosts: ['vizito.in', '.vizito.in', 'localhost']
   },
 })

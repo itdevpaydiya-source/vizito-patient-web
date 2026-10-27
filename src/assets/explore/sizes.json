@@ -1,0 +1,98 @@
+[
+  {
+    "name": "all-providers.webp",
+    "bytes": 33758
+  },
+  {
+    "name": "ambulance.webp",
+    "bytes": 69940
+  },
+  {
+    "name": "blood-services.webp",
+    "bytes": 8930
+  },
+  {
+    "name": "doctor-consultation.webp",
+    "bytes": 26488
+  },
+  {
+    "name": "easy-booking.svg",
+    "bytes": 247
+  },
+  {
+    "name": "fallback-ambulance.webp",
+    "bytes": 36536
+  },
+  {
+    "name": "fallback-bloodbank.webp",
+    "bytes": 14232
+  },
+  {
+    "name": "fallback-doctor.webp",
+    "bytes": 18026
+  },
+  {
+    "name": "fallback-equipment.webp",
+    "bytes": 26500
+  },
+  {
+    "name": "fallback-homecare.webp",
+    "bytes": 28336
+  },
+  {
+    "name": "fallback-hospital.webp",
+    "bytes": 46212
+  },
+  {
+    "name": "fallback-lab.webp",
+    "bytes": 21712
+  },
+  {
+    "name": "fallback-pharmacy.webp",
+    "bytes": 21770
+  },
+  {
+    "name": "hero-care.webp",
+    "bytes": 26924
+  },
+  {
+    "name": "home-care.webp",
+    "bytes": 53212
+  },
+  {
+    "name": "hospitals-clinics.webp",
+    "bytes": 70584
+  },
+  {
+    "name": "index.ts",
+    "bytes": 1676
+  },
+  {
+    "name": "lab-tests.webp",
+    "bytes": 27620
+  },
+  {
+    "name": "medical-equipment.webp",
+    "bytes": 51400
+  },
+  {
+    "name": "nearby.svg",
+    "bytes": 279
+  },
+  {
+    "name": "pharmacy.webp",
+    "bytes": 20686
+  },
+  {
+    "name": "prompts.json",
+    "bytes": 13438
+  },
+  {
+    "name": "sheet.png",
+    "bytes": 1068040
+  },
+  {
+    "name": "verified.svg",
+    "bytes": 275
+  }
+]

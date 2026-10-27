@@ -4,11 +4,17 @@ import apiClient from './index';
 // Exact unit counts are never sent to patients.
 export type Band = 'AVAILABLE' | 'NOT_AVAILABLE';
 export interface BloodReference { components: { code: string; name: string }[]; groups: { code: string; label: string }[] }
-export interface BloodCentre {
+export interface VerifiedBloodCentre {
   partner_id: string; name: string; phone: string | null; address: string | null; pincode: string | null;
-  distance_km: number | null; bands: Record<string, Band>; any_available: boolean;
+  distance_km: number | null;
+}
+export interface BloodCentre extends VerifiedBloodCentre {
+  bands: Record<string, Band>; any_available: boolean;
 }
 export interface AvailabilityResult { group: string; components: string[]; centres: BloodCentre[] }
+
+export const bloodCentresApi = async (point: { lat?: number; lng?: number } = {}): Promise<{ centres: VerifiedBloodCentre[] }> =>
+  (await apiClient.get('/bloodbank/centres', { params: point })).data;
 
 export const bloodReferenceApi = async (): Promise<BloodReference> => (await apiClient.get('/bloodbank/reference')).data;
 export const bloodAvailabilityApi = async (p: { group: string; component?: string; lat?: number; lng?: number }): Promise<AvailabilityResult> =>
@@ -22,6 +28,10 @@ export const bloodError = (e: any, fallback: string) => {
 // ── Requests (D2) ──
 export interface Requisition { id: string; source: 'DOCTOR' | 'UPLOAD'; routed_bloodbank?: { partner_id: string; name: string | null } | null; doctor_name: string | null; component_code: string | null; requested_group: string | null; quantity: number | null; urgency: string | null; indication: string | null; file_name: string | null; created_at: string }
 export interface MyBloodRequest {
+  timeline?: {code:string;label:string;at:string}[];
+  reserved_until?:string|null; paid_at?:string|null;payment_method?:'CASH'|'ONLINE'|null;payment_reference?:string|null;
+  cancel_unavailable_reason?:string|null;for_relationship?:string|null;requested_by_doctor?:string|null;
+  bloodbank?:{name:string|null;phone:string|null;address:string|null;latitude:number|null;longitude:number|null;licence_number:string|null;hours:{day:string;open:string|null;close:string|null;closed:boolean}[]};
   id: string; request_number: string; bloodbank_partner_id: string; bloodbank_name: string | null; patient_name: string | null;
   component_code: string; requested_group: string; quantity: number; urgency: string; status: string; status_label: string; status_reason: string | null;
   processing_charge: { per_unit: number; total: number } | null; payment_status: string; can_pay: boolean; can_cancel: boolean; created_at: string; issued_at: string | null;
@@ -38,6 +48,7 @@ export const uploadRequisitionApi = async (file: File, familyMemberId?: string):
 export const createBloodRequestApi = async (body: Record<string, unknown>, idempotencyKey = key()): Promise<MyBloodRequest> =>
   (await apiClient.post('/bloodbank/requests', body, { headers: { 'Idempotency-Key': idempotencyKey } })).data;
 export const myBloodRequestsApi = async (): Promise<MyBloodRequest[]> => (await apiClient.get('/bloodbank/requests/mine')).data;
+export const myBloodRequestApi = async (id:string):Promise<MyBloodRequest> => (await apiClient.get(`/bloodbank/requests/mine/${encodeURIComponent(id)}`)).data;
 export const cancelBloodRequestApi = async (id: string, reason: string): Promise<MyBloodRequest> => (await apiClient.post(`/bloodbank/requests/mine/${encodeURIComponent(id)}/cancel`, { reason })).data;
 export const payBloodRequestApi = async (id: string, payment: Record<string, unknown>, idempotencyKey = key()): Promise<MyBloodRequest> =>
   (await apiClient.post(`/bloodbank/requests/mine/${encodeURIComponent(id)}/pay`, { payment }, { headers: { 'Idempotency-Key': idempotencyKey } })).data;

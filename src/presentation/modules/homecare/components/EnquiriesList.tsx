@@ -22,15 +22,17 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 export default function EnquiriesList({ onQuoteAccepted, className = '' }: EnquiriesListProps) {
   const [enquiries, setEnquiries] = useState<HcEnquiry[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState(false);
   const [selectedEnquiry, setSelectedEnquiry] = useState<HcEnquiry | null>(null);
   const [reviewQuote, setReviewQuote] = useState<HcQuote | null>(null);
 
   const loadEnquiries = useCallback(async () => {
+    setLoading(true);setError(false);
     try {
       const data = await hcEnquiriesMineApi();
       setEnquiries(data);
     } catch {
-      setEnquiries([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -44,12 +46,12 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
     return <div className="text-xs text-slate-400 py-3">Loading active enquiries...</div>;
   }
 
-  if (!enquiries || enquiries.length === 0) {
-    return null; // Don't show clutter if patient hasn't submitted any enquiries yet
-  }
+  if(error)return <section role="alert" className="hcj-state"><h2>Unable to load your care quotes</h2><p>Please try again.</p><button onClick={loadEnquiries}>Retry</button></section>;
+  if (!enquiries || enquiries.length === 0) return <section className="hcj-state"><h2>No care quote requests yet</h2><p>Share your long-term care needs to request a quote from an agency.</p><a className="hcj-primary" href="/home-care?track=longterm">Request a quote</a></section>;
 
   return (
     <div className={`space-y-3 ${className}`} data-testid="patient-enquiries-section">
+      {enquiries.flatMap(e=>(e.quotes|| (e.quote?[e.quote]:[])).filter(q=>q.status==='SENT'&&new Date(q.valid_until).getTime()>Date.now()).map(q=>({q,agency:e.agency?.name}))).length>1&&<section className="hcj hcj-team"><h2>Compare available quotes</h2><div className="hcj-table-scroll"><table><thead><tr><th>Agency / plan</th><th>Shift price</th><th>Shifts / cycle</th><th>Total incl. tax</th><th>Advance</th><th>Includes</th><th/></tr></thead><tbody>{enquiries.flatMap(e=>(e.quotes||(e.quote?[e.quote]:[])).filter(q=>q.status==='SENT'&&new Date(q.valid_until).getTime()>Date.now()).map(q=><tr key={q.id}><td>{e.agency?.name}<br/>{q.service.name}</td><td>₹{q.rate_per_shift}</td><td>{q.shifts_per_cycle} / {q.cycle_days} days</td><td>₹{q.total}</td><td>₹{q.advance}</td><td>{q.includes||'Not provided'}</td><td><button onClick={()=>setReviewQuote(q)}>Review & accept</button></td></tr>))}</tbody></table></div></section>}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
           <FileText className="w-4 h-4 text-teal-700" />

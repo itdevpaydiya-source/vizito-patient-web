@@ -1,8 +1,11 @@
+import {useSearchArea} from '../../../services/location';
+import {providerDistance} from '../../components/ProviderCard';
+import type {ProviderItem} from '../../../services/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import HomePinField from '../../components/location/HomePinField';
 import FavoriteButton from '../../components/FavoriteButton';
 import { useSearchParams } from 'react-router-dom';
-import { getAddressesApi } from '../../../services/patientHelper';
+import { getAddressesApi,getProvidersApi } from '../../../services/patientHelper';
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import { Search, ShieldCheck, Star, Clock, Users, CheckCircle2, MapPin, ChevronDown, X, Info } from 'lucide-react';
@@ -34,6 +37,9 @@ const CAT_LABEL: Record<HcCategory, string> = { NURSING: 'Nursing', PHYSIOTHERAP
 
 export default function HomeCareAgencyBook({ category, onBooked, referral, prefill, onCategory }: { category: HcCategory; onBooked: (o: HcOrder) => void; referral?: HcReferral | null; prefill?: HcOrder | null; onCategory?: (c: HcCategory) => void }) {
   const [urlParams, setUrlParams] = useSearchParams();
+  const area=useSearchArea(),[providerPins,setProviderPins]=useState<ProviderItem[]>([]);
+  useEffect(()=>{getProvidersApi('homecare').then(setProviderPins).catch(()=>setProviderPins([]));},[]);
+  const distance=(s:HcService)=>{const p=providerPins.find(p=>p.id===s.agency.id);return p?providerDistance(p,area)?.metres??Infinity:Infinity;};
   // The agency chosen in the header search (or a rebook): a real filter the patient can remove.
   const wantAgency = urlParams.get('agency') || prefill?.agency_id || '';
   const [coverage, setCoverage] = useState<HcCoverage | null | 'gone'>(null);
@@ -48,7 +54,8 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   const [err, setErr] = useState<string | null>(null);
   const [q, setQState] = useState(() => urlParams.get('q') || ''); // a search carried over from the header
   const setQ = (v: string) => { setQState(v); setUrl('q', v.trim()); };
-  const [sort, setSort] = useState<'PRICE' | 'RATING'>('PRICE');
+  const [sort, setSort] = useState<'PRICE' | 'RATING' | 'NEAREST'>(area?'NEAREST':'PRICE');
+  useEffect(()=>{setSort(area?'NEAREST':'PRICE');},[area]);
   const [kind, setKind] = useState<'ALL' | 'VISIT' | 'SHIFT'>('ALL');
   const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<string | null>(null);
@@ -109,7 +116,7 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   const matchAgency = (x: HcService) => !wantAgency || String(x.agency.id) === String(wantAgency);
   const rows = useMemo(() => (list || [])
     .filter((x) => (kind === 'ALL' || x.kind === kind) && matchWords(x) && matchAgency(x))
-    .sort((a, b) => (sort === 'RATING' ? (b.agency.rating || 0) - (a.agency.rating || 0) : 0) || a.price - b.price), [list, kind, q, sort, wantAgency]); // eslint-disable-line react-hooks/exhaustive-deps
+    .sort((a,b)=> (area&&sort==='NEAREST'?(distance(a)-distance(b))||0:0) || (sort === 'RATING' ? (b.agency.rating || 0) - (a.agency.rating || 0) : 0) || a.price - b.price), [list, kind, q, sort, wantAgency,area,providerPins]); // eslint-disable-line react-hooks/exhaustive-deps
   // The same search in the other care types at this PIN ("Physiotherapy (2)").
   const elsewhere = (['NURSING', 'PHYSIOTHERAPY', 'CAREGIVER'] as HcCategory[]).filter((c) => c !== category)
     .map((c) => ({ c, n: (all || []).filter((x) => x.category === c && matchWords(x) && matchAgency(x)).length })).filter((e) => e.n > 0);
@@ -127,13 +134,14 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   return (
     <div className="space-y-4">
       {referral && <ReferralNote r={referral} />}
-      <section className={`${card} space-y-4`} aria-label="Find home care">
+      <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <section className={`${card} space-y-4 lg:sticky lg:top-4`} aria-label="Search and filter home care">
         <div>
           <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-teal-800">{intro.title}</p>
           <h2 className="text-lg font-black text-slate-900 mt-0.5">Find care near you</h2>
           <p className="text-sm text-slate-600 mt-1">{intro.text}</p>
         </div>
-        <div className="grid gap-3 md:grid-cols-[minmax(220px,0.8fr)_minmax(260px,1.2fr)_auto] md:items-end">
+        <div className="grid gap-3">
           <label className="block space-y-1.5">
             <span className="text-xs font-bold text-slate-700">Where do you need care?</span>
             <span className="relative block"><MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input aria-label="Your pincode" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} onBlur={() => { if (pin) { const p = validatePinCode(pin); if (!p.ok) setErr(p.message); } }} placeholder="6-digit PIN code" className={`${field} pl-9`} /></span>
@@ -142,13 +150,13 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
             <span className="text-xs font-bold text-slate-700">Looking for a specific agency or service?</span>
             <span className="relative block"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input aria-label="Search services or agencies" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} placeholder="Search by agency or service name" className={`${field} pl-9`} />{q && <button type="button" aria-label="Clear search" onClick={() => { setQ(''); setShown(PAGE); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}</span>
           </label>
-          <button type="button" onClick={() => find(undefined, true)} className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold shadow-sm motion-safe:transition-colors motion-reduce:transition-none">Find care</button>
+          <button type="button" onClick={() => find(undefined, true)} className="px-5 py-2.5 rounded-xl bg-[#B45F28] hover:bg-[#984A1D] text-white text-sm font-bold shadow-sm motion-safe:transition-colors motion-reduce:transition-none">Apply filters</button>
         </div>
         <p className="text-xs text-slate-500">We’ll show services from agencies that cover this PIN code.</p>
         {err && <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>}
       </section>
       {list && (
-        <section aria-label="Services near you" className={`${card} space-y-3`}>
+        <section aria-label="Services near you" className={`${card} min-w-0 space-y-3`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-black text-slate-900">{CAT_LABEL[category]} near {pin}</h3>
@@ -156,7 +164,7 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {(['ALL', 'VISIT', 'SHIFT'] as const).map((k) => <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(PAGE); }} className={`px-3 py-1.5 rounded-full border font-bold ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>{k === 'ALL' ? 'All care' : k === 'VISIT' ? 'Visits' : '12 / 24-hour care'}</button>)}
-              <label className="sr-only" htmlFor="home-care-sort">Sort results</label><select id="home-care-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-slate-200 px-2 py-1.5 font-bold text-slate-700"><option value="PRICE">Lowest price</option><option value="RATING">Best rated</option></select>
+              <label className="sr-only" htmlFor="home-care-sort">Sort results</label><select id="home-care-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-slate-200 px-2 py-1.5 font-bold text-slate-700"><option value="NEAREST" disabled={!area}>Nearest</option><option value="PRICE">Lowest price</option><option value="RATING">Best rated</option></select>
             </div>
           </div>
           {chips.length > 0 && (
@@ -187,7 +195,9 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
           ) : (
             <ul className="space-y-3" aria-label="Services">
               {rows.slice(0, shown).map((x) => (
-                <li key={x.id} className="rounded-xl border border-slate-200 p-4 space-y-2">
+                <li key={x.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:p-4">
+                  <img src={x.category === 'PHYSIOTHERAPY' ? '/images/healthcare/services/physiotherapy.svg' : '/images/healthcare/services/homecare.webp'} alt="" aria-hidden="true" className="h-28 w-full shrink-0 rounded-xl bg-slate-50 object-cover sm:h-28 sm:w-28" />
+                  <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-black text-slate-900 flex items-center gap-2">{x.name}<FavoriteButton partnerId={String(x.agency.id)} name={x.agency.name} className="w-7 h-7" /></p>
@@ -217,19 +227,20 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
                         type="button"
                         onClick={() => setPick(x)}
                         data-testid="book-service-btn"
-                        className="px-4 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold hover:bg-teal-800 transition shadow-sm"
+                        className="px-4 py-2 rounded-xl bg-[#B45F28] text-white text-xs font-bold hover:bg-[#984A1D] transition shadow-sm"
                       >
                         Request this visit
                       </button>
                     </div>
                   </div>
-                </li>
+                </div></li>
               ))}
             </ul>
           )}
           {rows.length > shown && <button onClick={() => setShown(shown + PAGE)} className="w-full py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">Show {Math.min(PAGE, rows.length - shown)} more ({rows.length - shown} left)</button>}
         </section>
       )}
+      </div>
 
       {enquirySuccess && (
         <div className="fixed bottom-6 right-6 left-6 sm:left-auto z-50 max-w-sm bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
@@ -476,3 +487,4 @@ export function BookedNote({ o, onOpen }: { o: HcOrder; onOpen: () => void }) {
     </section>
   );
 }
+

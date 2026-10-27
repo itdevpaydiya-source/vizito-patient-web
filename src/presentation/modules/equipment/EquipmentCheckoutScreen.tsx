@@ -1,3 +1,4 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -31,7 +32,7 @@ interface SelectedProvider {
   verified: boolean;
   location: string;
   distanceText: string;
-  distanceKm: number;
+  distanceKm?: number;
   rentalPrice: number;
   deposit: number;
   image: string;
@@ -48,15 +49,15 @@ export const EquipmentCheckoutScreen: React.FC = () => {
   const item: PatientEquipmentItem | undefined = state?.item;
 
   const provider: SelectedProvider = state?.provider || {
-    id: item?.providerId || 'prov-pending',
-    name: item?.providerName || 'Verified Rental Provider',
-    verified: true,
-    location: item?.providerLocation || item?.providerAddress || 'Verified Provider Hub',
-    distanceText: 'Calculated upon dispatch',
-    distanceKm: 5.0,
+    id: item?.providerId || '',
+    name: item?.providerName || 'Provider name unavailable',
+    verified: false,
+    location: item?.providerLocation || item?.providerAddress || 'Location unavailable',
+    distanceText: 'Distance unavailable',
+    distanceKm: undefined,
     rentalPrice: item?.dailyRate || 0,
     deposit: item?.securityDeposit || 0,
-    image: item?.imageUrl || '/equipment/hospital-bed.jpg',
+    image: item?.providerLogo || '',
   };
 
   // Rental Dates
@@ -151,7 +152,6 @@ export const EquipmentCheckoutScreen: React.FC = () => {
 
   // Review confirmation modal
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
-  const [orderConfirmed, setOrderConfirmed] = useState<boolean>(false);
 
   // Requested Quantity
   const [requestedQuantity, setRequestedQuantity] = useState<number>(1);
@@ -254,32 +254,27 @@ export const EquipmentCheckoutScreen: React.FC = () => {
     setIsSubmitting(true);
     setSubmissionError(null);
     try {
-      let finalCity = address.city?.trim();
-      if (!finalCity && address.line?.trim()) {
-        const parts = address.line.split(',').map((p) => p.trim());
-        const knownCities = ['Hyderabad', 'Secunderabad', 'Bengaluru', 'Bangalore', 'Mumbai', 'Delhi', 'Chennai', 'Pune'];
-        const found = parts.find((p) => knownCities.some((c) => p.toLowerCase().includes(c.toLowerCase())));
-        finalCity = found || (parts.length > 1 ? parts[parts.length - 1] : 'Hyderabad');
+      if (!address.recipientName.trim() || !address.phone.trim() || !address.line.trim() || !address.city.trim() || !address.pincode.trim()) {
+        setSubmissionError('Add your name, phone, delivery address, city and PIN code before placing the order.');
+        return;
       }
-      if (!finalCity) finalCity = 'Hyderabad';
-
       const res = await equipmentService.createOrder({
         item,
         quote,
         quantity: requestedQuantity,
         deliveryAddress: {
-          recipientName: address.recipientName || 'Patient',
-          phone: address.phone || '9999999999',
-          addressLine: address.line || 'Delivery Address',
-          city: finalCity,
-          pincode: address.pincode || '500001',
+          recipientName: address.recipientName,
+          phone: address.phone,
+          addressLine: address.line,
+          city: address.city.trim(),
+          pincode: address.pincode,
           instructions: deliveryInstructions,
         },
         paymentMethod,
       });
 
       if (res.success && res.data) {
-        setOrderConfirmed(true);
+        navigate(`/equipment-rental/orders/${encodeURIComponent(res.data.id)}/confirmation`, { state: { order: res.data } });
       } else {
         setSubmissionError(res.message);
       }
@@ -360,9 +355,9 @@ export const EquipmentCheckoutScreen: React.FC = () => {
             {/* Provider Banner */}
             <div className="bg-[#FFF9F5] border border-[#FDE3CF] rounded-2xl p-4 flex items-center gap-4">
               <div className="w-20 h-16 sm:w-24 sm:h-16 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                <img
-                  src={provider.image || '/equipment/store-1.jpg'}
-                  alt={provider.name}
+                <MediaImage kind="equipment" category={undefined}
+                  src={provider.image}
+                  name={provider.name}
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -393,9 +388,9 @@ export const EquipmentCheckoutScreen: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-16 h-14 sm:w-20 sm:h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                  <img
+                  <MediaImage kind="equipment" category={item.mediaCategory}
                     src={item.imageUrl}
-                    alt={item.name}
+                    name={item.name}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -718,12 +713,9 @@ export const EquipmentCheckoutScreen: React.FC = () => {
             {/* Equipment Preview */}
             <div className="flex items-start gap-3.5 pb-4 border-b border-slate-100">
               <div className="w-16 h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                <img
-                  src={item.imageUrl || '/equipment/hospital-bed.jpg'}
-                  alt={item.name}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                  }}
+                <MediaImage kind="equipment" category={item.mediaCategory}
+                  src={item.imageUrl}
+                  name={item.name}
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -940,7 +932,7 @@ export const EquipmentCheckoutScreen: React.FC = () => {
       {isReviewModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg p-6 shadow-2xl space-y-4">
-            {!orderConfirmed ? (
+            {(
               <>
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
@@ -1004,33 +996,10 @@ export const EquipmentCheckoutScreen: React.FC = () => {
                     onClick={handleConfirmOrder}
                     className="flex-1 py-2.5 bg-[#9C4119] text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-[#853512] disabled:opacity-50"
                   >
-                    {isSubmitting ? 'Processing Payment...' : 'Pay & Confirm Order'}
+                    {isSubmitting ? 'Placing order...' : 'Place order — pay on delivery'}
                   </button>
                 </div>
               </>
-            ) : (
-              <div className="text-center py-4 space-y-3">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
-                  <Check className="w-6 h-6" />
-                </div>
-                <h3 className="text-base font-bold text-slate-900">Payment Successful &amp; Order Confirmed!</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Your payment has been received and your rental order for <strong>{item.name}</strong> is confirmed with <strong>{provider.name}</strong>. Your equipment is confirmed and will be dispatched out for delivery.
-                </p>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsReviewModalOpen(false);
-                      setOrderConfirmed(false);
-                      navigate('/equipment-rental/orders');
-                    }}
-                    className="px-6 py-2.5 bg-[#9C4119] text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-[#853512]"
-                  >
-                    View My Orders
-                  </button>
-                </div>
-              </div>
             )}
           </div>
         </div>

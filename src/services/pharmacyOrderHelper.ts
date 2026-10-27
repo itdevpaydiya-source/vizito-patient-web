@@ -97,6 +97,11 @@ export const payOrderApi = async (orderId: string, input: ProcessPaymentInput): 
 // lines to a real catalogue medicine — GET /medicines/autocomplete is already real,
 // already public, already used by the pharmacist's own dispense screen for exactly this.
 export interface MedicineSearchResult {
+  image_url?: string | null;
+  packaging_type?: string | null;
+  units_per_pack?: number | null;
+  available_quantity?: number | null;
+  in_stock?: boolean;
   id: string;
   code: string | null;
   medicine_name: string;
@@ -123,17 +128,22 @@ export const searchMedicinesApi = async (keyword: string): Promise<MedicineSearc
     strength: m.strength,
     strength_unit: m.strength_unit,
     dosage_form: m.dosage_form,
-    mrp: Number(m.mrp ?? 0),
+    image_url: m.image_url ?? null,
+    mrp: m.mrp == null || String(m.mrp).trim() === '' ? NaN : Number(m.mrp),
     requires_prescription: Boolean(m.requires_prescription),
   }));
 };
 
-// Live, per-pharmacy stock/price read for a specific medicine at a specific pharmacy —
-// informational only, never a reservation (see the backend design: no stock holds exist
-// anywhere in this system). Reuses the same GET /medicine-stock the pharmacist's own
-// Stock screen already calls, scoped server-side to whichever pharmacy the caller
-// authenticates as — NOT usable here directly since the patient isn't that pharmacy.
-// There is deliberately no cross-pharmacy "check availability" read exposed yet (the
-// Independent Pharmacy audit flagged this as a real gap, not solved by this feature) —
-// so for v1 the Order Builder's own creation-time rejection (see createRxOrderApi /
-// createDirectOrderApi) is the only availability signal a patient gets before confirming.
+// Pharmacy catalogue is informational, not a stock reservation. The order service rechecks stock.
+export interface PharmacyMedicine extends MedicineSearchResult {
+  manufacturer: string | null;
+  packaging_type: string | null;
+  units_per_pack: number | null;
+  category_name: string | null;
+  in_stock: boolean;
+}
+export async function getPharmacyCatalogueApi(pharmacyId: string, keyword = '', page = 1): Promise<{ items: PharmacyMedicine[]; total: number }> {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/pharmacy-catalogue/${encodeURIComponent(pharmacyId)}`, { params: { keyword, page } });
+  const data = res.data;
+  return { items: Array.isArray(data?.items) ? data.items.map((m: any) => ({ ...m, mrp: m.mrp == null || String(m.mrp).trim() === '' ? NaN : Number(m.mrp), available_quantity: m.available_quantity == null ? null : Number(m.available_quantity), units_per_pack: m.units_per_pack == null ? null : Number(m.units_per_pack) })) : [], total: Number(data?.total) || 0 };
+}

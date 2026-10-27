@@ -1,8 +1,12 @@
+import {SharedMotionLayer} from '../presentation/components/motion/Motion';
+import './LayoutTheme.css';
+import {BookingActivityProvider} from '../services/BookingActivityContext';
 import { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { PharmacyBasketProvider } from '../services/PharmacyBasketContext';
 import Sidebar from '../presentation/components/Sidebar';
 import {
-  Bell, Search, Menu, ChevronDown, User, Settings, LogOut, ArrowLeft, Home,
+  Bell, Search, Menu, ChevronDown, User, Settings, Star, LogOut, ArrowLeft, Home,
   X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill, FlaskConical, HeartHandshake } from 'lucide-react';
 import { useRole } from '../store/role/RoleContext';
 import { useLanguage } from '../store/language/LanguageContext';
@@ -125,8 +129,9 @@ const MainLayout = () => {
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden relative" style={{ fontFamily: "var(--font-sans)" }}>
+    <BookingActivityProvider><div className="patient-app-layout flex h-screen overflow-hidden relative" style={{ fontFamily: "var(--font-sans)" }}>
 
+      <SharedMotionLayer/>
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div
@@ -139,14 +144,15 @@ const MainLayout = () => {
       <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="patient-content flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 relative z-30 shrink-0">
+        <header className="patient-header h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 relative z-30 shrink-0">
 
           <div className="flex items-center gap-3 flex-1">
             {/* Hamburger - mobile only */}
             <button
               className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-xl lg:hidden transition-colors"
+              aria-label="Open navigation"
               onClick={() => setIsMobileMenuOpen(true)}
             >
               <Menu className="w-5 h-5" />
@@ -347,7 +353,7 @@ const MainLayout = () => {
 
             {/* Patient Profile Dropdown Trigger */}
             <div className="relative">
-              <div
+              <button type="button" aria-label="Patient profile menu" aria-expanded={isProfileMenuOpen}
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 className="flex items-center gap-2.5 cursor-pointer group hover:bg-slate-50 p-1.5 rounded-xl transition-all"
               >
@@ -367,7 +373,7 @@ const MainLayout = () => {
                   </p>
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400 hidden sm:block" />
-              </div>
+              </button>
 
               {isProfileMenuOpen && (
                 <>
@@ -393,6 +399,7 @@ const MainLayout = () => {
                       <Settings className="w-4 h-4 text-slate-400" /> {t("Settings")}
                     </button>
 
+                    <button onClick={()=>{setIsProfileMenuOpen(false);navigate('/reviews');}} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Star className="w-4 h-4"/>Ratings &amp; Reviews</button>
                     <div className="border-t border-slate-100 my-1" />
 
                     <button
@@ -416,11 +423,11 @@ const MainLayout = () => {
         {/* Scrollable Page Content */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-5 md:p-6 lg:p-8 xl:p-10">
           <div className="w-full min-w-0">
-            <Outlet />
+            <PharmacyBasketProvider><Outlet /></PharmacyBasketProvider>
           </div>
         </main>
       </div>
-    </div>
+    </div></BookingActivityProvider>
   );
 };
 

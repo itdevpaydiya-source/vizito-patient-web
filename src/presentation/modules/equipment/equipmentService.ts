@@ -9,6 +9,17 @@ import type {
   DeliveryTimelineStep,
 } from './types';
 
+/** Raw patient-owned rental data for Bookings: no catalogue placeholders or inferred prices. */
+export interface RentalBookingOrder {
+  id: number | string; order_number: string; provider_id: string; status: string; category?: string;
+  start_date: string; end_date: string; created_at: string; quantity: number;
+  total_amount: number | string; payment_status?: string | null; payment_method?: string | null;
+  product?: { id: number | string; name: string; primary_image_url?: string | null } | null;
+  provider?: { id: string; name?: string | null; address?: string | null } | null;
+  delivery_address?: { addressLine?: string; city?: string; pincode?: string; settlement?: { payment_status?: string; payment_method?: string }; payment_status?: string; payment_method?: string; delivery_status?: string; delivery_otp?: { verified?: boolean }; return_schedule?: unknown } | null;
+  cancellation_message?: string;
+}
+
 export const REQUIRED_BACKEND_UNAVAILABLE_MESSAGE =
   'This feature is not implemented yet. The required backend/API integration is unavailable. No data has been saved.';
 
@@ -61,11 +72,12 @@ function mapBackendProductToEquipmentItem(p: any): PatientEquipmentItem {
   return {
     id: String(p.id),
     name: p.name,
+    mediaCategory: p.category,
     dailyRate: Number(p.daily_rental_price),
     securityDeposit: Number(p.deposit_amount || 0),
     minDurationDays: p.min_rental_days || 1,
     maxDurationDays: p.max_rental_days || 90,
-    imageUrl: resolveImageUrl(p.primary_image_url) || '/equipment/hospital-bed.jpg',
+    imageUrl: resolveImageUrl(p.primary_image_url),
     additionalImages: p.gallery_images || [],
     shortDescription: p.brand ? `${p.brand} ${p.model_number || ''}` : p.name,
     fullDescription: p.description || p.name,
@@ -203,8 +215,8 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
 
     if (['ACCEPTED', 'OUT_FOR_DELIVERY', 'ACTIVE', 'COMPLETED'].includes(o.status)) {
       timeline.push({
-        title: 'Order Confirmed & Payment Received',
-        description: 'Payment successful. Equipment reserved and confirmed automatically for dispatch.',
+        title: 'Order confirmed',
+        description: 'The provider has confirmed the rental order.',
         timestamp: o.updated_at || o.created_at,
         completed: true,
         current: o.status === 'ACCEPTED',
@@ -251,6 +263,7 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
     orderNumber: o.order_number,
     equipmentId: String(o.product_id),
     equipmentName: o.product?.name || 'Medical Equipment',
+    mediaCategory: o.category || o.product?.category,
     equipmentImage:
       resolveImageUrl(
         o.product?.primary_image_url ||
@@ -258,7 +271,7 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
         o.equipment_image ||
         o.equipmentImage ||
         o.image_url
-      ) || '/equipment/hospital-bed.jpg',
+      ),
     categoryLabel: o.product?.brand || 'Clinical Grade',
     quantity: o.quantity || 1,
     startDate: o.start_date,
@@ -270,7 +283,7 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
     deliveryFee: Number(o.delivery_fee || 0),
     totalOrderValue: Number(o.total_amount),
     status,
-    paymentStatus: 'successful',
+    paymentStatus: o.delivery_address?.settlement?.payment_status === 'PAID' ? 'successful' : o.delivery_address?.settlement?.payment_status === 'FAILED' ? 'failed' : o.delivery_address?.settlement?.payment_status === 'PENDING' ? 'pending' : 'not_initiated',
     createdAt: o.created_at,
     deliveryAddress: o.delivery_address || {
       recipientName: '',
@@ -392,6 +405,15 @@ export const equipmentService = {
   /**
    * Get orders for the current patient session via real API
    */
+  async getBookingOrders(): Promise<RentalBookingOrder[]> {
+    const res = await apiClient.get('/rental/patient/orders/mine');
+    if (!Array.isArray(res.data)) throw new Error('Invalid rental orders response.');
+    return res.data;
+  },
+  async getBookingOrder(id: string): Promise<RentalBookingOrder> {
+    return (await apiClient.get(`/rental/patient/orders/${encodeURIComponent(id)}`)).data;
+  },
+
   async getMyOrders(options?: {
     search?: string;
     status?: string;

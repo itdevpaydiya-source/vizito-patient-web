@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, MapPin, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Users, Video, Clock, ChevronRight } from 'lucide-react';
+import BusinessImage from './BusinessImage';
 import FavoriteButton from './FavoriteButton';
 import DoctorTrustDetails from './DoctorTrustDetails';
 import { pauseText, type ProviderItem } from '../../services/types';
@@ -9,7 +10,7 @@ import { useSearchArea, nearest, metresBetween, formatDistance } from '../../ser
 // One card for every kind of provider: what it is, where (nearest branch / centre / store and how far),
 // what it offers, its rating, and the right next step for that kind (book a doctor, a hospital visit,
 // lab tests, order medicines, request home care).
-export type ProviderKind = 'doctor' | 'hospital' | 'lab' | 'pharmacy' | 'homecare' | 'other';
+export type ProviderKind = 'doctor' | 'hospital' | 'lab' | 'pharmacy' | 'homecare' | 'equipment' | 'bloodbank' | 'ambulance' | 'other';
 export const kindOf = (p: ProviderItem): ProviderKind => {
   const t = String(p.partnerType || p.serviceId || '').toLowerCase();
   if (/doctor/.test(t)) return 'doctor';
@@ -17,6 +18,9 @@ export const kindOf = (p: ProviderItem): ProviderKind => {
   if (/diagnos|laborator/.test(t)) return 'lab';
   if (/pharmac/.test(t)) return 'pharmacy';
   if (/home ?care|home_care/.test(t)) return 'homecare';
+  if (/ambulance/.test(t)) return 'ambulance';
+  if (/equipment|rental/.test(t)) return 'equipment';
+  if (/blood ?bank|bloodbank/.test(t)) return 'bloodbank';
   return 'other';
 };
 const META: Record<ProviderKind, { label: string; icon: React.ElementType; cta: string }> = {
@@ -25,6 +29,9 @@ const META: Record<ProviderKind, { label: string; icon: React.ElementType; cta: 
   lab: { label: 'Diagnostic lab', icon: FlaskConical, cta: 'Book tests' },
   pharmacy: { label: 'Pharmacy', icon: Pill, cta: 'Order medicines' },
   homecare: { label: 'Home care', icon: HeartHandshake, cta: 'Request home care' },
+  equipment: { label: 'Equipment rental', icon: Building2, cta: 'Rent equipment' },
+  bloodbank: { label: 'Blood bank', icon: HeartHandshake, cta: 'View availability' },
+  ambulance: { label: 'Ambulance operator', icon: HeartHandshake, cta: 'Book ambulance' },
   other: { label: 'Provider', icon: Building2, cta: 'View' },
 };
 export const providerRoute = (p: ProviderItem): string => {
@@ -35,6 +42,9 @@ export const providerRoute = (p: ProviderItem): string => {
     case 'lab': return `/lab-tests?lab=${id}`;
     case 'pharmacy': return `/pharmacy-orders/new?pharmacy=${id}`;
     case 'homecare': return `/home-care?agency=${id}`;
+    case 'equipment': return '/equipment-rental';
+    case 'bloodbank': return '/find-blood';
+    case 'ambulance': return '/book-ambulance';
     default: return `/find-doctors?doctor=${id}`;
   }
 };
@@ -46,9 +56,7 @@ export const providerDistance = (p: ProviderItem, area: { lat: number; lng: numb
   return n ? { metres: n.metres, where: n.place.name } : null;
 };
 
-const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
-
-export default function ProviderCard({ p }: { p: ProviderItem }) {
+export default function ProviderCard({ p, compact = false }: { p: ProviderItem; compact?: boolean }) {
   const navigate = useNavigate();
   const area = useSearchArea();
   const k = kindOf(p); const M = META[k]; const Icon = M.icon;
@@ -58,10 +66,9 @@ export default function ProviderCard({ p }: { p: ProviderItem }) {
   const depts = p.org?.departments || [];
   const minFee = depts.map((d) => d.from_fee).filter((x): x is number => x != null).sort((a, b) => a - b)[0];
   return (
-    <article className="group h-full min-h-[21rem] bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-4 shadow-sm motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none hover:shadow-md hover:border-orange-200" aria-label={`${p.name}, ${M.label}`}>
+    <article className={`group h-full ${compact ? 'min-h-[15rem] p-4 gap-3' : 'min-h-[21rem] p-5 gap-4'} bg-white rounded-2xl border border-slate-200 flex flex-col shadow-sm motion-safe:transition-all motion-safe:duration-200 motion-reduce:transition-none hover:shadow-md hover:border-orange-200`} aria-label={`${p.name}, ${M.label}`}>
       <div className="flex items-start gap-3">
-        {p.logo ? <img src={p.logo} alt="" className="w-14 h-14 rounded-2xl object-cover border border-slate-100 shrink-0" />
-          : <span className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-800 border border-orange-100 flex items-center justify-center text-sm font-extrabold shrink-0">{initials(p.name)}</span>}
+        <BusinessImage key={`${p.id}:${p.logo || ''}`} p={p} className={`${compact ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} border border-slate-100 shrink-0`} />
         <div className="min-w-0 flex-1">
           <p className="inline-flex max-w-full items-center gap-1 rounded-full border border-orange-100 bg-orange-50/70 px-2 py-1 text-[10px] font-bold text-orange-800"><Icon className="w-3.5 h-3.5 shrink-0" /><span className="truncate">{p.specialtyOrType && k !== 'other' && !/^(doctor|diagnostics|pharmacy|homecare)$/i.test(p.specialtyOrType) ? p.specialtyOrType : M.label}</span></p>
           <h3 className="mt-1.5 min-h-[2.75rem] font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-orange-900">{p.name}</h3>
@@ -73,7 +80,7 @@ export default function ProviderCard({ p }: { p: ProviderItem }) {
         <FavoriteButton partnerId={p.id} name={p.name} className="w-8 h-8" />
       </div>
 
-      <div className="min-h-[5.5rem] flex-1 rounded-xl bg-slate-50/80 border border-slate-100 px-3.5 py-3 text-xs text-slate-600 space-y-1.5">
+      <div className={`${compact ? 'min-h-[4rem] px-3 py-2' : 'min-h-[5.5rem] px-3.5 py-3'} flex-1 rounded-xl bg-slate-50/80 border border-slate-100 text-xs text-slate-600 space-y-1.5`}>
         {k === 'doctor' && <>
           <DoctorTrustDetails
             qualification={p.qualification}
@@ -103,13 +110,13 @@ export default function ProviderCard({ p }: { p: ProviderItem }) {
             <p className="flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" /><span className="truncate">{where}</span></p>
           ) : null
         )}
-        {dist ? <p className="font-bold text-teal-800 flex items-center gap-1"><MapPin className="w-3 h-3" />{formatDistance(dist.metres)} away{dist.where ? ` · ${dist.where}` : ''}</p>
-          : area && k !== 'homecare' && k !== 'doctor' && <p className="text-[11px] text-slate-400">Distance not available: map pin not confirmed yet</p>}
+        {dist ? <p className="font-bold text-teal-800 flex items-center gap-1"><MapPin className="w-3 h-3" />{formatDistance(dist.metres)} from {area?.label}{dist.where ? ` · ${dist.where}` : ''}</p>
+          : area && <p className="text-[11px] text-slate-500">Distance unavailable · provider location pin not confirmed</p>}
         {p.pause && <p className="font-bold text-amber-700 flex items-center gap-1"><Clock className="w-3 h-3" />{pauseText(p.pause, k === 'pharmacy' ? 'orders' : 'bookings')}</p>}
       </div>
 
       <button type="button" onClick={() => navigate(providerRoute(p))} disabled={!!p.pause}
-        className="mt-auto w-full px-4 py-3 rounded-xl text-sm font-bold bg-teal-700 hover:bg-teal-800 text-white disabled:opacity-50 inline-flex items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+        className={`${compact ? 'px-3 py-2.5 text-xs' : 'px-4 py-3 text-sm'} mt-auto w-full rounded-xl font-bold bg-[#B45F28] hover:bg-[#8A4A1F] text-white disabled:opacity-50 inline-flex items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B45F28] focus-visible:ring-offset-2`}>
         {M.cta} <ChevronRight className="w-3.5 h-3.5" />
       </button>
     </article>

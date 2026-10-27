@@ -1,0 +1,81 @@
+import {test,expect as baseExpect,type Page} from '@playwright/test';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+const dir='artifacts/doctor-journey';
+const expect=baseExpect.configure({timeout:20000});
+test.use({channel:'chromium'});
+async function shots(page:Page,name:string,portal=false){for(const width of [1280,390]){await page.setViewportSize({width,height:1000});if(!portal){await expect.poll(()=>page.locator('.patient-sidebar').evaluate(e=>innerWidth>=1024||e.getBoundingClientRect().right<=1)).toBe(true);
+await expect.poll(()=>page.locator('main').evaluate(e=>e.scrollWidth<=e.clientWidth),{message:name+' overflow '+width}).toBe(true);}await page.screenshot({path:`${dir}/${name}-${width}.png`,fullPage:true});}await page.setViewportSize({width:1280,height:1000});}
+function pdf(){const c='BT /F1 14 Tf 40 750 Td (Vizito QA report - Ramesh doctor booking verification.) Tj 0 -24 Td (Workflow test only. No clinical findings or medical advice.) Tj ET';const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${c.length} >>\nstream\n${c}\nendstream`];let s='%PDF-1.4\n',offsets:number[]=[];objects.forEach((o,i)=>{offsets.push(Buffer.byteLength(s));s+=`${i+1} 0 obj\n${o}\nendobj\n`;});const x=Buffer.byteLength(s);s+='xref\n0 6\n0000000000 65535 f \n'+offsets.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;return Buffer.from(s);}
+test('Ananya appointment for Ramesh: report and reason reach doctor portal',async({page,request,browser})=>{test.setTimeout(240000);page.setDefaultTimeout(15000);
+await mkdir(dir,{recursive:true});const login=await request.post('http://localhost:3000/patient/auth/login',{data:{phone:process.env.PHARMACY_AUDIT_PHONE,password:process.env.PHARMACY_AUDIT_PASSWORD}});expect(login.ok(),'Patient login '+login.status()).toBe(true);const a=await login.json(),token=a.access_token||a.token||a.data?.access_token,headers={Authorization:`Bearer ${token}`};
+await page.goto('/auth/login');
+await page.evaluate(token=>{localStorage.setItem('vizito_token',token);localStorage.setItem('vizito_user',JSON.stringify({role:'patient',fullName:'Kavya Reddy',token}));sessionStorage.removeItem('vizito_search_area');},token);let evidence:any;const resume=process.env.DOCTOR_QA_RESUME==='1';if(resume)evidence=JSON.parse(await readFile(`${dir}/booking-checkpoint.json`,'utf8'));else{
+ await page.goto('/find-doctors');
+await expect(page.locator('.dj-card').first()).toBeVisible();
+await page.getByRole('button',{name:'Change service location',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Your service location'});
+await dialog.getByLabel('Area or PIN code',{exact:true}).fill('Kondapur, Hyderabad');
+await dialog.getByLabel('Area or PIN code',{exact:true}).press('Enter');
+await expect(dialog.getByRole('listbox',{name:'Matching areas'})).toBeVisible({timeout:25000});
+await dialog.getByRole('option').first().click();
+await dialog.getByRole('button',{name:'Apply location',exact:true}).click();
+await page.getByRole('button',{name:'General Medicine',exact:true}).click();
+await shots(page,'find-doctors');const card=page.locator('.dj-card').filter({hasText:'Dr. Ananya Rao'});
+await expect(card).toHaveCount(1);
+await card.getByRole('button',{name:'View profile',exact:true}).click();
+await expect(page.getByRole('heading',{name:'Dr. Ananya Rao',exact:true})).toBeVisible();
+await expect(page.getByText('12 years experience',{exact:false})).toBeVisible();
+await expect(page.getByRole('navigation',{name:'Doctor profile'}).getByRole('button',{name:'FAQs'})).toHaveCount(0);
+await shots(page,'profile-overview');for(const tab of ['Services & fees','Clinics','Reviews']){await page.getByRole('navigation',{name:'Doctor profile'}).getByRole('button',{name:tab,exact:true}).click();
+await shots(page,'profile-'+tab.toLowerCase().replaceAll(/[^a-z]+/g,'-'));}await page.getByRole('button',{name:'Book appointment',exact:true}).click();
+await shots(page,'consultation-type');const clinic=page.getByLabel('Choose clinic');if(await clinic.inputValue()==='')await clinic.selectOption({index:1});
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await expect(page.locator('.dj-slots button').first()).toBeVisible();
+await page.locator('.dj-slots button').first().click();
+await shots(page,'date-time');const date=await page.getByLabel('Appointment date',{exact:true}).inputValue();
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await page.getByLabel('Appointment patient',{exact:true}).selectOption('5414');const reason='QA journey verification for Ramesh: review the attached report at an in-clinic consultation.';
+await page.getByLabel('Reason for consultation',{exact:true}).fill(reason);const uploadResponse=page.waitForResponse(r=>r.url().endsWith('/patient-records/documents')&&r.request().method()==='POST');
+await page.getByLabel('Upload appointment report',{exact:true}).setInputFiles({name:'ramesh-ananya-qa-report.pdf',mimeType:'application/pdf',buffer:pdf()});const ur=await uploadResponse;expect(ur.ok()).toBe(true);const document=await ur.json();
+await expect(page.getByText('Attached: ramesh-ananya-qa-report.pdf',{exact:false})).toBeVisible();
+await shots(page,'patient-report');
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await expect(page.getByLabel('Appointment payment')).toHaveValue('CASH');
+await shots(page,'review-pay');const created=page.waitForResponse(r=>r.url().endsWith('/patients/bookings')&&r.request().method()==='POST');
+await page.getByRole('button',{name:'Confirm appointment',exact:true}).click();const cr=await created;expect(cr.ok(),'Booking status '+cr.status()+' '+await cr.text()).toBe(true);const raw=await cr.json(),order=raw.data||raw;evidence={booking_id:order.id,booking_number:order.booking_number,document_id:document.id,report_name:document.file_name,reason,date,subject:'5414',doctor_id:'f91916a3-a294-4771-a8b6-6f14fcc475d0'};
+await writeFile(`${dir}/booking-checkpoint.json`,JSON.stringify(evidence,null,2));
+await expect(page.getByRole('heading',{name:'Appointment booked!',exact:true})).toBeVisible();
+await shots(page,'confirmation');const calendar=page.waitForEvent('download');
+await page.getByRole('button',{name:'Add to calendar',exact:true}).click();expect((await calendar).suggestedFilename()).toContain('.ics');
+await page.getByRole('link',{name:'View in my bookings',exact:true}).click();}
+ if(resume)await page.goto(`/my-consultations?type=Doctor&open=${evidence.booking_id}`);
+await expect(page.getByRole('heading',{name:'Booking details',exact:true})).toBeVisible();
+await expect(page.getByText('Ramesh Reddy',{exact:false}).first()).toBeVisible();
+await shots(page,'patient-booking-details');const records=await (await request.get('http://localhost:3000/patient-records?subject=5414',{headers})).json();expect(records.documents.some((d:any)=>d.id===evidence.document_id)).toBe(true);const self=await (await request.get('http://localhost:3000/patient-records?subject=self',{headers})).json();expect(self.documents.some((d:any)=>d.id===evidence.document_id)).toBe(false);
+ const doctorContext=await browser.newContext();try{const doctor=await doctorContext.newPage();doctor.setDefaultTimeout(20000);doctor.setDefaultNavigationTimeout(40000);
+await doctor.goto('http://localhost:5173/auth/login',{waitUntil:'domcontentloaded'});
+await doctor.getByPlaceholder('Enter mobile number or email').fill('9848012347');
+await doctor.getByRole('button',{name:'Login with OTP instead',exact:true}).click();const sent=doctor.waitForResponse(r=>r.url().endsWith('/auth/send-otp')&&r.request().method()==='POST');
+await doctor.getByRole('button',{name:'Send OTP',exact:true}).click();const sr=await sent;expect(sr.ok()).toBe(true);const otp=await sr.json();
+await doctor.getByPlaceholder('Enter code').fill(String(otp.dev_otp||otp.otp||otp.data?.dev_otp||await doctor.getByPlaceholder('Enter code').inputValue()));
+await doctor.getByRole('button',{name:'Verify & Enter Dashboard',exact:true}).click();const workspace=doctor.getByRole('heading',{name:'Select Workspace Role'});
+await expect.poll(async()=>!doctor.url().includes('/auth/')||await workspace.isVisible(),{timeout:15000}).toBe(true);if(await workspace.isVisible()){await doctor.getByRole('heading',{name:'Dr. Ananya Rao',exact:true}).click();
+await doctor.getByRole('button',{name:'Continue to Dashboard',exact:true}).click();}await doctor.waitForURL(url=>!url.pathname.includes('/auth/'),{timeout:30000,waitUntil:'domcontentloaded'});
+await doctor.goto('http://localhost:5173/appointments',{waitUntil:'domcontentloaded'});
+await doctor.getByRole('textbox',{name:'Search appointments',exact:true}).fill(evidence.booking_number);const dateFilter=doctor.getByRole('button',{name:/^Date:/});
+await dateFilter.click();
+await doctor.getByRole('listbox',{name:'Filter by date'}).getByRole('button',{name:'All',exact:true}).click();
+await expect(doctor.getByText('Ramesh Reddy',{exact:true}).filter({visible:true}).first()).toBeVisible();
+await shots(doctor,'doctor-appointment-list',true);const more=doctor.getByRole('button',{name:'More actions for Ramesh Reddy',exact:true}).filter({visible:true}).first();
+await more.click();
+await doctor.getByRole('menuitem',{name:'Visit details',exact:true}).click();
+await expect(doctor.getByRole('heading',{name:'Appointment Details',exact:true})).toBeVisible();
+await expect(doctor.getByText(evidence.reason,{exact:false}).filter({visible:true}).first()).toBeVisible();
+await shots(doctor,'doctor-reason',true);
+await doctor.getByRole('button',{name:'Documents',exact:true}).click();
+await expect(doctor.getByText(evidence.report_name,{exact:true}).first()).toBeVisible();
+await shots(doctor,'doctor-documents',true);const file=doctor.waitForResponse(r=>r.request().method()==='GET'&&(r.headers()['content-type']||'').includes('pdf'));
+await doctor.getByRole('button',{name:'View '+evidence.report_name,exact:true}).click();const fr=await file;expect(fr.ok()).toBe(true);expect(fr.headers()['content-type']).toContain('pdf');expect((await fr.body()).equals(pdf())).toBe(true);await expect(doctor.getByTitle(evidence.report_name,{exact:true})).toBeVisible();const saved=doctor.waitForEvent('download');await doctor.getByRole('dialog',{name:evidence.report_name,exact:true}).getByRole('button',{name:'Download',exact:true}).click();expect((await saved).suggestedFilename()).toBe(evidence.report_name);evidence.doctor_report_bytes_match=true;await doctor.waitForTimeout(2000); // Native PDF rendering has no application-level ready event; byte verification above is authoritative.
+
+await shots(doctor,'doctor-report-viewer',true);evidence.doctor_saw_patient=true;evidence.doctor_saw_reason=true;evidence.doctor_opened_report=true;
+await writeFile(`${dir}/walkthrough-evidence.json`,JSON.stringify(evidence,null,2));}finally{await doctorContext.close();}
+});

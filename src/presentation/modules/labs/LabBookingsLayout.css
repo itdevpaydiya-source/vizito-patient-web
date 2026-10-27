@@ -1,0 +1,26 @@
+/* Scoped to lab bookings; no changes to shared portal spacing. */
+.lab-bookings-page { display: flex; flex-direction: column; gap: 14px; }
+.lab-bookings-page .lab-bookings-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lab-bookings-page .lab-bookings-header > div { min-width: 0; }
+.lab-bookings-page .lab-bookings-header > button { flex-shrink: 0; white-space: nowrap; }
+.lab-bookings-tabs { padding: 4px; }
+.lab-bookings-tabs > button { padding: 9px 20px; }
+.lab-empty { padding: 24px 28px; }
+.lab-empty-main { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 560px; margin: 0 auto; }
+.lab-empty-art { display: block; width: 240px; max-width: 100%; height: auto; }
+.lab-empty-heading { font-size: 26px; line-height: 1.25; margin: 0; }
+.lab-empty-main > p { margin: 0; line-height: 1.6; }
+.lab-empty-action { margin: 4px 0 0; padding: 11px 28px; gap: 8px; min-height: 44px; }
+.lab-empty-divider { margin-top: 26px; }
+.lab-empty-benefits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin: 20px 0 0; padding: 0; list-style: none; }
+.lab-benefit-icon { width: 44px; height: 44px; margin-bottom: 10px; }
+@media (max-width: 639px) {
+  .lab-bookings-page .lab-bookings-header { align-items: flex-start; gap: 12px; }
+  .lab-bookings-page .lab-bookings-header h1 { font-size: 22px; }
+  .lab-bookings-page .lab-bookings-header > button { padding: 10px 12px; font-size: 12px; }
+  .lab-bookings-page .lab-bookings-header > button svg { width: 14px; }
+  .lab-empty { padding: 20px 16px; }
+  .lab-empty-art { width: 200px; }
+  .lab-empty-heading { font-size: 23px; }
+  .lab-empty-benefits { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
+}

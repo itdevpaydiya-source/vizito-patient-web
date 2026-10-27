@@ -130,7 +130,7 @@ export default function HomeCareMine({
   );
 }
 
-function OrderCard({
+export function OrderCard({
   o,
   expanded,
   onToggle,
@@ -362,7 +362,7 @@ function OrderCard({
               <p className={o.refund.status === 'REFUNDED' ? 'text-emerald-800 font-semibold' : 'text-amber-900 font-semibold'}>
                 <b>Refund:</b> {rupees(o.refund.amount)}{' '}
                 {o.refund.status === 'REFUNDED'
-                  ? `sent${o.refund.reference ? ` (ref ${o.refund.reference})` : ''} — reaches your account in 3–5 working days`
+                  ? `sent — reaches your account in 3–5 working days`
                   : 'for unused visits — being processed by Vizito support (usually within 2 working days)'}
               </p>
             )}

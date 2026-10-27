@@ -1,3 +1,5 @@
+import SharedRecordPage from '../presentation/modules/records/SharedRecordPage';
+import AppointmentsRoute from '../presentation/modules/bookings/AppointmentsRoute';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 // Layouts
@@ -13,17 +15,19 @@ import RegistrationModule from '../presentation/modules/auth/RegistrationModule'
 import PatientDashboard from '../presentation/modules/dashboard/PatientDashboard';
 import HealthcareServicesScreen from '../presentation/modules/services/HealthcareServicesScreen';
 import LabBookingScreen from '../presentation/modules/labs/LabBookingScreen';
+import LabBookingConfirmation from '../presentation/modules/labs/LabBookingConfirmation';
 import LabBookingsScreen from '../presentation/modules/labs/LabBookingsScreen';
 import VerifyReportScreen from '../presentation/modules/labs/VerifyReportScreen';
 import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
 import FindBloodScreen from '../presentation/modules/bloodbank/FindBloodScreen';
 import RequestBloodScreen from '../presentation/modules/bloodbank/RequestBloodScreen';
-import MyBloodRequestsScreen from '../presentation/modules/bloodbank/MyBloodRequestsScreen';
+import EmergencyBookings from '../presentation/modules/bookings/EmergencyBookings';
 import DonateBloodScreen from '../presentation/modules/bloodbank/DonateBloodScreen';
 import BookAmbulanceScreen from '../presentation/modules/ambulance/BookAmbulanceScreen';
-import MyAmbulanceTripsScreen from '../presentation/modules/ambulance/MyAmbulanceTripsScreen';
+
 import UrgentAmbulanceScreen from '../presentation/modules/ambulance/UrgentAmbulanceScreen';
 import UniversalBookingScreen from '../presentation/modules/booking/UniversalBookingScreen';
+import HospitalsClinicsScreen from '../presentation/modules/booking/HospitalsClinicsScreen';
 import BookingRedirect from '../presentation/modules/booking/BookingRedirect';
 import MyConsultationsScreen from '../presentation/modules/bookings/MyConsultationsScreen';
 import MyRecordsScreen from '../presentation/modules/records/MyRecordsScreen';
@@ -132,6 +136,7 @@ const RegisterWrapper = () => {
 const AppNavigator = () => {
   return (
     <Routes>
+      <Route path="/shared/:token" element={<SharedRecordPage />} />
       {/* Public: lab report verification from the QR code (no login, no patient data) */}
       <Route path="/verify-report/:token" element={<VerifyReportScreen />} />
 
@@ -159,15 +164,16 @@ const AppNavigator = () => {
         <Route path="/homecare-services" element={<UniversalBookingScreen />} />
         <Route path="/ambulance-dispatch" element={<Navigate to="/urgent-ambulance" replace />} />
         <Route path="/book-ambulance" element={<BookAmbulanceScreen />} />
-        <Route path="/ambulance-trips" element={<MyAmbulanceTripsScreen />} />
+        <Route path="/ambulance-trips" element={<EmergencyBookings kind="ambulance" />} />
         <Route path="/urgent-ambulance" element={<UrgentAmbulanceScreen />} />
         <Route path="/lab-tests" element={<LabBookingScreen />} />
+        <Route path="/lab-tests/booked/:orderId" element={<LabBookingConfirmation />} />
         <Route path="/lab-bookings" element={<LabBookingsScreen />} />
         <Route path="/home-care" element={<HomeCareScreen />} />
         {/* Blood Bank */}
         <Route path="/find-blood" element={<FindBloodScreen />} />
         <Route path="/request-blood" element={<RequestBloodScreen />} />
-        <Route path="/blood-requests" element={<MyBloodRequestsScreen />} />
+        <Route path="/blood-requests" element={<EmergencyBookings kind="blood" />} />
         <Route path="/donate-blood" element={<DonateBloodScreen />} />
         {/* Medical Equipment Rental Module */}
         <Route path="/equipment-rental" element={<EquipmentCatalogueScreen />} />
@@ -184,11 +190,12 @@ const AppNavigator = () => {
         <Route path="/equipment-rental/active" element={<ActiveRentalsScreen />} />
         <Route path="/equipment-rental/returns" element={<ReturnSchedulingScreen />} />
         <Route path="/find-doctors" element={<BookConsultationScreen />} />
+        <Route path="/find-hospitals" element={<HospitalsClinicsScreen />} />
         <Route path="/my-records" element={<MyRecordsScreen />} />
         <Route path="/reviews" element={<ReviewsScreen />} />
-        <Route path="/my-consultations" element={<MyConsultationsScreen />} />
+        <Route path="/my-consultations" element={<AppointmentsRoute />} />
         <Route path="/bookings" element={<MyConsultationsScreen />} />
-        <Route path="/appointments" element={<MyConsultationsScreen />} />
+        <Route path="/appointments" element={<AppointmentsRoute />} />
         <Route path="/pharmacy-orders" element={<PharmacyOrdersScreen />} />
         <Route path="/pharmacy-orders/new" element={<OrderBuilderScreen />} />
         <Route path="/pharmacy-orders/:id" element={<OrderDetailScreen />} />
@@ -208,3 +215,4 @@ const AppNavigator = () => {
 };
 
 export default AppNavigator;
+

@@ -21,7 +21,7 @@ export function TestPaymentNote({ className = '' }: { className?: string }) {
   return (
     <p role="note" className={`text-[11px] font-semibold text-indigo-900 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5 ${className}`}>
       <FlaskConical className="w-3.5 h-3.5 mt-px shrink-0" />
-      Test mode: online payment is simulated. No real money is charged and no bank account is debited.
+      Test mode: no real money is charged and no bank account is debited.
     </p>
   );
 }

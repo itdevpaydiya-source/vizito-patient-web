@@ -15,6 +15,7 @@ export interface PatientEquipmentItem {
   id: string;
   name: string;
   category?: EquipmentCategory;
+  mediaCategory?: string;
   categoryLabel?: string;
   dailyRate: number;
   securityDeposit: number; // Informational only — NEVER added to patient price or total
@@ -167,6 +168,7 @@ export interface PatientRentalOrder {
   orderNumber: string;
   equipmentId: string;
   equipmentName: string;
+  mediaCategory?: string;
   equipmentImage: string;
   categoryLabel?: string;
   quantity?: number;
@@ -228,6 +230,7 @@ export interface PatientRentalOrder {
 export interface EquipmentFilterState {
   search: string;
   category?: EquipmentCategory;
+  mediaCategory?: string;
   priceSort: 'none' | 'low_to_high' | 'high_to_low';
   onlyAvailable: boolean;
 }

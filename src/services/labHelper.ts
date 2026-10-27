@@ -1,14 +1,17 @@
+import type { BookingActions } from './bookingActions';
 import apiClient from './index';
 
 // Lab tests (patient side): the test list, labs that offer the chosen tests, booking and my bookings.
 export interface LabTestDef { id: number; code: string; name: string; short_name: string | null; department: string; specimen_type: string; container_type?: string; fasting_hours: number; patient_instructions: string | null; tat_hours: number; about?: string | null; why_done?: string | null }
-export interface LabCentre { id: number; name: string; address: string; city: string | null; pincode: string | null; phone: string | null; total?: number; pin?: { lat: number; lng: number } | null }
+export interface LabCentre { id: number; name: string; address: string; city: string | null; pincode: string | null; phone: string | null; next_slot?: string | null; total?: number; pin?: { lat: number; lng: number } | null }
 export interface LabHours { open: string; close: string }
 export interface LabSettings { centre_hours: Record<string, (LabHours | null)[]>; home: { enabled: boolean; fee: number; pincodes: string[]; open: string; close: string } }
-export interface LabHit { id: string; name: string; locations: LabCentre[]; tests_offered: number; selected: { code: string; name: string; price: number; tat_hours?: number }[]; total: number; prices_vary?: boolean; settings?: LabSettings; registration_number?: string | null; report_hours?: number; hospital_lab?: boolean }
+export interface LabHit { id: string; name: string; locations: LabCentre[]; tests_offered: number; selected: { code: string; name: string; price: number; tat_hours?: number }[]; total: number; prices_vary?: boolean; settings?: LabSettings; registration_number?: string | null; report_hours?: number; hospital_lab?: boolean; logo_url?: string | null; rating?: {average:number;count:number}; nabl?: {current?:boolean;cert_no:string;valid_until:string;source:"lab_declared"}|null; next_available?:string|null; next_home_slot?:string|null }
 export interface RxTests { prescription_id: string; doctor_name: string; prescribed_on: string; tests: { name: string; code: string | null }[]; family_member_id: string | null; patient_name: string | null; hospital_lab?: { id: string; name: string } | null }
 export const rxTestsApi = async (prescriptionId: string): Promise<RxTests> => (await apiClient.get(`/lab-orders/rx/${encodeURIComponent(prescriptionId)}`)).data;
-export interface MyLabOrder {
+export interface MyLabOrder extends BookingActions {
+  payment?: {total:number;paid:number;due:number;status:string};
+  lab_partner_id?: string; location_id?: number;
   id: string; order_number: string; lab_name: string | null; location_name: string | null; location_address: string | null;
   visit_date: string; visit_time: string; fasting_hours: number; status: string; total_amount: number; payment_status: string | null;
   payment_mode?: string | null; patient_name?: string | null; created_at?: string; my_rating?: number | null; cancelled_by?: string | null; cancellation_reason?: string | null;
@@ -19,11 +22,26 @@ export interface MyLabOrder {
   report_status?: 'RELEASED' | 'PARTIAL' | null;
 }
 export interface MyLabSample { id: string; specimen_type: string; container_type: string; test_codes: string; status: 'EXPECTED' | 'COLLECTED' | 'RECEIVED' | 'REJECTED'; rejection_reason: string | null; recollection_of: string | null; collected_at: string | null }
-export interface MyLabOrderDetail extends MyLabOrder { specimens: MyLabSample[] }
+export interface LabPaymentRecord { amount: number; method: string; transaction_number: string | null; payment_reference: string | null; receipt_number: string | null; paid_at: string | null; status: 'PAID' | 'REFUND_DUE' | 'REFUNDED' }
+export interface LabTimelineEntry { code: 'BOOKED' | 'RESCHEDULED' | 'PAYMENT' | 'SAMPLE_COLLECTED' | 'PROCESSING' | 'REPORT_READY' | 'CANCELLED'; label: string; state: 'completed' | 'current' | 'pending'; occurred_at: string | null; scheduled_for?: string | null }
+export interface MyLabOrderDetail extends MyLabOrder { payments: LabPaymentRecord[]; timeline: LabTimelineEntry[]; lab_partner_id?: string; location_id?: number; home_pincode?: string | null; specimens: MyLabSample[] }
+export interface LabConfirmationOrder extends MyLabOrderDetail {
+ lab_partner_id?:string;location_id?:number;patient_profile_id?:string;booked_by_user_id?:string;
+ patient_phone?:string|null;patient_gender?:string|null;patient_dob?:string|null;patient_email?:string|null;home_pincode?:string|null;
+}
 
 export const fetchLabTestsApi = async (): Promise<LabTestDef[]> => (await apiClient.get('/lab-tests')).data;
 export const findLabsApi = async (codes: string[], city?: string): Promise<LabHit[]> =>
   (await apiClient.get('/lab-tests/labs', { params: { tests: codes.join(','), city: city || undefined } })).data;
+export interface LabSlot { time: string; available: boolean; left: number | null }
+export interface LabAvailabilityDay { date: string; weekday: string | number; open: boolean; slots: LabSlot[] }
+export interface LabAvailability {
+  timezone: string; visit_type: 'LAB_VISIT' | 'HOME'; location_id: number; capacity: number | null;
+  bookable: boolean; reason?: string; slot_minutes: number; lead_minutes: number; max_days: number;
+  days: LabAvailabilityDay[];
+}
+export const labAvailabilityApi = async (input: {lab_partner_id:string;location_id:number;visit_type:'LAB_VISIT'|'HOME';pincode?:string}):Promise<LabAvailability> =>
+  (await apiClient.get('/lab-orders/availability', {params: input})).data;
 export const bookLabTestsApi = async (input: {
   lab_partner_id: string; location_id: number; test_codes: string[]; visit_date: string; visit_time: string;
   payment_mode: 'UPI' | 'CASH'; payment?: { payment_method: 'UPI'; upi_id: string };
@@ -33,6 +51,10 @@ export const bookLabTestsApi = async (input: {
 }): Promise<MyLabOrder> => (await apiClient.post('/lab-orders', input)).data;
 export const myLabOrdersApi = async (): Promise<MyLabOrder[]> => (await apiClient.get('/lab-orders/mine')).data;
 export const myLabOrderApi = async (id: string): Promise<MyLabOrderDetail> => (await apiClient.get(`/lab-orders/${encodeURIComponent(id)}`)).data;
+export const labReceiptApi = async (id:string):Promise<{blob:Blob;disposition:string|null}> => {
+ const response=await apiClient.get(`/lab-orders/${encodeURIComponent(id)}/receipt`,{responseType:'blob'});
+ return {blob:response.data as Blob,disposition:response.headers['content-disposition']||null};
+};
 export const rateMyLabOrderApi = async (id: string, rating: number, review: string, tags?: string[]): Promise<void> => { await apiClient.post(`/lab-orders/${encodeURIComponent(id)}/rate`, { rating, review, tags }); };
 export const cancelMyLabOrderApi = async (id: string, reason?: string): Promise<{ status: string; refund: { status: 'REFUNDED' | 'NEEDS_SUPPORT' | 'NOT_APPLICABLE'; amount: number } }> =>
   (await apiClient.post(`/lab-orders/${encodeURIComponent(id)}/cancel`, { reason })).data;
@@ -98,6 +120,9 @@ export interface PublicPackage {
   lab: { id: string; name: string; registration_number: string | null; centres: number; home_collection: boolean };
 }
 export const healthPackagesApi = async (city?: string): Promise<PublicPackage[]> => (await apiClient.get('/lab-tests/packages', { params: { city: city || undefined } })).data;
-export interface LabPublicTest { id: number; code: string; name: string; department: string | null; fasting_hours: number; tat_hours: number; price: number; home_collection_allowed: boolean; parameters: number }
-export interface LabPublic { id: string; name: string; registration_number: string | null; locations: LabCentre[]; settings: LabSettings; packages: PublicPackage[]; tests?: LabPublicTest[] }
+export interface LabPublicTest { instructions?:string|null; id: number; code: string; name: string; department: string | null; fasting_hours: number; tat_hours: number; price: number; home_collection_allowed: boolean; parameters: number }
+export interface LabPublic { logo_url?:string|null; nabl?:LabHit["nabl"]; rating?:LabHit["rating"]; id: string; name: string; registration_number: string | null; locations: LabCentre[]; settings: LabSettings; packages: PublicPackage[]; tests?: LabPublicTest[] }
 export const labPublicApi = async (labId: string): Promise<LabPublic> => (await apiClient.get(`/lab-tests/labs/${encodeURIComponent(labId)}`)).data;
+
+export const rescheduleMyLabOrderApi = async (id: string, visit_date: string, visit_time: string): Promise<MyLabOrderDetail> =>
+  (await apiClient.post(`/lab-orders/${encodeURIComponent(id)}/reschedule`, { visit_date, visit_time })).data;

@@ -1,0 +1,126 @@
+/* Reference page content only. Shared MainLayout and Sidebar own the app shell. */
+
+.booking-reference-page{max-width:1200px;margin:0 auto;color:#07164f;font-size:14px;line-height:1.45;padding-bottom:24px}
+.booking-page-heading{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}
+.booking-page-heading h1{font-size:27px;line-height:34px;font-weight:750;display:flex;gap:10px;align-items:center;margin:0}
+.booking-page-heading h1>svg{width:25px;height:25px;color:#4962a2}
+.booking-page-heading p{font-size:14px;color:#4962a2;margin:1px 0 0}
+.booking-eyebrow{color:#e54400!important;letter-spacing:.1em;text-transform:uppercase;font-size:12px!important;font-weight:750;margin:0 0 4px!important}
+.booking-eyebrow:before{content:'◆';font-size:8px;margin-right:7px}
+.booking-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 14px;min-height:35px;border:1px solid #91b5ff;border-radius:5px;color:#0058ef;background:#fff;font-weight:600;font-size:14px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.booking-button svg{width:16px;height:16px;flex:none}
+.booking-button.primary{background:linear-gradient(120deg,#ff6400,#ff3e00);border-color:#ff4e00;color:#fff}
+.booking-button.danger{border-color:#ff7d80;color:#e82831;background:#fff}
+.booking-button:disabled{background:#edf1f7;border-color:#e6ecf5;color:#7d91ba;cursor:not-allowed}
+.booking-button:focus-visible,.booking-reference-page button:focus-visible,.booking-reference-page a:focus-visible,.booking-filter button:focus-visible{outline:2px solid #1267ff;outline-offset:3px}
+.booking-toolbar{display:flex;justify-content:space-between;gap:14px;align-items:center;border-bottom:1px solid #e0eafa;margin-bottom:16px;padding-bottom:9px;min-width:0}
+.booking-tabs{display:flex;gap:8px;min-width:0}
+.booking-tabs button{padding:12px 14px 11px;border:0;background:none;color:#233e86;font-size:14px;white-space:nowrap;position:relative;font-weight:500}
+.booking-tabs button[aria-pressed=true]{color:#ff4c00}
+.booking-tabs button[aria-pressed=true]:after{content:'';position:absolute;bottom:-10px;left:0;right:0;height:2px;background:#ff5b00}
+.booking-search-actions{display:flex;align-items:center;gap:9px;min-width:0}
+.booking-search{display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #d8e5fb;border-radius:5px;padding:8px 10px;min-height:36px;min-width:0}
+.booking-search>svg{width:16px;height:16px;color:#4866a9;flex:none}
+.booking-search input{width:100%;min-width:0;outline:0;border:0;background:none;font-size:14px;color:#254486}
+.booking-search input::placeholder{color:#5672aa}
+.booking-search button{border:0;background:none;padding:0;color:#5774af}
+.booking-search button svg{width:14px;height:14px}
+.booking-view-toggle{display:flex;border:1px solid #dde7f8;border-radius:5px;background:#fff;padding:2px}
+.booking-view-toggle button{display:flex;align-items:center;gap:5px;padding:6px 8px;border:0;background:none;font-size:12px;color:#526ba3;border-radius:3px}
+.booking-view-toggle svg{width:14px;height:14px}
+.booking-view-toggle button[aria-pressed=true]{background:#fff0e7;color:#ff4e00}
+.booking-service-grid,.loading-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.booking-service-grid.service-list-view{grid-template-columns:1fr}
+.booking-service-card{background:#fff;border:1px solid #e0eafa;border-radius:7px;overflow:hidden;min-width:0;padding:0 10px 9px}
+.service-tone-doctor{--service-tint:#edf5ff;--service-color:#065dff}
+.service-tone-lab{--service-tint:#fff0f4;--service-color:#ff193b}
+.service-tone-homecare{--service-tint:#e6fff4;--service-color:#00a576}
+.service-tone-hospital,.service-tone-equipment{--service-tint:#f4ebff;--service-color:#7529ff}
+.service-tone-pharmacy{--service-tint:#fff1e6;--service-color:#ff590c}
+.booking-service-card>header{display:flex;align-items:center;gap:10px;margin:0 -10px 10px;padding:9px 11px;background:linear-gradient(90deg,var(--service-tint),#fff);min-height:49px}
+.service-icon{width:35px;height:35px;border-radius:50%;display:grid;place-items:center;background:var(--service-tint,#edf5ff);color:var(--service-color,#065dff);flex:none}
+.service-icon svg{width:23px;height:23px}
+.booking-service-card>header h2{font-size:16px;font-weight:750;flex:1;margin:0;line-height:1.3}
+.service-count{font-size:14px;white-space:nowrap}
+.service-next{display:flex;align-items:flex-start;gap:10px;color:inherit;text-decoration:none;padding:2px 3px 10px;min-width:0}
+.service-next>div{flex:1;min-width:0}
+.service-next h3{font-size:14px;font-weight:750;margin:0 0 3px;overflow-wrap:anywhere}
+.service-next p{font-size:12px;color:#506ba8;margin:2px 0;display:flex;gap:4px;align-items:flex-start}
+.service-next p svg{width:12px;height:12px;flex:none;margin-top:2px}
+.booking-pill{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border-radius:4px;font-size:12px;padding:3px 8px;line-height:1.3;flex:none}
+.status-upcoming{background:#d8fff0;color:#008d57}
+.status-completed{background:#e5f0ff;color:#075df0}
+.status-cancelled{background:#ffe6ed;color:#e52447}
+.service-next>.booking-pill{align-self:center}
+.service-view-all{display:flex;align-items:center;justify-content:center;gap:5px;color:var(--service-color);background:var(--service-tint);border-radius:4px;padding:8px 5px;font-size:14px;font-weight:650;text-decoration:none}
+.service-view-all svg{width:14px;height:14px}
+.provider-image{display:inline-flex;align-items:center;justify-content:center;flex:none;overflow:hidden;border-radius:7px;background:var(--service-tint,#edf5ff);color:var(--service-color,#075df0)}
+.provider-image-small{width:42px;height:42px}.provider-image-medium{width:63px;height:52px}.provider-image-large{width:90px;height:75px}
+.provider-image img{width:100%;height:100%;object-fit:cover}
+.provider-doctor{border-radius:50%;--service-tint:#e9f3ff;--service-color:#065dff}
+.provider-lab{--service-tint:#fff0f4;--service-color:#ff193b}.provider-homecare{--service-tint:#e6fff4;--service-color:#00a576}
+.provider-hospital,.provider-clinic,.provider-equipment{--service-tint:#f4ebff;--service-color:#7529ff}.provider-pharmacy{--service-tint:#fff1e6;--service-color:#ff590c}
+.provider-generated{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;gap:1px}
+.provider-generated svg{width:24px;height:24px}.provider-generated b{font-size:14px;line-height:1.1;letter-spacing:.04em}.provider-doctor b{font-size:19px}
+.booking-records-banner{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px;background:linear-gradient(90deg,#eaf4ff,#f8fbff);border:1px solid #e1ebfc;border-radius:6px}
+.booking-records-banner>div{flex:1;min-width:0}.booking-records-banner h2{font-size:14px;font-weight:750;margin:0}.booking-records-banner p{font-size:12px;color:#5772ab;margin:2px 0}
+.booking-state{display:flex;flex-direction:column;align-items:center;text-align:center;justify-content:center;padding:60px 24px;min-height:350px;background:#fff;border:1px solid #e3ecfa;border-radius:7px}
+.booking-state h2{font-size:21px;font-weight:750;margin:10px 0 6px}.booking-state p{max-width:460px;font-size:14px;color:#5672a7;line-height:1.6;margin:0 0 18px}
+.booking-state-actions{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.booking-state-art{position:relative;display:block;width:165px;height:115px;color:#8aa7d6;margin:0 auto 10px}
+.booking-state-art .state-cloud{position:absolute;bottom:10px;left:5px;width:155px;height:105px;fill:#e8f2ff;stroke:#e8f2ff;stroke-width:1}
+.booking-state-art .state-symbol{position:absolute;top:20px;left:48px;width:70px;height:70px;stroke-width:1.6;color:#8ba6d2}
+.booking-state-art i{position:absolute;background:#f1f7ff;transform:rotate(35deg);border-radius:3px;width:19px;height:10px;right:4px;top:15px}
+.booking-state-art i:last-child{top:30px;right:24px;width:10px;height:7px}
+.art-error .state-symbol{width:42px;height:42px;left:62px;top:56px;color:#fff;fill:#ff1532;stroke-width:1.6}
+.art-lab .state-symbol,.art-filtered .state-symbol,.art-reports .state-symbol{color:#075dff}
+.booking-quick-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(510px,100%);gap:14px;margin-top:40px}
+.booking-quick-tiles>a{padding:18px 9px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;background:var(--service-tint);color:#07164f;text-decoration:none;border-radius:7px;font-size:14px;min-height:115px}
+.booking-quick-tiles svg{width:30px;height:30px;color:var(--service-color)}
+.booking-state.is-compact{min-height:155px;padding:12px;border:0;background:none}
+.booking-state.is-compact h2{font-size:14px;margin:4px 0}.booking-state.is-compact p{font-size:12px;margin-bottom:8px}.booking-state.is-compact .booking-state-art{transform:scale(.55);height:67px;margin:-15px auto -10px}.booking-state.is-compact .booking-button{font-size:12px;min-height:28px;padding:4px 12px}
+.booking-loading{gap:16px}.loading-rows,.loading-detail{display:grid;grid-template-columns:1fr}.booking-skeleton{background:#fff;border:1px solid #e1eaf9;border-radius:7px;padding:22px 18px;min-height:165px}
+.skeleton-heading{display:flex;gap:14px;margin-bottom:15px;align-items:center}.skeleton-heading>i{width:45px;height:45px;border-radius:50%;background:#edf0f4;flex:none}.skeleton-heading>div{flex:1}
+.booking-skeleton b,.booking-skeleton span,.skeleton-line{display:block;background:#edf0f4;border-radius:5px;height:10px;margin:8px 0;width:75%;animation:booking-pulse 1.4s ease-in-out infinite}.booking-skeleton b{width:45%;height:12px}.skeleton-line.short{width:55%}
+.loading-rows .booking-skeleton{min-height:115px}.loading-detail .booking-skeleton{min-height:350px}.booking-loading.is-compact{display:block}.booking-loading.is-compact .booking-skeleton{border:0;min-height:165px}
+@keyframes booking-pulse{50%{opacity:.5}}@media(prefers-reduced-motion:reduce){.booking-skeleton b,.booking-skeleton span,.skeleton-line{animation:none}}
+.booking-filter{border:1px solid #e0eafa;width:380px;border-radius:7px;color:#07164f;padding:0;max-width:calc(100vw - 24px)}
+.booking-filter>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e7effa;padding:15px 18px}.booking-filter h2{font-size:16px;font-weight:750;margin:0}.booking-filter>header button{border:0;background:none;padding:0;color:#4567a6}.booking-filter>header svg{width:19px;height:19px}
+.booking-filter-body{padding:18px;display:grid;gap:19px}.booking-filter fieldset{border:0;margin:0;padding:0;min-width:0}.booking-filter legend{font-size:14px;font-weight:650;margin-bottom:8px}.booking-chips{display:flex;gap:6px;flex-wrap:wrap}.booking-chips button{border:1px solid #dce7f8;border-radius:16px;background:#f8faff;color:#213e82;padding:4px 12px;font-size:12px}.booking-chips button[aria-pressed=true]{border-color:#ff6a20;background:#fff4ed;color:#ff4d00}
+.booking-date-inputs{display:flex;gap:9px}.booking-date-inputs label{position:relative;min-width:0;flex:1;font-size:12px;color:#526ea8}.booking-date-inputs input{display:block;width:100%;border:1px solid #dce7f8;border-radius:5px;padding:8px;font-size:12px;color:#385995;min-width:0;background:#fff}.booking-date-inputs label>svg{position:absolute;right:8px;bottom:10px;pointer-events:none;width:14px;height:14px;background:#fff}.booking-filter>footer{display:flex;gap:10px;border-top:1px solid #e7effa;padding:15px 18px}.booking-filter>footer>button{flex:1}
+.booking-mobile-back{display:none}.booking-notice{padding:10px;border:1px solid #c7ecdf;background:#edfff6;color:#09794d;border-radius:5px;margin-bottom:12px}
+@media(max-width:1100px){.booking-toolbar{flex-wrap:wrap}.booking-search-actions{flex:1;justify-content:flex-end}.service-next{flex-wrap:wrap}.service-next>.booking-pill{margin-left:73px}.booking-service-card header{gap:6px}.booking-service-card h2{font-size:14px}}
+@media(max-width:767px){
+ 
+ .booking-reference-page{padding:0 12px 24px;font-size:14px}.booking-page-heading{margin:0 -12px 7px;padding:15px 12px;min-height:62px;background:#fff;gap:8px;justify-content:center}
+ .booking-mobile-back{display:flex;border:0;background:none;color:#07164f;padding:4px;position:absolute;left:12px}.booking-mobile-back svg{width:20px;height:20px}
+ .booking-page-heading h1{font-size:19px;line-height:25px}.booking-page-heading h1>svg,.booking-page-heading p{display:none}
+ .booking-service-grid,.loading-cards{grid-template-columns:1fr;gap:12px}.booking-toolbar{margin:0 -12px 12px;padding:0 0 10px;gap:8px;background:#fff}
+ .booking-tabs{width:100%;justify-content:space-around;gap:0;border-bottom:1px solid #e1ebfa}.booking-tabs button{flex:1;font-size:12px;padding:12px 4px}.booking-tabs button[aria-pressed=true]:after{bottom:-1px}
+ .booking-search-actions{padding:0 12px;width:100%;justify-content:stretch;gap:8px}.booking-search{flex:1}.booking-search input{font-size:14px}.booking-view-toggle button{font-size:0;padding:7px}.booking-view-toggle svg{width:15px;height:15px}.filter-button{padding:8px 10px}.filter-button span{display:none}
+ .booking-service-card>header h2{font-size:16px}.service-next{flex-wrap:nowrap}.service-next>.booking-pill{margin:0}.service-next{position:relative;min-height:90px;padding-bottom:29px}.service-next>.booking-pill{position:absolute;left:76px;bottom:4px}.service-next p{font-size:12px}.service-next h3{font-size:14px}
+ .booking-records-banner{flex-wrap:wrap;gap:9px}.booking-records-banner .booking-button{margin-left:46px;font-size:12px}.booking-records-banner p{font-size:12px}
+ .booking-state{padding:45px 16px;min-height:390px}.booking-state h2{font-size:19px}.booking-state p{font-size:14px}.booking-quick-tiles{gap:9px;margin-top:30px}.booking-quick-tiles>a{font-size:12px;padding:12px 6px;min-height:100px}
+}
+
+.booking-state-art>img{width:100%;height:100%;object-fit:contain;display:block}
+
+.booking-service-card.service-tone-lab>.service-view-all{color:#5424ed;background:#f4efff}
+.booking-service-card.service-tone-homecare>.service-view-all{color:#0096bd;background:#f0fbfc}
+.booking-service-card.service-tone-hospital>.service-view-all{color:#075dff;background:#edf4ff}
+.overview-page>.booking-state{border:0;background:transparent}
+.overview-error-page>.booking-page-heading,.overview-error-page>.booking-toolbar{display:none}
+.overview-error-page>.booking-state{margin-top:85px}
+.booking-service-card:has(.booking-error){background:#fff2f4;border-color:#f5d5dd}
+.booking-service-card:has(.booking-state.is-compact)>header{display:none}
+
+.provider-doctor.provider-image-medium{width:52px;height:52px}
+.provider-doctor.provider-image-large{width:75px;height:75px}
+
+.booking-quick-tiles>a{gap:3px}.booking-quick-tiles>a>svg{margin-bottom:8px}.booking-quick-tiles>a>span{font-size:12px;font-weight:400}
+
+/* Page content uses the same title scale as Home Care; the shared shell owns its layout. */
+.booking-page-heading h1,.lab-detail-heading h1{font-size:30px;line-height:36px;font-weight:900}
+@media(max-width:639px){.booking-page-heading h1,.lab-detail-heading h1{font-size:24px;line-height:32px}}
+
+.service-next h3{font-size:16px}.service-next p{font-size:14px}

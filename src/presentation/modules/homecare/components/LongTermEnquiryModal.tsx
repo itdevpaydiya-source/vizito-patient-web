@@ -1,3 +1,4 @@
+import BookingDialog from '../../bookings/BookingDialog';
 import React, { useState, useEffect } from 'react';
 import HomePinField from '../../../components/location/HomePinField';
 import { X, Calendar, User, MapPin, Activity, ShieldCheck, HeartHandshake, AlertCircle, Clock, ChevronRight, CheckCircle2, Users } from 'lucide-react';
@@ -34,8 +35,8 @@ const SHIFT_OPTIONS = [
 const MOBILITY_OPTIONS = [
   { id: 'INDEPENDENT', label: 'Walks on own', hint: 'Fully mobile, needs minimal supervision' },
   { id: 'ASSISTED', label: 'Walks with help', hint: 'Uses cane, walker, or family support' },
-  { id: 'WHEELCHAIR', label: 'Wheelchair-bound', hint: 'Requires assistance with chair transfers' },
-  { id: 'BEDRIDDEN', label: 'Completely bedridden', hint: 'Requires full in-bed care & 2-hr positioning' },
+  { id: 'WHEELCHAIR', label: 'Uses a wheelchair', hint: 'Requires assistance with chair transfers' },
+  { id: 'BEDRIDDEN', label: 'Needs care in bed', hint: 'Requires full in-bed care & 2-hr positioning' },
 ];
 
 export default function LongTermEnquiryModal({
@@ -239,28 +240,25 @@ export default function LongTermEnquiryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <BookingDialog label="Book Long-Term Home Care" onClose={onClose} className="hcj-quote-dialog">
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Book Long-Term Home Care"
         className="bg-white rounded-3xl max-w-2xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-teal-700 to-teal-800 text-white p-5 sm:p-6 relative">
+        <div className="bg-white border-b border-slate-100 text-slate-900 p-5 sm:p-6 relative">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+            className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 text-teal-200 text-xs font-bold uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-teal-700 text-xs font-bold uppercase tracking-wider mb-1">
             <HeartHandshake className="w-4 h-4" />
             <span>Long-Term Care Planning (12h / 24h)</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black">Request a Dedicated Care Manager</h2>
-          <p className="text-teal-100 text-xs sm:text-sm mt-1 max-w-lg">
+          <h2 className="text-xl sm:text-2xl font-black">Request a quote for long-term care</h2>
+          <p className="text-slate-600 text-xs sm:text-sm mt-1 max-w-lg">
             No instant automated matching. A clinical coordinator will call within 30 minutes to review needs and arrange a home assessment.
           </p>
 
@@ -293,7 +291,7 @@ export default function LongTermEnquiryModal({
           {step === 1 && (
             <div className="space-y-5 animate-in fade-in duration-200">
               <div className="flex flex-wrap items-center justify-between gap-x-2 border-b border-slate-100 pb-2">
-                <span className="text-xs font-bold text-teal-800 uppercase tracking-wider">Step 1 of 3: Patient & Clinical Needs</span>
+                <span className="text-xs font-bold text-teal-800 uppercase tracking-wider">Step 1 of 3: Your care needs</span>
                 <span className="text-xs text-slate-400">Condition & Mobility</span>
               </div>
 
@@ -773,6 +771,6 @@ export default function LongTermEnquiryModal({
           )}
         </form>
       </div>
-    </div>
+    </BookingDialog>
   );
 }

@@ -2,10 +2,10 @@ import { formatTime } from '../utils/dateFormat';
 import { ENDPOINTS } from "./endpoints";
 import apiClient from "./index";
 
-// Online appointment booking — all data is real and backend-authoritative.
+// Online appointment booking â€” all data is real and backend-authoritative.
 //   Doctor:   provider(doctor) -> date -> slots -> book
 //   Hospital: provider(hospital) -> branches -> departments -> doctors -> date -> slots -> book
-// Nothing here fabricates slots/fees/booking ids — the backend is the source of truth.
+// Nothing here fabricates slots/fees/booking ids â€” the backend is the source of truth.
 
 export interface DoctorDetail {
   full_name: string | null;
@@ -23,15 +23,20 @@ export interface DoctorDetail {
 }
 
 export interface ProviderDetail {
+  display_type?: string | null;
+  pause?: import('./types').ProviderPause | null;
+  hospital?: import('./types').HospitalFacts | null;
+  image_url?: string | null;
   id: string;
   business_name: string;
   partner_type: string;
   status: string;
   doctor: DoctorDetail | null;
-  pharmacy?: { address: string | null; phone: string | null; pin?: { lat: number; lng: number } | null } | null;
+  pharmacy?: { license_number?: string | null; address: string | null; phone: string | null; pin?: { lat: number; lng: number } | null } | null;
 }
 
 export interface Branch {
+  hours?: {day:string;open:string;close:string}[];
   facility_id: number;
   name: string;
   facility_type: string | null;
@@ -56,6 +61,8 @@ export interface BranchDepartment {
 }
 
 export interface BranchDoctor {
+  qualification?: string | null;
+  department?: string | null;
   doctor_partner_id: string;
   doctor_user_id: number;
   name: string;
@@ -74,10 +81,10 @@ export interface AvailableSlot {
   fee: number | null;
   /** What a video consultation in this slot costs (doctor or department video fee). */
   video_fee?: number | null;
-  // Resolved from the facility's own catalogue record (same source as its pricing above) — a doctor
+  // Resolved from the facility's own catalogue record (same source as its pricing above) â€” a doctor
   // can hold slots at more than one clinic, so this is per-slot, not a single fixed "doctor's clinic".
   // No resolved city/state name exists anywhere in the backend today (catalogue only stores city_id/
-  // state_id foreign keys, never joined to a name) — address is street-level only.
+  // state_id foreign keys, never joined to a name) â€” address is street-level only.
   facility_name: string | null;
   facility_type: string | null;   // e.g. "Clinic" / "Hospital" / "Sub Branch"
   facility_address: string | null;
@@ -92,7 +99,7 @@ export interface CreatedBooking {
   booking_date: string;
   appointment?: any;
   payment_status?: string;
-  // Only present when the booking was created via an online payment (see CreateBookingInput.payment) —
+  // Only present when the booking was created via an online payment (see CreateBookingInput.payment) â€”
   // the simulated gateway's reference id for the charge that was made before this booking existed.
   payment_reference_id?: string;
 }
@@ -101,7 +108,9 @@ const unwrap = <T>(res: any): T => (res?.data?.data ?? res?.data) as T;
 
 export const getProviderDetailApi = async (partnerId: string): Promise<ProviderDetail | null> => {
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_DETAIL(partnerId));
-  return unwrap<ProviderDetail>(res) ?? null;
+  const detail = unwrap<ProviderDetail>(res) ?? null;
+  if (detail?.pharmacy?.address) detail.pharmacy.address = detail.pharmacy.address.replace(/\bNear\s+Near\b/gi, 'Near');
+  return detail;
 };
 
 export const getBranchesApi = async (partnerId: string): Promise<Branch[]> => {
@@ -124,7 +133,7 @@ export const getBranchDoctorsApi = async (facilityId: number, facilityDepartment
   return Array.isArray(list) ? list : [];
 };
 
-// Real, date-gated branch doctors — a doctor is only included if they have a genuine bookable slot
+// Real, date-gated branch doctors â€” a doctor is only included if they have a genuine bookable slot
 // at THIS branch on `date` (backend-enforced). Same BranchDoctor shape as getBranchDoctorsApi, so it
 // can drop straight into the same `doctors` state; this is the date-aware replacement used once a
 // date has been selected, not a parallel/competing source of truth.
@@ -207,6 +216,7 @@ export const getProviderSlotsApi = async (
 };
 
 export interface CreateBookingInput {
+  document_ids?: string[];
   partner_id: string;         // the DOCTOR partner uuid (bookable provider)
   service_type: string;       // 'In Person' | 'Video' | 'Home Visit'
   booking_date: string;       // YYYY-MM-DD
@@ -218,7 +228,7 @@ export interface CreateBookingInput {
   hospital_partner_id?: string;
   notes?: string;
   payment_mode?: string;
-  // Present for every online payment mode — absent for CASH. When present, the backend charges
+  // Present for every online payment mode â€” absent for CASH. When present, the backend charges
   // this BEFORE creating the booking or reserving the slot, so an abandoned/declined payment
   // attempt never leaves a real booking (or a held slot) behind (see BUGS.md #57).
   payment?: ProcessPaymentInput;
@@ -229,8 +239,8 @@ export const createBookingApi = async (input: CreateBookingInput): Promise<Creat
   return (res?.data?.data ?? res?.data) as CreatedBooking;
 };
 
-// ─── Payment (simulated — no real gateway wired in yet) ────────────────────
-// The payable amount is never sent from here — the backend resolves it from the booking's own
+// â”€â”€â”€ Payment (simulated â€” no real gateway wired in yet) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// The payable amount is never sent from here â€” the backend resolves it from the booking's own
 // stored total_amount and ignores anything the client sends (see vizito-booking's
 // PaymentsService.initiate). This type intentionally has no `amount` field.
 export type PaymentMethod = 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET' | 'CASH';
@@ -238,7 +248,7 @@ export type PaymentMethod = 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET' | 'CASH';
 export interface ProcessPaymentInput {
   payment_method: PaymentMethod;
   upi_id?: string;
-  // Only the last 4 digits are ever sent — see ProcessPaymentDto on the backend for why.
+  // Only the last 4 digits are ever sent â€” see ProcessPaymentDto on the backend for why.
   card_last4?: string;
   card_holder_name?: string;
   bank_name?: string;
@@ -276,5 +286,5 @@ export const getPaymentStatusApi = async (bookingId: string): Promise<PaymentSta
 };
 
 // Formats a HH:mm:ss backend time to a friendly 10:00 AM label.
-// Walk-in slots are stored as "06:00 AM", online ones as "06:00:00" — both come out as "6:00 AM".
+// Walk-in slots are stored as "06:00 AM", online ones as "06:00:00" â€” both come out as "6:00 AM".
 export const formatSlotTime = (t: string): string => formatTime(t);

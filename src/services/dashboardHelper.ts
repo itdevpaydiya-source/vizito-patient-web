@@ -1,3 +1,4 @@
+import type { BookingActions, NextCareVisit } from './bookingActions';
 import { ENDPOINTS } from "./endpoints";
 import apiClient from "./index";
 
@@ -5,12 +6,44 @@ import apiClient from "./index";
 // (+ its Appointment relation) returned by GET /patients/dashboard. Fields the backend does not
 // denormalize onto the booking (notably the provider/business NAME — the booking stores partner_id
 // only) are left null and rendered honestly by the UI, never fabricated.
+export interface HospitalBookingInfo {
+  accreditation: { body: 'NABH' | 'NABH Entry Level' | 'JCI'; cert_no: string; valid_until: string; current: boolean } | null;
+  arrival_desk: string | null;
+  phone: string | null;
+}
+export interface BookingProvider {
+  hospital?: HospitalBookingInfo | null;
+  doctor?: { id?: string; name: string | null; photo_url: string | null; qualification: string | null; speciality: string | null; experience_years: number | null; rating: number | null; review_count: number | null } | null;
+  image_url?: string | null;
+  place?: { name?: string | null; address?: string | null; landmark?: string | null; city?: string | null; pincode?: string | null; latitude?: number | null; longitude?: number | null; pin_confirmed?: boolean; image_url?: string | null } | null;
+  payment?: { receipt_number: string | null; transaction_number: string | null; payment_reference: string | null; method: string | null; amount: number; paid_at: string | null } | null;
+  nabl?: { cert_no: string | null; valid_until: string | null; current: boolean } | null;
+  items?: { name: string; price: number }[];
+  duration_minutes?: number | null;
+  total_amount?: number | null;
+  payment_status?: string | null;
+  payment_mode?: string | null;
+}
+export interface DoctorVisit extends BookingActions {
+  can_reschedule: boolean;
+  can_cancel: boolean;
+  reschedules_left: number;
+  token_number: string | null;
+  reason_for_visit: string | null;
+  prescription: { id: string; number: string | null; finalized_at: string | null } | null;
+  timeline: { code: 'BOOKED'|'PAYMENT'|'CHECKED_IN'|'CONSULTATION'|'PRESCRIPTION'|'CANCELLED'; label: string; state: 'completed'|'current'|'pending'; occurred_at: string | null }[];
+  video: { how: 'DOCTOR_CALLS'; can_join: false; join_url: null; call_expected_from: string | null; call_expected_until: string | null; message: string; mode_used: string | null } | null;
+}
 export interface DashboardBooking {
+  visit?: DoctorVisit | null;
+  patientProfileId?: string | null;
+  provider?: BookingProvider | null;
   id: string;
   bookingNumber: string | null;   // authoritative backend reference (Booking.booking_number)
   status: string;                 // booking_status, falling back to appointment.status
   bookingDate: string | null;
   appointmentDate: string | null;
+  endTime?: string | null; // Actual appointment end_time; never an assumed duration.
   timeSlot: string | null;
   appointmentType: string | null; // VIDEO_CALL / IN_CLINIC / HOME_VISIT
   location: string | null;        // facility address captured at booking time
@@ -34,19 +67,15 @@ export interface DashboardBooking {
   appointmentStatus: string | null; // appointment.status, kept separate from the coarser `status` above
   paymentMode: string | null;     // booking.payment_mode ("Online" / "Pay at Clinic (Cash)")
   source: string | null;          // booking.source ("ONLINE" / "WALK_IN")
-  // NOT available from this endpoint: the backend only returns a payment gateway reference
-  // (payment_reference_id) transiently in the booking-CREATION response, never persisted on the
-  // Booking entity or joined back in from the Transaction table for GET /patients/dashboard. Wired
-  // up defensively in case a future backend response includes it; renders only when present.
   paymentReferenceId: string | null;
   // Who ended a cancelled visit: PATIENT, or DOCTOR / HOSPITAL when the provider declined it.
   cancelledBy: string | null;
   cancellationReason: string | null;
   // What it is and with whom (from the booking service): never a bare "Appointment".
   kind: 'DOCTOR_VISIT' | 'VIDEO_CONSULT' | 'HOME_VISIT' | 'LAB_TEST' | 'HOME_CARE';
-  homeCare: { id: string; order_number: string; agency_name: string | null; service_name: string; category: string; kind: string; sessions: number; done: number; status: string; patient_name: string | null; next_date: string | null; next_time: string | null } | null;
+  homeCare: (BookingActions & { next_visit?: NextCareVisit | null; reschedule_visit_id?: string | null; id: string; order_number: string; agency_name: string | null; service_name: string; category: string; kind: string; sessions: number; done: number; status: string; patient_name: string | null; next_date: string | null; next_time: string | null }) | null;
   business: { id: string; name: string | null; type: string } | null;
-  labOrder: { id: string; order_number: string; lab_name: string | null; location_name: string | null; status: string; visit_type: string; visit_date: string; visit_time: string; patient_name: string | null; tests: string[]; package_name: string | null } | null;
+  labOrder: (BookingActions & { id: string; order_number: string; lab_name: string | null; location_name: string | null; status: string; visit_type: string; visit_date: string; visit_time: string; patient_name: string | null; tests: string[]; package_name: string | null }) | null;
 }
 
 export interface DashboardData {
@@ -61,12 +90,15 @@ function mapBooking(b: any): DashboardBooking {
   const toStr = (v: any) => (v == null ? null : String(v).split('T')[0]);
   return {
     id: String(b?.id ?? ''),
+    visit: b?.visit ?? null,
+    patientProfileId: appt?.patient_id ?? b?.patient_id ?? null,
     bookingNumber: b?.booking_number ?? null,
     // Prefer the appointment's lifecycle status (IN_PROGRESS/COMPLETED) so the badge matches the tab;
     // booking_status is a coarser fallback that can lag behind at 'Pending'.
     status: appt?.status || b?.booking_status || 'Status unavailable',
     bookingDate: toStr(b?.booking_date),
     appointmentDate: toStr(appt?.appointment_date),
+    endTime: appt?.end_time ?? null,
     timeSlot: appt?.time_slot ?? null,
     appointmentType: appt?.appointment_type ?? null,
     location: appt?.location || null,
@@ -95,6 +127,7 @@ function mapBooking(b: any): DashboardBooking {
     cancelledBy: appt?.cancelled_by ?? b?.cancelled_by ?? null,
     cancellationReason: appt?.cancellation_reason ?? b?.cancellation_reason ?? null,
     kind: b?.kind || (b?.booking_type === 'LAB' ? 'LAB_TEST' : appt?.appointment_type === 'HOME_VISIT' ? 'HOME_VISIT' : appt?.appointment_type === 'VIDEO_CALL' ? 'VIDEO_CONSULT' : 'DOCTOR_VISIT'),
+    provider: b?.provider ?? null,
     business: b?.business || null,
     labOrder: b?.lab_order ? { ...b.lab_order, visit_date: String(b.lab_order.visit_date || '').slice(0, 10) } : null,
     homeCare: b?.home_care || null,

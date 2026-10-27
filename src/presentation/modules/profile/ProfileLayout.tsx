@@ -60,7 +60,7 @@ export default function ProfileLayout() {
   // Active Tab / Section
   const [activeSection, setActiveSection] = useState<
     'personal' | 'health' | 'contact' | 'addresses' | 'family' | 'password' | 'settings'
-  >(() => (new URLSearchParams(window.location.search).get('section') === 'health' ? 'health' : 'personal'));
+  >(() => (new URLSearchParams(window.location.search).get('section') === 'addresses' ? 'addresses' : new URLSearchParams(window.location.search).get('section') === 'health' ? 'health' : 'personal'));
 
   // Toasts Feedback State
   const [toastMessage, setToastMessage] = useState<string | null>(null);

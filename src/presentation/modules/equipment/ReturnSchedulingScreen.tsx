@@ -1,3 +1,4 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -667,12 +668,9 @@ export const ReturnSchedulingScreen: React.FC = () => {
               >
                 <div className="flex items-start gap-4 min-w-0 flex-1">
                   <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0">
-                    <img
-                      src={req.equipmentImage || '/equipment/hospital-bed.jpg'}
-                      alt={req.equipmentName}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                      }}
+                    <MediaImage kind="equipment" category={undefined}
+                      src={req.equipmentImage}
+                      name={req.equipmentName}
                       className="w-full h-full object-cover"
                     />
                   </div>

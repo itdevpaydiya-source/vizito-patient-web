@@ -1,0 +1,75 @@
+{
+  "mode": "Built-in image_gen",
+  "reference": "D:\\Vizito-latest6\\design\\explore-services.png",
+  "allProviders": "Fictional male doctor with glasses at computer, white coat, soft daylight, landscape 4:3, no text or brands.",
+  "assets": [
+    {
+      "name": "doctor-consultation",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, not a UI, no collage. 4:3 landscape service tile: smiling fictional Indian female doctor, white coat, blue shirt, stethoscope, waist-up portrait on a pale blue clean clinical background, facing slightly left, matching the reference doctor consultation tile. Use the attached screenshot only as subject/framing/colour mood guidance; do not reproduce its interface. Soft daylight, pale cream/blue/teal palette, warm natural skin tones, professionally composed, believable anatomy, uncluttered and readable at thumbnail sizes. All people are invented, no recognizable real people. No text, no logos, no brands, no watermarks."
+    },
+    {
+      "name": "hospitals-clinics",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, not a UI, no collage. 4:3 landscape service tile: modern midrise hospital exterior, white facade and blue glass, three-quarter architectural view, palm trees and small lawn, pale blue sky, matching the reference hospitals tile. Absolutely no writing or hospital signs. Use the attached screenshot only as subject/framing/colour mood guidance; do not reproduce its interface. Soft daylight, pale cream/blue/teal palette, warm natural skin tones, professionally composed, believable anatomy, uncluttered and readable at thumbnail sizes. All people are invented, no recognizable real people. No text, no logos, no brands, no watermarks."
+    },
+    {
+      "name": "lab-tests",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, not a UI, no collage. 4:3 landscape service tile: close-up row of clear laboratory test tubes in a white rack, blue caps, red and blue sample liquids, pristine white clinical counter, soft blurred lab background, like reference lab tests tile. Use the attached screenshot only as subject/framing/colour mood guidance; do not reproduce its interface. Soft daylight, pale cream/blue/teal palette, warm natural skin tones, professionally composed, believable anatomy, uncluttered and readable at thumbnail sizes. All people are invented, no recognizable real people. No text, no logos, no brands, no watermarks."
+    },
+    {
+      "name": "home-care",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, not a UI, no collage. 4:3 landscape service tile: fictional Indian woman nurse in blue scrubs leaning warmly toward an elderly Indian woman seated in a bright home room, hand on patient's arm, realistic friendly care interaction, matching reference home-care tile. Use the attached screenshot only as subject/framing/colour mood guidance; do not reproduce its interface. Soft daylight, pale cream/blue/teal palette, warm natural skin tones, professionally composed, believable anatomy, uncluttered and readable at thumbnail sizes. All people are invented, no recognizable real people. No text, no logos, no brands, no watermarks."
+    },
+    {
+      "name": "pharmacy",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website image asset. Landscape 4:3 service tile. Several generic white medicine bottles and blank medicine cartons, teal and orange minimal colour bands, white counter, softly blurred pharmacy background. A blue-capped bottle at right and amber medicine bottle at center. Like the reference pharmacy tile. No readable lettering or trademarks. Attached screenshot is a visual guide ONLY; no interface, collage, borders, text, watermark or brand identity. Clean clinical palette, realistic material detail and soft lighting, thumbnail-friendly subject framing. No recognizable people."
+    },
+    {
+      "name": "medical-equipment",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website image asset. Landscape 4:3 service tile. Realistic black wheelchair with chrome frame and large wheels, three-quarter angle in a tidy bright home medical room, a small unbranded oxygen concentrator beside it, soft off-white walls and window light. Like the reference medical equipment tile. Attached screenshot is a visual guide ONLY; no interface, collage, borders, text, watermark or brand identity. Clean clinical palette, realistic material detail and soft lighting, thumbnail-friendly subject framing. No recognizable people."
+    },
+    {
+      "name": "ambulance",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website image asset. Landscape 4:3 service tile. White modern emergency ambulance with red and blue stripes and roof warning light bar, three-quarter front view, parked outdoors in daylight, pale blue sky and unobtrusive background. Like reference ambulance tile. No text, registration lettering, numbers, names, logos or trademarks. Attached screenshot is a visual guide ONLY; no interface, collage, borders, text, watermark or brand identity. Clean clinical palette, realistic material detail and soft lighting, thumbnail-friendly subject framing. No recognizable people."
+    },
+    {
+      "name": "blood-services",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website image asset. Landscape 4:3 service tile. One glossy deep-red blood drop symbol centered on a soft very pale blush pink background, rounded highlights, clean subtle three-dimensional render, matching the simple blood services tile in the reference. No text or other icons. Attached screenshot is a visual guide ONLY; no interface, collage, borders, text, watermark or brand identity. Clean clinical palette, realistic material detail and soft lighting, thumbnail-friendly subject framing. No recognizable people."
+    },
+    {
+      "name": "hero-care",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, no collage or UI. Wide 3:1 website hero banner. Warm consultation between a smiling fictional Indian female doctor in a white coat, blue blouse and stethoscope and a fictional female patient in a muted coral blouse seen from behind. Both people entirely within the LEFT half of the image. Bright softly blurred clinic, small plant left. The RIGHT half must be completely open, light ivory and pale peach wall softly fading, for text added later. No text in image. Reference hero mood and scene but not its UI or text. Attached screenshot is style/framing guidance only. Match its realistic editorial healthcare style, soft natural daylight, pale teal/blue/cream clinical tones and warm skin tones. All people are invented; believable anatomy and natural expressions. No letters, text, logos, trademarks or watermark."
+    },
+    {
+      "name": "fallback-doctor",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, no collage or UI. Square 1:1 provider card portrait. Fictional Indian male general physician, early 40s, short dark hair, dark rectangular glasses, white coat, pale blue shirt and stethoscope, chest-up, looking kindly at camera, bright softly blurred clinic background. Similar framing and subject to reference first doctor card. No known or recognizable real person. Attached screenshot is style/framing guidance only. Match its realistic editorial healthcare style, soft natural daylight, pale teal/blue/cream clinical tones and warm skin tones. All people are invented; believable anatomy and natural expressions. No letters, text, logos, trademarks or watermark."
+    },
+    {
+      "name": "fallback-hospital",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, no collage or UI. Square 1:1 provider card image. Modern blue glass and white multi-storey hospital exterior, confident low three-quarter architectural angle, crisp sunny soft daylight, landscaping and pale sky. Similar framing to reference hospital provider card. No words, names, signs, flags or branding on building. Attached screenshot is style/framing guidance only. Match its realistic editorial healthcare style, soft natural daylight, pale teal/blue/cream clinical tones and warm skin tones. All people are invented; believable anatomy and natural expressions. No letters, text, logos, trademarks or watermark."
+    },
+    {
+      "name": "fallback-lab",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, no collage or UI. Square 1:1 provider card image. Fictional Indian female laboratory technician in white coat and blue gloves at a workbench, pipetting a sample beside test tubes and microscope, three-quarter side profile, soft clinical daylight, shallow depth of field. Similar framing to reference laboratory provider card. Attached screenshot is style/framing guidance only. Match its realistic editorial healthcare style, soft natural daylight, pale teal/blue/cream clinical tones and warm skin tones. All people are invented; believable anatomy and natural expressions. No letters, text, logos, trademarks or watermark."
+    },
+    {
+      "name": "fallback-homecare",
+      "prompt": "Use case: photorealistic-natural. Generate ONE new standalone website photograph, no collage or UI. Square 1:1 provider card image. Fictional Indian woman nurse in blue scrubs leaning toward a smiling elderly Indian woman wearing a soft peach saree, holding the patient's hand in a bright home setting. Warm candid close framing like the reference home-care card. Keep both faces visible. Attached screenshot is style/framing guidance only. Match its realistic editorial healthcare style, soft natural daylight, pale teal/blue/cream clinical tones and warm skin tones. All people are invented; believable anatomy and natural expressions. No letters, text, logos, trademarks or watermark."
+    },
+    {
+      "name": "fallback-pharmacy",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website asset, no UI or collage. Square 1:1 provider card image. Fictional Indian male pharmacist in a white coat behind a clean pharmacy counter, rows of unbranded medicine cartons and bottles on shelves behind him, friendly natural expression, close framing like reference pharmacy provider card. All packaging blank, no readable text or logos. Use attached screenshot only as visual guide to subject, framing and palette. Realistic photography, soft daylight, natural textures, white/teal/blue clinical colour mood. Any people must be entirely fictional and unrecognizable. No typography, text, watermarks, trademarks or real business identity."
+    },
+    {
+      "name": "fallback-equipment",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website asset, no UI or collage. Square 1:1 provider card image. Real black wheelchair with metallic frame and footrests, three-quarter angle, large wheels clearly visible, in an off-white clean medical equipment room with a small unobtrusive cabinet. Like reference equipment provider card; no people or brands. Use attached screenshot only as visual guide to subject, framing and palette. Realistic photography, soft daylight, natural textures, white/teal/blue clinical colour mood. Any people must be entirely fictional and unrecognizable. No typography, text, watermarks, trademarks or real business identity."
+    },
+    {
+      "name": "fallback-ambulance",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website asset, no UI or collage. Square 1:1 provider card image. Realistic white modern emergency ambulance with red/blue stripes and roof warning light, three-quarter front close view outdoors by greenery and a neutral healthcare building. Match reference ambulance card framing. Absolutely no text, numbers, license lettering, names, logos or brand emblems. Use attached screenshot only as visual guide to subject, framing and palette. Realistic photography, soft daylight, natural textures, white/teal/blue clinical colour mood. Any people must be entirely fictional and unrecognizable. No typography, text, watermarks, trademarks or real business identity."
+    },
+    {
+      "name": "fallback-bloodbank",
+      "prompt": "Use case: photorealistic-natural / product photography. Generate ONE standalone website asset, no UI or collage. Square 1:1 provider card image. Close-up realistic sealed medical blood donation bag containing dark red blood, red tubing curved above, transparent plastic edge, hanging against softly blurred pale grey clinical background. Generic blank cream label with NO writing, no identifiers, no brand. Like reference blood bank provider card, clean and non-graphic. Use attached screenshot only as visual guide to subject, framing and palette. Realistic photography, soft daylight, natural textures, white/teal/blue clinical colour mood. Any people must be entirely fictional and unrecognizable. No typography, text, watermarks, trademarks or real business identity."
+    }
+  ]
+}

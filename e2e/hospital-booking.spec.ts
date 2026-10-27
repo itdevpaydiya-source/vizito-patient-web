@@ -1,20 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { createTestPatient } from './helpers/testAccount';
+import { createTestPatient, loginAsTestPatient } from './helpers/testAccount';
 import { registerProviderAccount, lettersFor } from './helpers/providerAccount';
 
 // Cross-portal: a hospital goes live (submit refused until it has a branch, a department and a
 // doctor), a patient finds it, books its doctor at the department fee and pays; the hospital and the
 // doctor both see the visit, the ledger and a notification. The doctor was never separately
 // verified: the approved hospital credentials them at its own branch.
-test.describe.configure({ timeout: 300000 });
+test.describe.configure({ timeout: 180000 });
+test.use({actionTimeout:15000,trace:'retain-on-failure'});
 const api = 'http://localhost:3000';
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-test('patient books a hospital doctor at the department fee; both sides see it', async ({ request }) => {
+test('patient books a hospital doctor at the department fee; both sides see it', async ({ page, request }) => {
   const out: string[] = [];
   const call = async (label: string, method: string, path: string, token: string, data?: any, params?: any) => {
     const r = await (request as any)[method](`${api}${path}`, { headers: { Authorization: `Bearer ${token}` }, data, params });
-    const t = await r.text();
+    const t = await r.text(); console.log(label, r.status());
     out.push(`${label}: ${r.status()} ${t.slice(0, 700)}`);
     try { return JSON.parse(t); } catch { return t; }
   };
@@ -48,14 +49,29 @@ test('patient books a hospital doctor at the department fee; both sides see it',
   const slots = await call('slots', 'get', `/patients/providers/${docPartner}/slots`, P, undefined, { date: tomorrow, facility_id: fid, hospital_partner_id: hospPartnerId });
   const list = Array.isArray(slots) ? slots : slots?.data || slots?.slots || [];
   const slot = list.find((s: any) => String(s.start_time || '').startsWith('10:00')) || list[0];
+  // Before payment, every visible amount must use this hospital's department fee.
+  await loginAsTestPatient(page, patient);
+  await page.goto(`/booking?service=hospital&provider=${hospPartnerId}`);
+  await page.getByRole('radiogroup', { name: 'Department', exact: true }).getByRole('radio', { name: /Cardiology/ }).click();
+  await expect(page.getByText('Checking doctors’ next available slots…')).toHaveCount(0, { timeout: 60000 });
+  await page.getByRole('radio', { name: 'Select doctor', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByLabel('Appointment date', { exact: true }).fill(tomorrow);
+  await page.locator('.hj-slots button').filter({ hasText: '10:00 AM' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Reason for visit' }).fill('Cardiology follow-up appointment');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.locator('.hj-book dl')).toContainText('₹750');
+  await page.screenshot({ path: 'artifacts/ui-audit-20261025/hospital-branch-fee.png', fullPage: true });
   const bk = await call('BOOK', 'post', '/patients/bookings', P, { partner_id: docPartner, hospital_partner_id: hospPartnerId, service_type: 'In Person', booking_date: tomorrow, time_slot_id: slot?.time_slot_id, time_slot: '10:00', payment_mode: 'UPI', payment: { payment_method: 'UPI', upi_id: 'probe@upi' } });
   await call('HOSP appts', 'get', `/appointments?date=${tomorrow}`, H);
   await call('DOC appts', 'get', `/appointments?date=${tomorrow}`, D);
-  await call('PATIENT bookings', 'get', '/patients/bookings', P);
+  const mine = await call('PATIENT bookings', 'get', '/patients/dashboard', P);
+  expect(JSON.stringify(mine)).toContain((bk.data || bk).booking_number);
   await call('HOSP txns', 'get', '/transactions?limit=3', H);
   await call('DOC txns', 'get', '/transactions?limit=3', D);
   await call('HOSP notifications', 'get', '/notifications?limit=3', H);
   await call('DOC notifications', 'get', '/notifications?limit=3', D);
   console.log(out.join('\n'));
-  expect(bk).toBeTruthy();
+  expect((bk.data || bk).id).toBeTruthy();
 });

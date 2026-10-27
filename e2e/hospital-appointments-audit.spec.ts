@@ -1,0 +1,16 @@
+import {test,expect} from '@playwright/test';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {createSixBookingFixtures} from './helpers/sixBookingFixtures';
+test.setTimeout(240000);
+test('audit real hospital appointment fields before rebuilding',async({request})=>{
+ const f=await createSixBookingFixtures(request),dashboard=(await f.get('/patients/dashboard')).data;
+ const booking=[...dashboard.active,...dashboard.upcoming,...dashboard.history].find((b:any)=>b.id===f.hospitalBooking.id);expect(booking.business.type).toBe('Hospital');expect(booking.provider).toHaveProperty('hospital');if(booking.provider.hospital){expect(booking.provider.hospital).toHaveProperty('accreditation');expect(booking.provider.hospital).toHaveProperty('arrival_desk');expect(booking.provider.hospital).toHaveProperty('phone');}expect(booking.visit).toHaveProperty('can_reschedule');expect(booking.visit.timeline.length).toBeGreaterThan(0);
+ const branches=(await f.get(`/patients/providers/${f.hospital.current_account.partner_id}/branches`)).data;
+ await mkdir('artifacts/hospital-appointments',{recursive:true});await writeFile('artifacts/hospital-appointments/api-audit.json',JSON.stringify({bookingKeys:Object.keys(booking),appointmentKeys:Object.keys(booking.appointment||{}),providerKeys:Object.keys(booking.provider||{}),placeKeys:Object.keys(booking.provider?.place||{}),visitKeys:Object.keys(booking.visit||{}),department:booking.appointment?.department,branchKeys:Object.keys(branches?.[0]||{}),hasBranchPhone:!!branches?.[0]?.phone,hospitalKeys:Object.keys(booking.provider.hospital||{}),hasAccreditation:!!booking.provider.hospital?.accreditation,hasReportDesk:!!booking.provider.hospital?.arrival_desk},null,2));
+});
+
+test('audit configured hospital accreditation and arrival desk read-only',async({request})=>{
+ test.skip(!process.env.HOSPITAL_AUDIT_PHONE||!process.env.HOSPITAL_AUDIT_PASSWORD,'Optional read-only existing account audit requires credentials');
+ const response=await request.post('http://localhost:3000/patient/auth/login',{data:{phone:process.env.HOSPITAL_AUDIT_PHONE,password:process.env.HOSPITAL_AUDIT_PASSWORD}});expect(response.ok()).toBe(true);const login=await response.json(),token=login.access_token||login.token||login.data?.access_token;
+ const res=await request.get('http://localhost:3000/patients/dashboard',{headers:{Authorization:`Bearer ${token}`}});expect(res.ok()).toBe(true);const data=(await res.json()).data,booking=[...data.active,...data.upcoming,...data.history].find((b:any)=>b.booking_number==='BK-20261025-000011');expect(booking).toBeTruthy();expect(booking.provider.hospital.accreditation.body).toBe('NABH');expect(booking.provider.hospital.accreditation.current).toBe(true);expect(booking.provider.hospital.arrival_desk).toBeTruthy();expect(booking.provider.hospital.phone).toBeTruthy();await mkdir('artifacts/hospital-appointments',{recursive:true});await writeFile('artifacts/hospital-appointments/configured-api-audit.json',JSON.stringify({booking:booking.booking_number,hospitalKeys:Object.keys(booking.provider.hospital||{}),accreditation:booking.provider.hospital.accreditation,hasDesk:!!booking.provider.hospital.arrival_desk,hasPhone:!!booking.provider.hospital.phone},null,2));
+});

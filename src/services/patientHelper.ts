@@ -60,40 +60,65 @@ export const changePasswordApi = async (currentPassword: string, newPassword: st
 // Real approved providers from the backend (auth partners, active/approved only), with the public
 // doctor profile (qualification, experience, city, fees) and star rating when they exist — a field
 // the provider hasn't filled is simply absent, never invented.
+const providerServiceParam = (serviceId?: string) => ({
+  homecare: 'HOME_CARE', home_care: 'HOME_CARE', diagnostic: 'LAB', diagnostics: 'LAB', lab: 'LAB',
+  equipment: 'EQUIPMENT', rental: 'EQUIPMENT', ambulance: 'AMBULANCE', doctor: 'DOCTOR', hospital: 'HOSPITAL', pharmacy: 'PHARMACY',
+} as Record<string, string>)[String(serviceId || '').toLowerCase()] || serviceId;
+
+const mapProviderItem = (p: any, serviceId?: string): ProviderItem => ({
+  id: String(p.id), serviceId: serviceId || '',
+  name: p.display_name || p.business_name || p.name || (serviceId === 'hospital' ? 'Hospital' : 'Provider'),
+  subtitle: p.display_type || p.partner_type || undefined,
+  specialtyOrType: p.display_type || p.partner_type || undefined,
+  partnerType: String(p.partner_type || '').toLowerCase() || null,
+  qualification: p.doctor?.qualification ?? null,
+  specialization: p.doctor?.specialization ?? p.doctor?.primary_specialization ?? null,
+  experienceYears: p.doctor?.years_of_experience ?? null,
+  medicalRegistrationNumber: p.doctor?.medical_registration_number ?? p.doctor?.registration_number ?? p.medical_registration_number ?? null,
+  medicalCouncilName: p.doctor?.medical_council_name ?? p.doctor?.council_name ?? p.medical_council_name ?? null,
+  languages: p.doctor?.languages ?? null,
+  gender: p.doctor?.gender ?? null,
+  languagesList: p.doctor?.languages_list ?? [],
+  nextAvailable: p.doctor?.next_available ?? null,
+  city: p.doctor?.city ?? null,
+  inClinicFee: p.doctor?.in_clinic_fee ?? null,
+  videoFee: p.doctor?.video_fee ?? null,
+  registrationVerified: Boolean(p.doctor?.registration_verified ?? p.doctor?.verification_status === 'VERIFIED'),
+  logo: p.logo ?? null, address: p.address?.replace(/\bNear\s+Near\b/gi, 'Near') ?? null, storePin: p.store_pin ?? null,
+  rating: p.rating && Number(p.rating.count) > 0 ? { average: Number(p.rating.average), count: Number(p.rating.count) } : null,
+  pause: p.pause?.paused ? p.pause : null,
+  licenseStatus: p.license_status ?? null,
+  businessHours: Array.isArray(p.business_hours) ? p.business_hours : [],
+  org: p.org || null,
+  hospital: p.hospital || null,
+});
+
 export const getProvidersApi = async (serviceId?: string, search?: string): Promise<ProviderItem[]> => {
   const params: Record<string, string> = {};
-  if (serviceId) params.service = serviceId;
+  if (serviceId) params.service = String(providerServiceParam(serviceId));
   if (search && search.trim()) params.search = search.trim();
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDERS, { params });
   const list = res?.data?.data;
   if (!Array.isArray(list)) return [];
-  return list.map((p: any): ProviderItem => ({
-    id: String(p.id),
-    serviceId: serviceId || '',
-    // The public name the business chose ("Display name"), else its registered business name.
-    name: p.display_name || p.business_name || p.name || (serviceId === 'hospital' ? 'Hospital' : 'Provider'),
-    // Prefer the friendly display_type (e.g. "Multi-Speciality Hospital") the backend resolves from the
-    // hospital profile; fall back to the raw partner_type only when no nicer label exists.
-    subtitle: p.display_type || p.partner_type || undefined,
-    specialtyOrType: p.display_type || p.partner_type || undefined,
-    partnerType: String(p.partner_type || '').toLowerCase() || null,
-    qualification: p.doctor?.qualification ?? null,
-    specialization: p.doctor?.specialization ?? p.doctor?.primary_specialization ?? null,
-    experienceYears: p.doctor?.years_of_experience ?? null,
-    medicalRegistrationNumber: p.doctor?.medical_registration_number ?? p.doctor?.registration_number ?? p.medical_registration_number ?? null,
-    medicalCouncilName: p.doctor?.medical_council_name ?? p.doctor?.council_name ?? p.medical_council_name ?? null,
-    languages: p.doctor?.languages ?? null,
-    city: p.doctor?.city ?? null,
-    inClinicFee: p.doctor?.in_clinic_fee ?? null,
-    videoFee: p.doctor?.video_fee ?? null,
-    registrationVerified: Boolean(p.doctor?.registration_verified ?? p.doctor?.verification_status === 'VERIFIED'),
-    logo: p.logo ?? null,
-    address: p.address ?? null,
-    storePin: p.store_pin ?? null,
-    rating: p.rating && Number(p.rating.count) > 0 ? { average: Number(p.rating.average), count: Number(p.rating.count) } : null,
-    pause: p.pause?.paused ? p.pause : null,
-    org: p.org || null,
-  }));
+  return list.map((p: any) => mapProviderItem(p, serviceId));
+};
+
+export interface ProviderPage { items: ProviderItem[]; total: number; page: number; limit: number }
+/** Paged directory request for screens that should not render the entire provider catalogue at once. */
+export const getProvidersPageApi = async (serviceId: string | undefined, search: string | undefined, page: number, limit = 12, area?: string): Promise<ProviderPage> => {
+  const params: Record<string, string | number> = { page, limit };
+  if (serviceId) params.service = String(providerServiceParam(serviceId));
+  if (search?.trim()) params.search = search.trim();
+  if (area?.trim()) params.area = area.trim();
+  const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDERS, { params });
+  const envelope = res?.data;
+  const list = envelope?.data;
+  return {
+    items: Array.isArray(list) ? list.map((p: any) => mapProviderItem(p, serviceId)) : [],
+    total: Number(envelope?.total) || 0,
+    page: Number(envelope?.page) || page,
+    limit: Number(envelope?.limit) || limit,
+  };
 };
 
 // Real, date-gated doctor availability — a doctor is only included if they have a genuine bookable
@@ -231,7 +256,7 @@ export const saveAddressApi = async (body: AddressInput, addressId?: string): Pr
 
 /** One line for showing an address anywhere (booking forms, cards). */
 export const addressText = (a: PatientAddress): string =>
-  [a.addressLine1, a.addressLine2, a.landmark ? `near ${a.landmark}` : null, a.city, a.state, a.pincode].filter(Boolean).join(', ');
+  [a.addressLine1, a.addressLine2, a.landmark ? (/^near\b/i.test(a.landmark.trim()) ? a.landmark.trim() : `near ${a.landmark}`) : null, a.city, a.state, a.pincode].filter(Boolean).join(', ');
 
 // Mobile / email change: a code goes to the NEW number or email; it changes only once the code is right.
 export const sendContactOtpApi = async (body: { phone?: string; email?: string }): Promise<{ dev_otp?: string; identifier: string }> =>
@@ -323,7 +348,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     prescription_number: p.prescription_number ?? null,
     patient_id: p.patient_id ? String(p.patient_id) : (p.patientId ? String(p.patientId) : null),
     booking_id: p.booking_id ?? null,
-    date: p.date ? String(p.date).split('T')[0] : null,
+    date: p.date ? String(p.date) : null,
     chief_complaint: p.chief_complaint ?? null,
     diagnosis: p.diagnosis ?? null,
     notes: p.notes ?? null,
@@ -345,7 +370,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     pharmacy_status: p.pharmacy_status ?? null,
     pharmacy_partner_id: p.pharmacy_partner_id ?? null,
     pharmacy_name: p.pharmacy_name ?? p.pharmacy?.business_name ?? p.pharmacy?.name ?? p.pharmacy_details?.business_name ?? p.pharmacy_details?.name ?? null,
-    pharmacy_address: p.pharmacy_address ?? p.pharmacy?.address ?? p.pharmacy_details?.address ?? null,
+    pharmacy_address: (p.pharmacy_address ?? p.pharmacy?.address ?? p.pharmacy_details?.address)?.replace(/\bNear\s+Near\b/gi, 'Near') ?? null,
     pharmacy_phone: p.pharmacy_phone ?? p.pharmacy?.phone ?? p.pharmacy_details?.phone ?? null,
     doctor: p.doctor ? {
       name: p.doctor.name ?? null,

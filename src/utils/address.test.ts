@@ -1,0 +1,3 @@
+import {describe,it,expect} from 'vitest';
+import {dedupeAddressParts} from './address';
+describe('consecutive address components',()=>{it('removes adjacent duplicates without dropping different parts',()=>{expect(dedupeAddressParts('Kondapur, kondapur, Hyderabad','500084')).toBe('Kondapur, Hyderabad, 500084');expect(dedupeAddressParts('Road 1, Kondapur, Road 1')).toBe('Road 1, Kondapur, Road 1');});it('handles empty values, whitespace and a repeated final pincode',()=>{expect(dedupeAddressParts(null,'  Kondapur ,  Kondapur , 500084','500084')).toBe('Kondapur, 500084');expect(dedupeAddressParts()).toBe('');});});

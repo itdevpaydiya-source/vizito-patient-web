@@ -1,0 +1,4 @@
+:root{--sidebar-bg:#024d50;--sidebar-text:#e6eded;--sidebar-muted:#b4ced0;--sidebar-divider:#28686b;--sidebar-hover:#ffffff14;--nav-active-bg:#c44c0c;--sidebar-accent:#ffa465;--page-bg:#f4f7fb;--card-bg:#ffffff;--card-border:#e6ecf3;--header-bg:#ffffff;--illustration-ink:#46658d;--illustration-bg:#eaf2fb;--status-success:#05a879}
+.patient-app-layout{background:var(--page-bg);--bg-card:var(--card-bg);--border-color:var(--card-border)}.patient-app-layout>.patient-content>.patient-header{background:var(--header-bg);border-color:var(--card-border)}.patient-app-layout main{background:var(--page-bg)}
+/* Shared surface utilities consume the same tokens; component layout/typography remain intact. */
+.patient-app-layout .bg-white{background-color:var(--card-bg)}.patient-app-layout .border-slate-200{border-color:var(--card-border)}

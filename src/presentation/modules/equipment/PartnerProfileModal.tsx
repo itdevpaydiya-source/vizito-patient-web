@@ -1,3 +1,4 @@
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -197,13 +198,10 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
         {/* 1. SEPARATE HERO BANNER (Top) */}
         <div className="relative h-36 sm:h-44 w-full overflow-hidden bg-gradient-to-r from-amber-700 via-orange-600 to-amber-900 shrink-0">
           {bannerUrl ? (
-            <img
+            <MediaImage kind="business" businessType="equipment"
               src={bannerUrl}
-              alt={`${businessName} Banner`}
+              name={`${businessName} Banner`}
               className="w-full h-full object-cover opacity-90"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-r from-amber-700 via-orange-600 to-amber-900 flex items-center justify-center opacity-90">
@@ -235,20 +233,11 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
             {/* Logo Avatar Box (Separated cleanly from banner) */}
             <div className="flex items-end gap-3.5">
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white p-1.5 shadow-xl border-2 border-white ring-1 ring-slate-200/90 shrink-0 overflow-hidden flex items-center justify-center">
-                {logoUrl ? (
-                  <img
+                <MediaImage kind="business" businessType="equipment"
                     src={logoUrl}
-                    alt={`${businessName} Logo`}
+                    name={`${businessName} Logo`}
                     className="w-full h-full object-contain rounded-xl"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
                   />
-                ) : (
-                  <div className="w-full h-full rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-[#9C4119] font-black text-2xl">
-                    {businessName.charAt(0).toUpperCase()}
-                  </div>
-                )}
               </div>
 
               {/* Title & Verified Badge */}

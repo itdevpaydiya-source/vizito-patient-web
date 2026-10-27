@@ -24,18 +24,19 @@ test('provider list is informative and private-data free', async ({ page, reques
   await loginAsTestPatient(page, patient);
   await page.goto('/booking?service=doctor');
   await page.getByPlaceholder(/Search by doctor/).fill(doctor.fullName);
-  const card = page.locator('div.rounded-2xl', { hasText: doctor.fullName }).filter({ has: page.getByRole('button', { name: /Book Appointment/ }) }).first();
+  const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name: new RegExp(doctor.fullName) }) });
   await expect(card).toContainText('MBBS');
-  await expect(card).toContainText('6 years experience');
+  await expect(card).toContainText('6 yrs experience');
   if (shots) await page.screenshot({ path: `${shots}/provider_card.png` });
 
-  // Lab tests flow is now live, while unlaunched services (like Scheduled Ambulance) show Coming soon.
+  // Lab tests and scheduled ambulance discovery are live.
   await page.goto('/lab-tests');
   await expect(page.getByRole('heading', { name: /Book lab tests/ })).toBeVisible();
   await page.goto('/healthcare-services');
   const amb = page.getByRole('radio', { name: /Scheduled Ambulance/ });
-  await expect(amb).toContainText('Coming soon');
-  await expect(amb).toBeDisabled();
+  await expect(amb).toBeEnabled();
+  await amb.check();
+  await expect(amb).toBeChecked();
   const doc = page.getByRole('radio', { name: /Doctor Consultation/ });
   await expect(doc).toBeEnabled();
 });

@@ -1,8 +1,11 @@
+import type { BookingActions, NextCareVisit } from './bookingActions';
 import apiClient from './index';
 
 // Home care by agencies (nursing, physiotherapy, caregivers): catalogue, booking and my bookings.
 export type HcCategory = 'NURSING' | 'PHYSIOTHERAPY' | 'CAREGIVER';
 export interface HcService {
+  team?: {available_genders: ('MALE'|'FEMALE')[]; languages:string[]; qualifications:string[]; police_verified:number};
+  earliest_start?: {date:string;time:string}|null;
   id: string; category: HcCategory; category_label: string; kind: 'VISIT' | 'SHIFT'; name: string; description: string | null; includes: string | null;
   duration_minutes: number | null; shift_hours: number | null; price: number; required_role: string;
   agency: { id: string; name: string; registration_number: string | null; vizito_verified?: boolean; about: string | null; hours: string; day_open: string; day_close: string; rating: number | null; ratings: number };
@@ -14,7 +17,13 @@ export interface HcVisit {
   professional: HcProfessional | null; on_the_way_at: string | null; arrived_at: string | null; started_at: string | null; completed_at: string | null;
   record: any; outcome_note: string | null; patient_rating: number | null; patient_feedback: string | null;
 }
-export interface HcOrder {
+export interface HcPayment { amount: number; method: string | null; transaction_number: string | null; payment_reference: string | null; receipt_number: string | null; paid_at: string | null; status: 'PAID' | 'REFUNDED' }
+export interface HcTimelineStep { code: 'REQUESTED' | 'CONFIRMED' | 'PROFESSIONAL_ASSIGNED' | 'VISITS_IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'; label: string; state: 'completed' | 'current' | 'pending'; occurred_at: string | null }
+export interface HcOrder extends BookingActions {
+  referral_document?: {id:string;file_name:string;mime_type:string;doc_type:string;doc_date:string|null}|null;
+  agency_phone: string | null; payments: HcPayment[]; timeline: HcTimelineStep[];
+  home_pin?: { lat: number; lng: number } | null;
+  reschedule_visit_id?: string | null; next_visit?: NextCareVisit | null;
   id: string; order_number: string; agency_id: string; agency_name: string | null; service_name: string; category: HcCategory; category_label: string; kind: 'VISIT' | 'SHIFT';
   duration_minutes: number | null; shift_hours: number | null; unit_price: number; sessions: number; schedule_text: string | null;
   patient_name: string | null; patient_profile_id?: string; address: string; pincode: string; landmark: string | null; care_needs: string | null; preferred_gender: string | null;

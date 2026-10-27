@@ -52,7 +52,7 @@ const MyBloodRequestsScreen = () => {
   );
 };
 
-const RequestSheet = ({ r, onClose, onChanged }: { r: MyBloodRequest; onClose: () => void; onChanged: () => void }) => {
+export const RequestSheet = ({ r, onClose, onChanged }: { r: MyBloodRequest; onClose: () => void; onChanged: () => void }) => {
   const [mode, setMode] = useState<'UPI' | 'CARD'>('UPI');
   const [upi, setUpi] = useState('');
   const [card, setCard] = useState({ last4: '', name: '' });
@@ -151,3 +151,4 @@ const RequestSheet = ({ r, onClose, onChanged }: { r: MyBloodRequest; onClose: (
 };
 
 export default MyBloodRequestsScreen;
+

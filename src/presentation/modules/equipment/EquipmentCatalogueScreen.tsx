@@ -1,3 +1,6 @@
+import LocationBar from '../../components/location/LocationBar';
+import {useSearchArea,metresBetween,formatDistance} from '../../../services/location';
+import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -17,11 +20,14 @@ import { PartnerProfileModal, type InitialPartnerInfo } from './PartnerProfileMo
 
 export const EquipmentCatalogueScreen: React.FC = () => {
   const navigate = useNavigate();
+  const area=useSearchArea();
+  const distance=(item:PatientEquipmentItem)=>area&&item.providerLatitude!=null&&item.providerLongitude!=null?metresBetween(area,{lat:item.providerLatitude,lng:item.providerLongitude}):null;
 
   const [items, setItems] = useState<PatientEquipmentItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
   const [priceSort, setPriceSort] = useState<'none' | 'low_to_high' | 'high_to_low'>('none');
+  useEffect(()=>setPriceSort('none'),[area]);
   const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
   const [selectedPartner, setSelectedPartner] = useState<InitialPartnerInfo | null>(null);
 
@@ -55,7 +61,7 @@ export const EquipmentCatalogueScreen: React.FC = () => {
   }, [search, priceSort, onlyAvailable]);
 
   return (
-    <div className="space-y-4 pb-12 font-sans animate-in fade-in duration-200">
+    <div className="space-y-4 pb-12 font-sans animate-in fade-in duration-200"><LocationBar compact purpose="find equipment providers near you"/>
       {/* 1. Breadcrumbs */}
       <nav className="flex items-center space-x-2 text-xs text-slate-500 font-medium" aria-label="Breadcrumb">
         <button
@@ -196,7 +202,7 @@ export const EquipmentCatalogueScreen: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-4.5">
-          {items.map((item) => {
+          {[...items].sort((a,b)=>area&&priceSort==='none'?(distance(a)??Infinity)-(distance(b)??Infinity):0).map((item) => {
             const isOutOfStock = (item.availableStock !== undefined && item.availableStock <= 0) || item.isAvailable === false;
 
             return (
@@ -206,13 +212,10 @@ export const EquipmentCatalogueScreen: React.FC = () => {
               >
                 {/* Image */}
                 <div className="relative h-36 sm:h-40 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center p-2.5">
-                  <img
+                  <MediaImage kind="equipment" category={item.mediaCategory}
                     src={item.imageUrl}
-                    alt={item.name}
+                    name={item.name}
                     className="w-full h-full object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/equipment/hospital-bed.jpg';
-                    }}
                   />
                   {/* Stock Availability Badge - only shown if Out of Stock */}
                   {isOutOfStock && (
@@ -279,7 +282,7 @@ export const EquipmentCatalogueScreen: React.FC = () => {
                   </div>
 
                   {/* Pricing, Distance & Action */}
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-100">
+                  {distance(item)!=null&&<p className="text-xs text-slate-500">{formatDistance(distance(item)!)} away (approx.)</p>}<div className="mt-2.5 pt-2.5 border-t border-slate-100">
                     <div className="space-y-1.5">
                       <div>
                         <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wide">
@@ -312,7 +315,7 @@ export const EquipmentCatalogueScreen: React.FC = () => {
                           e.stopPropagation();
                           setSelectedPartner({
                             providerId: item.providerId,
-                            name: item.providerName || 'MediNest',
+                            name: item.providerName || 'Equipment provider',
                             address: item.providerAddress,
                             location: item.providerLocation,
                             phone: item.providerPhone,
@@ -328,7 +331,7 @@ export const EquipmentCatalogueScreen: React.FC = () => {
                         title="Click to view partner business details, banner and logo"
                       >
                         <span className="font-bold text-slate-800 group-hover:text-[#9C4119] transition-colors">
-                          {item.providerName || 'MediNest'}
+                          {item.providerName || 'Equipment provider'}
                         </span>
                         <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-md">
                           <ShieldCheck className="w-3 h-3 text-sky-600" />

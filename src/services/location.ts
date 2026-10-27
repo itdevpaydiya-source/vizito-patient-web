@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 // patient taps "Use my location" (never on page load), and a refusal is remembered so we don't nag.
 
 export interface LatLng { lat: number; lng: number }
-export interface SearchArea extends LatLng { label: string; source: 'gps' | 'manual'; accuracy?: number | null; at: number }
+export interface SearchArea extends LatLng { city?:string; pincode?:string; label: string; source: 'gps' | 'manual'; accuracy?: number | null; at: number }
 
 const AREA_KEY = 'vizito_search_area';
 const DENIED_KEY = 'vizito_location_denied';
@@ -63,16 +63,11 @@ export function locateOnce(fresh = false): Promise<SearchArea> {
 
 /** Places in India matching what the patient typed (area, locality, PIN code). OpenStreetMap Nominatim:
  *  free, called only when the patient presses Search (their usage policy allows ≤1 request/second). */
-export async function findPlaces(q: string): Promise<{ label: string; lat: number; lng: number }[]> {
-  const text = q.trim();
-  if (text.length < 3) return [];
-  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&accept-language=en&countrycodes=in&limit=6&addressdetails=0&q=${encodeURIComponent(text)}`;
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!r.ok) throw new Error('search failed');
-  const list = (await r.json()) as any[];
-  return list.map((x) => ({ label: String(x.display_name || '').split(', ').slice(0, 4).join(', '), lat: Number(x.lat), lng: Number(x.lon) }))
-    .filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng));
-}
+export interface PlaceResult extends LatLng {label:string;city?:string;pincode?:string}
+const GEOCODER=(import.meta.env.VITE_GEOCODER_URL||'https://nominatim.openstreetmap.org').replace(/\/$/,'');
+let geocodeQueue:Promise<unknown>=Promise.resolve();let lastGeocode=0;
+async function geocode(path:string):Promise<any>{const work=geocodeQueue.catch(()=>undefined).then(async()=>{const gap=1100-(Date.now()-lastGeocode);if(gap>0)await new Promise(r=>setTimeout(r,gap));lastGeocode=Date.now();const r=await fetch(GEOCODER+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(!r.ok)throw new Error('Location search unavailable');return r.json();});geocodeQueue=work;return work;}
+export async function findPlaces(q:string):Promise<PlaceResult[]>{const text=q.trim();if(text.length<3)return [];const list=await geocode(`/search?format=jsonv2&accept-language=en&countrycodes=in&limit=6&addressdetails=1&q=${encodeURIComponent(/^\d{6}$/.test(text)?text+', India':text)}`);if(!Array.isArray(list))throw new Error('Invalid location response');return list.map((x:any)=>{const city=x.address?.city||x.address?.town||x.address?.village||'',name=x.name||String(x.display_name||'').split(', ')[0];return {label:city&&city!==name?name+', '+city:name,lat:Number(x.lat),lng:Number(x.lon),city,pincode:x.address?.postcode||(/^\d{6}$/.test(text)?text:'')};}).filter((x:PlaceResult)=>Number.isFinite(x.lat)&&Number.isFinite(x.lng)&&Math.abs(x.lat)<=90&&Math.abs(x.lng)<=180);}
 
 /** Straight-line distance in metres (haversine). Not road distance. */
 export function metresBetween(a: LatLng, b: LatLng): number {
@@ -114,9 +109,7 @@ export const isApple = () => typeof navigator !== 'undefined' && /iPhone|iPad|Ma
 
 /** The street address at a point (OpenStreetMap reverse lookup), split into address-form fields. */
 export async function addressAt(p: LatLng): Promise<{ line1: string; area: string; city: string; state: string; pincode: string; text: string } | null> {
-  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=en&addressdetails=1&zoom=18&lat=${p.lat}&lon=${p.lng}`, { headers: { Accept: 'application/json' } });
-  if (!r.ok) return null;
-  const raw = (await r.json())?.address || {};
+  const raw = (await geocode(`/reverse?format=jsonv2&accept-language=en&addressdetails=1&zoom=18&lat=${p.lat}&lon=${p.lng}`))?.address || {};
   // English (Latin script) only: a value OpenStreetMap has only in a local script is left out for the user to type.
   const a: any = Object.fromEntries(Object.entries(raw).filter(([, v]) => typeof v === 'string' && isLatin(v as string)));
   const out = {

@@ -31,7 +31,7 @@ export async function activatePartner(partnerId: string): Promise<void> {
 // booking flow actually needs to show a genuinely bookable slot, built the same way this
 // session's backend live-test scripts have throughout (register -> activate -> add clinic ->
 // add availability), just wrapped for reuse from a Playwright spec via the `request` fixture.
-export async function createTestDoctorWithAvailability(request: APIRequestContext): Promise<TestDoctor> {
+export async function createTestDoctorWithAvailability(request: APIRequestContext, activate: (partnerId: string) => Promise<void> = activatePartner): Promise<TestDoctor> {
   const unique = Date.now() + Math.floor(Math.random() * 1000);
   const fullName = `PW Booking Test Doctor ${lettersFor(unique)}`;
   const consultationFee = 650;
@@ -53,7 +53,7 @@ export async function createTestDoctorWithAvailability(request: APIRequestContex
   const partnerId = reg.current_account.partner_id;
   const numericId = reg.user.id;
 
-  await activatePartner(partnerId);
+  await activate(partnerId);
 
   const clinicRes = await request.post('http://localhost:3000/partners/clinics/me', {
     headers: { Authorization: `Bearer ${token}` },
