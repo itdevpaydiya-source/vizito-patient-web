@@ -6,7 +6,7 @@ export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] a
 export const COMMON_CONDITIONS = ['Diabetes', 'High blood pressure', 'Asthma', 'Thyroid disorder', 'Heart disease', 'Kidney disease', 'Pregnancy', 'Epilepsy'];
 
 export interface ReportedAllergy { allergen: string; reaction?: string | null; severity?: string | null }
-export interface ReportedMedication { name: string; dose?: string | null }
+export interface ReportedMedication { name: string; dose?: string | null; frequency?: string | null }
 
 export interface HealthProfile {
   blood_group: string | null;

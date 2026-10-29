@@ -1,3 +1,4 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import { useEffect, useMemo, useState } from 'react';
 import LabTrendsEmpty from './LabTrendsEmpty';
 import { TrendingUp } from 'lucide-react';
@@ -30,13 +31,13 @@ export default function LabTrends() {
       <div className="flex flex-wrap gap-3">
         {data.people.length > 1 && (
           <label className="text-xs font-bold text-slate-700">Person
-            <select aria-label="Person" value={person} onChange={(e) => setPerson(e.target.value)} className="block mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">{data.people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            <ThemedSelect aria-label="Person" value={person} onChange={(e) => setPerson(e.target.value)} className="block mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">{data.people.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</ThemedSelect>
           </label>
         )}
         <label className="text-xs font-bold text-slate-700">Result
-          <select aria-label="Result" value={key} onChange={(e) => setKey(e.target.value)} className="block mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
+          <ThemedSelect aria-label="Result" value={key} onChange={(e) => setKey(e.target.value)} className="block mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
             {params.map((x) => <option key={`${x.test_code}|${x.code}`} value={`${x.test_code}|${x.code}`}>{x.points.some((pt) => pt.flag && pt.flag !== 'N') ? '● ' : ''}{x.name} ({x.test_name}) · {x.points.length}</option>)}
-          </select>
+          </ThemedSelect>
         </label>
       </div>
       {p && <TrendCard p={p} />}

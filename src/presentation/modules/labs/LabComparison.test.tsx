@@ -19,13 +19,13 @@ it('awards comparative badges only to unique best options among comparable recor
 });
 it('keeps chosen tests visible and explains blocked continuation without inventing prices',()=>{
  const html=renderToStaticMarkup(<LabComparison labs={[]} city="" onCity={()=>{}} selectedId={null} onSelect={()=>{}} selectedTests={[{code:'T',name:'Actual test'}]} onChange={()=>{}} onContinue={()=>{}} canContinue={false} busy={false}/>);
- expect(html).toContain('Actual test');expect(html).toContain('Select an eligible lab to continue.');expect(html).toContain('Individual test availability is not provided here.');expect(html).not.toContain('₹0');
+ expect(html).toContain('Actual test');expect(html).toContain('No eligible labs for selected tests');expect(html).toContain('Checking which tests can be booked together');expect(html).not.toContain('₹0');
 });
 
-it('keeps a selected record in the summary independently of the visible results',()=>{
- const selected=record('Chosen lab',120,6);
+it('does not offer a stale selected lab outside the current full-match results',()=>{
+ const selected=record('Stale lab',120,6);
  const html=renderToStaticMarkup(<LabComparison labs={[]} selectedLab={selected} city="Elsewhere" onCity={()=>{}} selectedId={selected.id} onSelect={()=>{}} selectedTests={[{code:'T',name:'Actual test'}]} onChange={()=>{}} onContinue={()=>{}} canContinue={true} busy={false}/>);
- expect(html).toContain('Chosen lab');expect(html).toContain('120');expect(html).toContain('Chosen lab actions');expect(html).toContain('>Filters<');expect(html).not.toContain('>Nearest<');
+ expect(html).not.toContain('Stale lab');expect(html).not.toContain('Choose this lab');expect(html).toContain('No eligible labs for selected tests');
 });
 
 import {comparisonDistance,nextAvailable,homeCollection,validPin} from './labComparisonDetails';
@@ -42,6 +42,8 @@ it('uses the actual PIN coverage and omits absent home information',()=>{
 
 it('renders supplied trust and rating as text and omits them when absent',()=>{
  const absent=render([record('A',100)]);expect(absent).not.toContain('reviews');expect(absent).not.toContain('NABL');expect(absent).not.toContain('View on map');
- const lab=record('B',200);lab.rating={average:4.6,count:128};lab.nabl={cert_no:'MC-1234',valid_until:'2028-03-31',source:'lab_declared'};lab.logo_url='/actual-logo.png';
- const html=render([lab]);expect(html).toContain('128 reviews');expect(html).toContain('NABL cert. MC-1234');expect(html).toContain('/actual-logo.png');expect(html).not.toContain('accredited');expect(html).not.toContain('Verified pathologist');
+ const lab=record('B',200);lab.rating={average:4.6,count:128};lab.nabl={cert_no:'MC-1234',valid_until:'2028-03-31',source:'lab_declared',verification_status:'DECLARED'};lab.logo_url='/actual-logo.png';
+ const html=render([lab]);expect(html).toContain('128 reviews');expect(html).toContain('NABL certificate MC-1234');expect(html).toContain('/actual-logo.png');expect(html).not.toContain('accredited');expect(html).not.toContain('Verified pathologist');
 });
+
+it('shows an accreditation badge only with a verified certificate',()=>{const lab=record('Verified lab',200);lab.nabl={cert_no:'MC-9000',valid_until:'2028-03-31',source:'ops',verification_status:'VERIFIED'};expect(render([lab])).toContain('lj-accredited');lab.nabl.verification_status='DECLARED';expect(render([lab])).not.toContain('lj-accredited');expect(render([lab])).toContain('NABL certificate MC-9000');});

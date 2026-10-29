@@ -1,3 +1,4 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import '../records/MedicalRecords.css';
 import { useState, useEffect } from 'react';
 import {FileText, Download, X, Share2, Check, Plus} from 'lucide-react';
@@ -48,10 +49,10 @@ export function ShareBlock({ orderId }: { orderId: string }) {
       ))}
       {choices.length ? (
         <div className="flex flex-wrap gap-2 items-center">
-          <select aria-label="Doctor" value={pick} onChange={(e) => setPick(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm">
+          <ThemedSelect aria-label="Doctor" value={pick} onChange={(e) => setPick(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm">
             <option value="">Choose a doctor you have visited…</option>
             {choices.map((d) => <option key={d.doctor_partner_id} value={d.doctor_partner_id}>{d.name}</option>)}
-          </select>
+          </ThemedSelect>
           <button disabled={busy || !pick} onClick={() => run(() => shareReportApi(orderId, pick), `Shared with ${choices.find((d) => d.doctor_partner_id === pick)?.name}.`)} className="px-3 py-1.5 rounded-xl bg-teal-700 text-white text-xs font-bold disabled:opacity-50">Share</button>
         </div>
       ) : !o.shared.length && <p className="text-[11px] text-slate-500">After you visit a doctor on Vizito, you can share this report with them here.</p>}

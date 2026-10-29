@@ -2,7 +2,7 @@ import apiClient from '../../../services';
 
 export type RentalCategory='OXYGEN'|'BED'|'MOBILITY'|'MONITOR'|'OTHER';
 export interface RentalHistory {status:string;title:string;timestamp:string;note?:string}
-export interface RentalPayment {amount:number;method:string;paid_at:string|null;transaction_number:string|null;status:string;for:string}
+export interface RentalPayment {amount:number;method:string;paid_at:string|null;transaction_number:string|null;status:string;for:string;refund?:{status:'REFUND_STARTED'|'REFUND_FAILED';amount:number;started_at:string}|null}
 export interface RentalExtension {from_end:string;to_end:string;extra_days:number;amount:number;payment_status:'INCLUDED'|'DUE'|'PAID';at?:string}
 export interface RentalOrder {
  id:number;order_number:string;provider_id:string;product_id:number;status:string;order_type:'RENT';category:RentalCategory;
@@ -23,6 +23,7 @@ const base='/rental/patient/orders';
 const owned=(id:string|number)=>`${base}/${encodeURIComponent(id)}`;
 export const rentalOrdersApi={
  list:async():Promise<RentalOrder[]>=>{const r=await apiClient.get(base+'/mine');if(!Array.isArray(r.data))throw new Error('Invalid rental orders response.');return r.data;},
+ page:async(params:{page:number;page_size:10|20;q?:string;status?:string;category?:string;group?:string;date_from?:string;date_to?:string}):Promise<{items:RentalOrder[];page:number;page_size:10|20;total:number;total_pages:number}>=>(await apiClient.get(base+'/mine',{params})).data,
  detail:async(id:string|number):Promise<RentalOrder>=>(await apiClient.get(owned(id))).data,
  profile:async(id:string):Promise<RentalProfile>=>(await apiClient.get(`/rental/patient/providers/${encodeURIComponent(id)}/profile`)).data,
  preview:async(id:string|number,new_end_date:string):Promise<ExtensionPreview>=>(await apiClient.get(owned(id)+'/extend-preview',{params:{new_end_date}})).data,

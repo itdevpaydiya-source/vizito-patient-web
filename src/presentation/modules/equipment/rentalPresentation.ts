@@ -12,7 +12,7 @@ export const rentalStatus=(o:RentalOrder)=>o.status==='CANCELLED'?'Cancelled':o.
 export function rentalProgress(o:RentalOrder,today=istToday()){const elapsed=Math.max(0,Math.min(o.duration_days,daysBetween(o.start_date,today)+1));return {day:elapsed,total:o.duration_days,percent:Math.min(100,Math.max(0,Math.round(elapsed/o.duration_days*100)))};}
 export const dueSoon=(o:RentalOrder,today=istToday())=>rentalGroup(o)==='active'&&daysBetween(today,o.end_date)>=0&&daysBetween(today,o.end_date)<=3;
 export const paidAmount=(o:RentalOrder)=>o.payments.filter(p=>p.status==='PAID').reduce((sum,p)=>sum+Number(p.amount),0);
-export const rentalPaymentLabel=(o:RentalOrder)=>paidAmount(o)>0?(o.bill.amount_due>0?'Part paid':'Paid'):o.payments.some(p=>p.status==='REFUNDED')?'Refunded':'Pay on delivery';
+export const rentalPaymentLabel=(o:RentalOrder)=>paidAmount(o)>0?(o.bill.amount_due>0?'Part paid':'Paid'):o.payments.some(p=>p.status==='REFUNDED')?'Refunded':o.payments.some(p=>p.status==='REFUND_PENDING')?'Refund in progress':o.status==='CANCELLED'||o.status==='REJECTED'?'Not charged':'Pay on delivery';
 export const categoryLabels:Record<RentalCategory,string>={OXYGEN:'Oxygen',BED:'Beds',MOBILITY:'Mobility',MONITOR:'Monitors',OTHER:'Other'};
 export const safetyText:Record<RentalCategory,string[]>={OXYGEN:['Keep away from smoking and open flames.','Use in a well-ventilated room.','Keep the equipment at least 30 cm from walls.','Clean the filter as directed in the device manual.'],BED:['Lock the wheels before use.','Keep side rails up.'],MOBILITY:['Apply the wheelchair brakes when transferring.'],MONITOR:['Follow the device manual.'],OTHER:[]};
 /** Only actual recorded event dates populate the timeline. */

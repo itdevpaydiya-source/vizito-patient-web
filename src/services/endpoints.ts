@@ -85,4 +85,7 @@ export const ENDPOINTS = {
         association: (userId: number | string, associationId: string) =>
             `/users/${userId}/family-members/association/${associationId}`,
     },
+    VIDEO: {
+        STATUS: (appointmentId: string) => `/appointments/${appointmentId}/video-status`,
+    },
 };

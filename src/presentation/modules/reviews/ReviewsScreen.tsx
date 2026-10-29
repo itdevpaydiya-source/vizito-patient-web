@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Star, MessageSquare, AlertCircle, RotateCcw, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Clock, Package } from 'lucide-react';
+import { Star, MessageSquare, AlertCircle, RotateCcw, ShieldCheck, Stethoscope, Building2, FlaskConical, Pill, HeartHandshake, Clock, Package, Ambulance } from 'lucide-react';
+import { myTripsApi, rateTripApi } from '../../../services/ambulanceHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import { getDashboardApi } from '../../../services/dashboardHelper';
 import { createReviewApi, getMyReviewListApi, type PatientReview } from '../../../services/reviewHelper';
@@ -10,6 +11,8 @@ import { getProviderDetailApi } from '../../../services/bookingHelper';
 import { equipmentService } from '../equipment/equipmentService';
 import RateBox from '../../components/RateBox';
 import { KIND_LABEL, type CareKind } from '../../components/reviewKinds';
+import VizitoPagination from '../../components/navigation/VizitoPagination';
+import { useVizitoPagination } from '../../components/navigation/useVizitoPagination';
 
 // Ratings & Reviews: every finished visit the patient can rate (doctor, hospital, lab, pharmacy,
 // home care) with what it was, where and when; and every review they wrote, with the provider's reply.
@@ -21,7 +24,7 @@ interface ToRate {
   submit: (rating: number, review: string, tags: string[]) => Promise<unknown>;
 }
 
-const ICON: Record<CareKind, React.ElementType> = { doctor: Stethoscope, hospital: Building2, lab: FlaskConical, pharmacy: Pill, homecare: HeartHandshake, equipment: Package };
+const ICON: Record<CareKind, React.ElementType> = { doctor: Stethoscope, hospital: Building2, lab: FlaskConical, pharmacy: Pill, homecare: HeartHandshake, equipment: Package, ambulance: Ambulance };
 const VISIT: Record<string, string> = { VIDEO_CALL: 'Video consultation', IN_CLINIC: 'In-clinic visit', HOME_VISIT: 'Doctor home visit' };
 const dateText = (d?: string | null) => { if (!d) return null; const x = new Date(d); return Number.isNaN(x.getTime()) ? null : x.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); };
 const ago = (d?: string | null) => {
@@ -30,7 +33,7 @@ const ago = (d?: string | null) => {
 };
 const kindOfReview = (r: PatientReview): CareKind => {
   const t = String(r.consultation_type || '');
-  return /^Lab tests/i.test(t) ? 'lab' : /^Pharmacy order/i.test(t) ? 'pharmacy' : /^Home care/i.test(t) ? 'homecare' : /^Equipment/i.test(t) ? 'equipment' : 'doctor';
+  return /^Lab tests/i.test(t) ? 'lab' : /^Pharmacy order/i.test(t) ? 'pharmacy' : /^Home care/i.test(t) ? 'homecare' : /^Equipment/i.test(t) ? 'equipment' : /^Ambulance trip/i.test(t) ? 'ambulance' : 'doctor';
 };
 const Stars = ({ n }: { n: number }) => (
   <span className="inline-flex" aria-label={`${n} out of 5 stars`}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} className={`w-4 h-4 ${i <= n ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />)}</span>
@@ -44,18 +47,18 @@ export default function ReviewsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'rate' | 'mine'>('rate');
   const [kind, setKind] = useState<CareKind | 'all'>('all');
-  const [shown, setShown] = useState(10);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) { setLoading(true); setError(null); }
     try {
-      const [dash, reviewsRaw, labs, pharm, hc, equip] = await Promise.all([
+      const [dash, reviewsRaw, labs, pharm, hc, equip, trips] = await Promise.all([
         getDashboardApi().catch(() => null),
         getMyReviewListApi().catch(() => []),
         myLabOrdersApi().catch(() => []),
         getMyOrdersApi().catch(() => []),
         hcMineApi().catch(() => []),
         equipmentService.getMyOrders().catch(() => ({ orders: [] })),
+        myTripsApi().catch(() => []),
       ]);
       const reviews = Array.isArray(reviewsRaw) ? [...reviewsRaw] : [];
       const reviewed = new Set(reviews.map((r) => String(r.booking_id)));
@@ -71,6 +74,12 @@ export default function ReviewsScreen() {
         if (o.status !== 'REPORTED' || o.my_rating) continue;
         items.push({ key: `l:${o.id}`, kind: 'lab', provider: o.lab_name || 'Laboratory', partnerId: null, what: `Lab tests: ${(o as any).items?.map((i: any) => i.test_name).join(', ') || o.order_number}`,
           where: o.location_name, when: o.visit_date, forWhom: o.patient_name || null, submit: (r, t, g) => rateMyLabOrderApi(o.id, r, t, g) });
+      }
+      for (const t of Array.isArray(trips) ? trips : []) {
+        if (!t.can_rate) continue;
+        items.push({ key: `a:${t.id}`, kind: 'ambulance', provider: (t as any).operator?.name || 'Ambulance service', partnerId: null,
+          what: `Ambulance trip ${t.trip_number}${(t as any).vehicle_type_label ? ` · ${(t as any).vehicle_type_label}` : ''}`, where: null, when: (t as any).scheduled_at || t.created_at || null, forWhom: (t as any).patient_name || null,
+          submit: (r, txt, g) => rateTripApi(t.id, r, txt, g) });
       }
       for (const o of pharm) {
         if (o.status !== 'COMPLETED' || reviewed.has(o.id)) continue;
@@ -148,6 +157,7 @@ export default function ReviewsScreen() {
   const list = tab === 'rate' ? toRate : mine;
   const kindOf = (x: any): CareKind => (tab === 'rate' ? x.kind : kindOfReview(x));
   const filtered = useMemo(() => list.filter((x: any) => kind === 'all' || kindOf(x) === kind || (kind === 'doctor' && kindOf(x) === 'hospital')), [list, kind, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pagination = useVizitoPagination(filtered as any[], 'reviews');
   const kinds: (CareKind | 'all')[] = ['all', 'doctor', 'lab', 'pharmacy', 'homecare', 'equipment'];
   const countOf = (k: CareKind | 'all') => list.filter((x: any) => k === 'all' || kindOf(x) === k || (k === 'doctor' && kindOf(x) === 'hospital')).length;
 
@@ -175,7 +185,7 @@ export default function ReviewsScreen() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" className="inline-flex rounded-xl bg-slate-100 p-1">
           {([['rate', 'To rate', toRate.length], ['mine', 'My reviews', mine.length]] as const).map(([id, l, n]) => (
-            <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setShown(10); }}
+            <button key={id} role="tab" aria-selected={tab === id} onClick={() => { setTab(id); pagination.resetPage(); }}
               className={`px-4 py-2 rounded-lg text-sm font-bold inline-flex items-center gap-1.5 ${tab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
               {l}<span className={`min-w-[1.25rem] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${id === 'rate' && n > 0 ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-600'}`}>{n}</span>
             </button>
@@ -183,7 +193,7 @@ export default function ReviewsScreen() {
         </div>
         <div className="flex flex-wrap gap-1.5" aria-label="Type of care">
           {kinds.map((k) => (
-            <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(10); }}
+            <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); pagination.resetPage(); }}
               className={`px-3 py-1.5 rounded-full text-xs font-bold border ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
               {k === 'all' ? 'All' : k === 'doctor' ? 'Doctors & hospitals' : KIND_LABEL[k]} <span className="opacity-60">{countOf(k)}</span>
             </button>
@@ -206,7 +216,7 @@ export default function ReviewsScreen() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {filtered.slice(0, shown).map((x: any) => {
+          {pagination.visibleItems.map((x: any) => {
             if (tab === 'rate') {
               const it = x as ToRate; const Icon = ICON[it.kind];
               const name = it.provider || (it.partnerId && names[it.partnerId]) || KIND_LABEL[it.kind];
@@ -279,7 +289,7 @@ export default function ReviewsScreen() {
           })}
         </ul>
       )}
-      {filtered.length > shown && <button onClick={() => setShown((n) => n + 10)} className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Show more ({filtered.length - shown} more)</button>}
+      {!loading && !error && filtered.length > 0 && <VizitoPagination page={pagination.page} pageSize={pagination.pageSize} total={filtered.length} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="reviews"/>}
     </div>
   );
 }

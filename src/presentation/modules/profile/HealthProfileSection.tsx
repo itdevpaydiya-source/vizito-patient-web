@@ -1,3 +1,4 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import React, { useEffect, useState } from 'react';
 import { personNameInput } from '../../../utils/inputFilters';
 import { HeartPulse, Plus, X, ShieldAlert, Pill, Phone, CheckCircle2, AlertCircle, Info } from 'lucide-react';
@@ -120,10 +121,10 @@ export default function HealthProfileSection() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <div>
           <label htmlFor="hp-bg" className={label}>Blood group</label>
-          <select id="hp-bg" value={bloodGroup} onChange={(e) => { setBloodGroup(e.target.value); dirty(); }} className={field}>
+          <ThemedSelect id="hp-bg" value={bloodGroup} onChange={(e) => { setBloodGroup(e.target.value); dirty(); }} className={field}>
             <option value="">Not known</option>
             {BLOOD_GROUPS.map((b) => <option key={b}>{b}</option>)}
-          </select>
+          </ThemedSelect>
         </div>
         <div>
           <label htmlFor="hp-h" className={label}>Height (cm)</label>
@@ -160,9 +161,9 @@ export default function HealthProfileSection() {
             <label htmlFor="hp-alr" className="sr-only">Reaction</label>
             <input id="hp-alr" value={newAllergy.reaction || ''} maxLength={120} onChange={(e) => setNewAllergy({ ...newAllergy, reaction: e.target.value })} placeholder="What happens (rash, swelling…)" className={field} />
             <label htmlFor="hp-als" className="sr-only">Severity</label>
-            <select id="hp-als" value={newAllergy.severity || ''} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })} className={field}>
+            <ThemedSelect id="hp-als" value={newAllergy.severity || ''} onChange={(e) => setNewAllergy({ ...newAllergy, severity: e.target.value })} className={field}>
               <option value="">Severity</option><option>Mild</option><option>Moderate</option><option>Severe</option>
-            </select>
+            </ThemedSelect>
             <button type="button" onClick={addAllergy} disabled={newAllergy.allergen.trim().length < 2} className="px-3 py-2.5 rounded-xl border border-rose-200 bg-white text-xs font-bold text-rose-800 hover:bg-rose-50 disabled:opacity-50 inline-flex items-center justify-center gap-1"><Plus className="w-3.5 h-3.5" /> Add allergy</button>
           </div>
         )}

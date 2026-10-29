@@ -1,6 +1,6 @@
 // What patients can say about each kind of care: quick tags for what went well and what didn't.
 // Kept short and specific to healthcare so reviews are useful to the next patient and the provider.
-export type CareKind = 'doctor' | 'hospital' | 'lab' | 'pharmacy' | 'homecare' | 'equipment';
+export type CareKind = 'doctor' | 'hospital' | 'lab' | 'pharmacy' | 'homecare' | 'equipment' | 'ambulance';
 
 export const KIND_LABEL: Record<CareKind, string> = {
   doctor: 'Doctor',
@@ -9,6 +9,7 @@ export const KIND_LABEL: Record<CareKind, string> = {
   pharmacy: 'Pharmacy',
   homecare: 'Home care',
   equipment: 'Equipment rental',
+  ambulance: 'Ambulance',
 };
 
 export const CARE_TAGS: Record<CareKind, { good: string[]; bad: string[] }> = {
@@ -17,6 +18,7 @@ export const CARE_TAGS: Record<CareKind, { good: string[]; bad: string[] }> = {
   lab: { good: ['Painless sample collection', 'Hygienic', 'Report on time', 'Easy-to-read report', 'Helpful staff'], bad: ['Long wait', 'Report delayed', 'Sample taken again'] },
   pharmacy: { good: ['All medicines available', 'Ready on time', 'Explained the dosage', 'Well packed', 'Fair price'], bad: ['Medicine not available', 'Delayed', 'Wrong item'] },
   homecare: { good: ['Punctual', 'Skilled care', 'Kind and respectful', 'Explained the care plan', 'Hygienic'], bad: ['Arrived late', 'Rushed visit', 'Poor communication'] },
+  ambulance: { good: ['Arrived on time', 'Careful crew', 'Clean vehicle', 'Kept me informed', 'Safe driving'], bad: ['Arrived late', 'Hard to reach', 'Equipment missing', 'Rough handling'] },
   equipment: { good: ['Clean & Sanitized', 'Prompt Delivery', 'Helpful Support', 'Excellent Condition', 'Smooth Return'], bad: ['Late delivery', 'Defective equipment', 'Missing accessories', 'Unclear instructions'] },
 };
 

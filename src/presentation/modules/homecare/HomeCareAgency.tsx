@@ -1,3 +1,6 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
+import { payOnline, PaymentCancelled, type PaidOnline } from '../../../services/razorpayCheckout';
+import BookingForChip,{useFamilyBookingSelection} from '../family/BookingForChip';
 import {useSearchArea} from '../../../services/location';
 import {providerDistance} from '../../components/ProviderCard';
 import type {ProviderItem} from '../../../services/types';
@@ -164,7 +167,7 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {(['ALL', 'VISIT', 'SHIFT'] as const).map((k) => <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(PAGE); }} className={`px-3 py-1.5 rounded-full border font-bold ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>{k === 'ALL' ? 'All care' : k === 'VISIT' ? 'Visits' : '12 / 24-hour care'}</button>)}
-              <label className="sr-only" htmlFor="home-care-sort">Sort results</label><select id="home-care-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-slate-200 px-2 py-1.5 font-bold text-slate-700"><option value="NEAREST" disabled={!area}>Nearest</option><option value="PRICE">Lowest price</option><option value="RATING">Best rated</option></select>
+              <label className="sr-only" htmlFor="home-care-sort">Sort results</label><ThemedSelect id="home-care-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-slate-200 px-2 py-1.5 font-bold text-slate-700"><option value="NEAREST" disabled={!area}>Nearest</option><option value="PRICE">Lowest price</option><option value="RATING">Best rated</option></ThemedSelect>
             </div>
           </div>
           {chips.length > 0 && (
@@ -269,6 +272,7 @@ function BookPanel({ s, pincode, examples, onBack, onBooked, referral, prefill }
   const visit = s.kind === 'VISIT';
   const [family, setFamily] = useState<PatientFamilyMember[]>([]);
   const [forWho, setForWho] = useState('');
+  useFamilyBookingSelection(family,setForWho);
   const [sessions, setSessions] = useState(prefill?.sessions ? prefill.sessions : referral && visit ? Math.min(30, referral.sessions) : 1);
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const dateChips = Array.from({ length: 10 }, (_, i) => { const d = new Date(Date.now() + i * 86400000); return { iso: iso(d), dow: d.getDay(), label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }) }; });
@@ -328,9 +332,6 @@ function BookPanel({ s, pincode, examples, onBack, onBooked, referral, prefill }
     if (needs.trim().length < 10) {
       return { key: 'needs', label: 'Describe what care is needed (min 10 characters)', id: 'field-care-needs' };
     }
-    if (pay === 'UPI' && !validateUpiId(upi).ok) {
-      return { key: 'upi', label: 'Enter your UPI ID to pay now', id: 'field-upi-id' };
-    }
     return null;
   };
   const missing = getMissingField();
@@ -356,24 +357,25 @@ function BookPanel({ s, pincode, examples, onBack, onBooked, referral, prefill }
   };
 
   const book = async () => {
-    if (pay === 'UPI') {
-      const uRes = validateUpiId(upi);
-      if (!uRes.ok) { setErr(uRes.message); return; }
-    }
     setBusy(true); setErr(null);
+    let payment: PaidOnline | undefined;
+    if (pay === 'UPI') {
+      try { payment = await payOnline({ amount: total, purpose: 'home_care', description: `${s.name} · ${sessions} ${unit}${sessions === 1 ? '' : 's'}` }); }
+      catch (e) { setErr(e instanceof PaymentCancelled ? e.message : `${(e as Error)?.message || 'The payment failed.'} You can try again or choose to pay later.`); setBusy(false); return; }
+    }
     try {
       onBooked(await hcBookApi({
         service_id: s.id, sessions, start_date: date, start_time: time, weekdays: sessions > 1 ? weekdays : [],
         address: { line: addr.line.trim(), area: addr.area.trim() || undefined, landmark: addr.landmark.trim() || undefined, city: addr.city.trim(), pincode, pin: homePin || undefined },
-        care_needs: needs.trim(), preferred_gender: gender, family_member_id: forWho || undefined, payment_mode: pay, payment: pay === 'UPI' ? { payment_method: 'UPI', upi_id: upi.trim() } : undefined,
+        care_needs: needs.trim(), preferred_gender: gender, family_member_id: forWho || undefined, payment_mode: pay, payment,
         referral_id: referral?.id,
       }));
-    } catch (x) { setErr(labError(x, 'Could not book. Please try again.')); } finally { setBusy(false); }
+    } catch (x) { setErr(`${labError(x, 'Could not book. Please try again.')}${payment ? ' Your payment is being refunded (5–7 working days).' : ''}`); } finally { setBusy(false); }
   };
   const unit = visit ? 'visit' : 'shift';
 
   return (
-    <section aria-label="Book home care" className={`${card} space-y-5`}>
+    <section aria-label="Book home care" className={`${card} space-y-5`}><BookingForChip family={family} value={forWho} onChange={setForWho}/>
       {referral && <ReferralNote r={referral} />}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -447,11 +449,10 @@ function BookPanel({ s, pincode, examples, onBack, onBooked, referral, prefill }
       <div className="rounded-xl bg-slate-50 p-3 space-y-2">
         <div className="flex justify-between text-sm"><span className="text-slate-700">{rupees(s.price)} × {sessions} {unit}{sessions === 1 ? '' : 's'}</span><b className="tabular-nums text-slate-900">{rupees(total)}</b></div>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Payment">
-          <button type="button" role="radio" aria-checked={pay === 'UPI'} onClick={() => setPay('UPI')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'UPI' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay now (UPI)</button>
+          <button type="button" role="radio" aria-checked={pay === 'UPI'} onClick={() => setPay('UPI')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'UPI' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay online now</button>
           <button type="button" role="radio" aria-checked={pay === 'CASH'} onClick={() => setPay('CASH')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'CASH' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay at the visit</button>
         </div>
-        {pay === 'UPI' && <TestPaymentNote />}
-        {pay === 'UPI' && <input id="field-upi-id" aria-label="UPI ID" value={upi} onChange={(e) => setUpi(e.target.value.replace(/\s/g, '').toLowerCase())} onBlur={() => { if (upi) { const u = validateUpiId(upi); if (!u.ok) setErr(u.message); } }} placeholder="yourname@upi" className={`${field} transition-all duration-300 ${highlightField === 'upi' ? 'ring-4 ring-amber-400 border-amber-500' : ''}`} />}
+        {pay === 'UPI' && <p className="text-xs text-slate-500">Pay securely with UPI, card or net banking in the next step.</p>}
         <CancellationRefundPolicy service="homecare" className="mt-2" />
       </div>
       {err && <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>}

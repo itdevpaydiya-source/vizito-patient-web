@@ -1,3 +1,7 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
+import BookingForChip,{useFamilyBookingSelection} from '../family/BookingForChip';
+import {useSearchArea,addressAt} from '../../../services/location';
+import {labCity,combinedEstimate,packageCentres} from './labFlowDetails';
 import LocationBar from '../../components/location/LocationBar';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import HomePinField from '../../components/location/HomePinField';
@@ -8,8 +12,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FlaskConical, Search, MapPin, Clock, CheckCircle2, ArrowLeft, Utensils, Home, Building2, Stethoscope, KeyRound, ShieldCheck, PackageCheck, Droplet, Info, ChevronDown, X } from 'lucide-react';
 import LabComparison from './LabComparison';
 import LabSchedule from './LabSchedule';
-import LabReview from './LabReview';
-import {reviewDisabledReason,validUpi} from './labReviewDetails';
+import LabReview,{type ReviewPatient} from './LabReview';
+import LabPatientDetails from './LabPatientDetails';
+import LabBrowse from './LabBrowse';
+import LabDetailSelection from './LabDetailSelection';
+import './LabJourney.css';
+import {reviewDisabledReason} from './labReviewDetails';
+import {payOnline,PaymentCancelled} from '../../../services/razorpayCheckout';
 import {restoreAppointment,validHomePin} from './labScheduleDetails';
 import { hcOrderApi } from '../../../services/homecareHelper';
 import { getMyUserId, getFamilyMembersApi, type PatientFamilyMember } from '../../../services/familyHelper';
@@ -24,9 +33,9 @@ export default function LabBookingScreen() {
   const [params, setParams] = useSearchParams();
   const rxId = params.get('rx');
   const testParam = params.get('test');
-  const singleLabEntry = useRef(!!params.get('lab') && !params.has('step'));
   const labParam = params.get('lab'); // a lab chosen in the search: shown first once tests are picked
   const [labPage, setLabPage] = useState<LabPublic | null>(null);
+  const [labPageState,setLabPageState]=useState<'idle'|'loading'|'ready'|'error'>('idle');
   // H6: tests a home care team asked for (?hc=<request>&order=<care booking>): prefilled, home collection at the care address.
   const hcId = params.get('hc');
   const hcOrderId = params.get('order');
@@ -43,17 +52,20 @@ export default function LabBookingScreen() {
   // query so an interrupted render cannot overwrite a just-selected address or appointment.
   const latestParams=()=>new URLSearchParams(typeof window==='undefined'?navigationParams.current:window.location.search);
   useEffect(() => { const restored = Array.from(new Set(codesParam.split(',').filter(Boolean))); chosenRef.current = restored; setChosenState(current => current.join(',') === restored.join(',') ? current : restored); }, [codesParam]);
-  const requestedStep = Math.min(4, Math.max(1, Math.trunc(Number(params.get('step'))) || 1));
+  const requestedStep = Math.min(5, Math.max(1, Math.trunc(Number(params.get('step'))) || 1));
   const setStep = (next: number) => { const updated = latestParams(); updated.set('step', String(next)); navigationParams.current = updated; setParams(updated); };
   const setChosen = (next: string[] | ((current: string[]) => string[])) => { const selected = Array.from(new Set(typeof next === 'function' ? next(chosenRef.current) : next)); chosenRef.current = selected; setChosenState(selected); const updated = latestParams(); updated.set('tests', selected.join(',')); navigationParams.current = updated; setParams(updated, {replace:true}); };
   const submitting = useRef(false);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const previousStep = useRef(requestedStep);
   useEffect(() => { if (previousStep.current === requestedStep) return; previousStep.current = requestedStep; stepHeading.current?.focus({preventScroll:true}); }, [requestedStep]);
-  const [catalogueView, setCatalogueView] = useState<'tests'|'packages'>('tests');
 
   const [comparisonAddress,setComparisonAddress]=useState<PatientAddress|null>(null);
-  const [city, setCity] = useState('');
+  const searchArea=useSearchArea();
+  const [resolvedCity,setResolvedCity]=useState('');
+  useEffect(()=>{setResolvedCity('');if(!searchArea||searchArea.city||searchArea.label.includes(','))return;let active=true;addressAt(searchArea).then(a=>{if(active&&a?.city)setResolvedCity(a.city);});return()=>{active=false;};},[searchArea]);
+  const city=resolvedCity||labCity(searchArea,comparisonAddress?.city||'');
+  const setCity=(_value:string)=>undefined;
   const [labs, setLabs] = useState<LabHit[] | null>(null);
   const [lab, setLab] = useState<LabHit | null>(null);
   const [centreId, setCentreId] = useState<number | null>(null);
@@ -70,7 +82,7 @@ export default function LabBookingScreen() {
       const d = list.find(a=>a.addressId===latestParams().get('address')) || list.find((a) => a.isDefault) || list[0];
       if (!d) return;
       setComparisonAddress(d);
-      setAddr((cur) => (cur.line || cur.pincode ? cur : { line: d.addressLine1 || '', area: d.addressLine2 || '', landmark: d.landmark || '', city: d.city || '', pincode: d.pincode || '' }));
+      setAddr((cur) => (cur.line ? cur : { line: d.addressLine1 || '', area: d.addressLine2 || '', landmark: d.landmark || '', city: d.city || '', pincode: d.pincode || '' }));
       if (d.pin) setHomePin((p) => p || d.pin || null);
     }).catch(() => undefined);
   }, []);
@@ -83,18 +95,22 @@ export default function LabBookingScreen() {
   const time=params.get('time')||'';
   const setTime=(value:string)=>updateAppointment({time:value});
   const setDate=(value:string)=>updateAppointment({date:value,time:null});
-  const step = requestedStep <= 2 ? requestedStep : !lab ? 2 : requestedStep === 4 && !time ? 3 : requestedStep;
-  const [pay, setPay] = useState<'UPI' | 'CASH'>('UPI');
+  const addressHasFields=addr.line.trim().length>=5&&addr.city.trim().length>=2&&validHomePin(addr.pincode);
+  const step = requestedStep <= 2 ? requestedStep : !lab||!labs?.some(l=>l.id===lab.id&&l.locations.some(c=>c.id===centreId)) ? 2 : mode==='HOME'&&requestedStep>3&&!addressHasFields?3:requestedStep >= 4 && !time ? 3 : requestedStep;
+  const [pay, setPay] = useState<'UPI' | 'CASH'>('CASH');
+  const [reason,setReason]=useState('');
+  const [catalogueRetry,setCatalogueRetry]=useState(0);
   const [upi, setUpi] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [family, setFamily] = useState<PatientFamilyMember[]>([]);
   const [forWho, setForWho] = useState('');
+  useFamilyBookingSelection(family,setForWho);
   const [reviewProfile,setReviewProfile]=useState<PatientProfileData|null>(null);
   const [profileBusy,setProfileBusy]=useState(false);
   const [profileError,setProfileError]=useState<string|null>(null);
   const [profileTry,setProfileTry]=useState(0);
-  const needsReview=requestedStep===4;
+  const needsReview=requestedStep>=4;
   useEffect(()=>{
     if(!needsReview)return;
     let active=true;setProfileBusy(true);setProfileError(null);
@@ -105,17 +121,6 @@ export default function LabBookingScreen() {
   const [labsErr, setLabsErr] = useState<string | null>(null);
   const [labsTry, setLabsTry] = useState(0);
   const [pkg, setPkg] = useState<PublicPackage | null>(null);
-  const [openPkg, setOpenPkg] = useState<string | null>(null);
-  const [pkgQ, setPkgQ] = useState('');
-  const [pkgShown, setPkgShown] = useState(6);
-  const pkgList = (packages || []).filter((p) => { const s = pkgQ.trim().toLowerCase(); return !s || `${p.name} ${p.lab.name} ${p.audience || ''} ${p.tests.map((t) => t.name).join(' ')}`.toLowerCase().includes(s); });
-  // The same checkup from several labs is one card (cheapest first); the patient compares labs inside it.
-  const pkgGroups = useMemo(() => {
-    const m = new Map<string, PublicPackage[]>();
-    for (const p of pkgList) { const k = `${p.name.toLowerCase()}|${p.tests.map((t) => t.code).sort().join(',')}`; m.set(k, [...(m.get(k) || []), p]); }
-    return Array.from(m.values()).map((labs) => [...labs].sort((a, b) => a.price - b.price));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [packages, pkgQ]);
 
 
   useEffect(() => {
@@ -129,17 +134,11 @@ export default function LabBookingScreen() {
       setAddr({ line: o.address || '', area: '', landmark: o.landmark || '', city: '', pincode: o.pincode || '' });
     }).catch((e) => setError(labError(e, 'Could not load the care-team request.')));
   }, [hcId, hcOrderId]);
-  useEffect(() => { fetchLabTestsApi().then(setTests).catch((e) => setError(labError(e, 'Could not load tests.'))); }, []);
-  useEffect(() => { if (!rxId) healthPackagesApi().then(setPackages).catch(() => setPackages([])); }, [rxId]);
+  useEffect(() => { setError(null);fetchLabTestsApi().then(setTests).catch((e) => setError(labError(e, 'Could not load tests.'))); }, [catalogueRetry]);
+  useEffect(() => { if (!rxId&&city) healthPackagesApi(city).then(setPackages).catch(() => setPackages([])); }, [rxId,city]);
   // Book a package: its lab is fixed, so go straight to centre/home and time.
-  const choosePackage = async (p: PublicPackage) => {
-    setError(null); setChosen([]); setPkg(p); setLab(null); setCentreId(null);
-    try {
-      const d = await labPublicApi(p.lab.id);
-      setLab({ id: d.id, name: d.name, locations: d.locations, tests_offered: 0, selected: [], total: p.price, settings: d.settings, registration_number: d.registration_number });
-      setCentreId(d.locations[0]?.id ?? null); setMode('LAB_VISIT'); setTime(''); setStep(2);
-    } catch (e) { setError(labError(e, 'Could not open this package.')); setPkg(null); }
-  };
+  const choosePackage = (p: PublicPackage) => {setError(null);setPkg(p);setChosen([]);setLab(null);setCentreId(null);const updated=latestParams();updated.set('package',p.code);updated.set('step','1');navigationParams.current=updated;setParams(updated,{replace:true});};
+  useEffect(()=>{const code=params.get('package');if(code&&packages)setPkg(packages.find(p=>p.code===code)||null);},[params.get('package'),packages]);
   useEffect(() => { getMyUserId().then((id) => (id ? getFamilyMembersApi(id) : [])).then(setFamily).catch(() => setFamily([])); }, []);
   useEffect(() => {
     if (!rxId) return;
@@ -147,15 +146,15 @@ export default function LabBookingScreen() {
       .catch((e) => setError(labError(e, 'Could not open the prescription.')));
   }, [rxId]);
   useEffect(() => {
-    if (!chosen.length && pkg) return;
+
     if (!tests || chosen.some(code=>!tests.some(t=>t.code===code))) return;
     setLabs(null);setLabsErr(null);
-    if (!chosen.length) { setLab(null);setCentreId(null);return; }
-    setPkg(null);
+    if (!chosen.length&&!pkg) { setLabs([]);setLab(null);setCentreId(null);return; }
+    if(!city&&!searchArea)return;
     let active=true;
-    const timer=setTimeout(()=>findLabsApi(chosen).then(rows=>{if(active)setLabs(rows);}).catch(e=>{if(active)setLabsErr(labError(e,'Could not load labs right now.'));}),300);
+    const timer=setTimeout(()=>(pkg&&!chosen.length?labPublicApi(pkg.lab.id).then(d=>[{...d,tests_offered:d.tests?.length||0,selected:[],total:0}] as LabHit[]):findLabsApi(chosen,city,searchArea?{lat:searchArea.lat,lng:searchArea.lng,pincode:searchArea.pincode||addr.pincode,radius_km:5}:undefined)).then(rows=>{if(active)setLabs(packageCentres(rows,pkg));}).catch(e=>{if(active)setLabsErr(labError(e,'Could not load labs right now.'));}),300);
     return()=>{active=false;clearTimeout(timer);};
-  }, [chosen, labsTry, tests]);
+  }, [chosen, labsTry, tests,city,pkg,searchArea?.lat,searchArea?.lng,searchArea?.pincode,addr.pincode]);
   useEffect(()=>{
     if(!tests)return;
     const allowed=new Set(tests.map(t=>t.code));
@@ -165,10 +164,13 @@ export default function LabBookingScreen() {
     if(!valid.length){const updated=latestParams();updated.set('step','1');updated.delete('lab');navigationParams.current=updated;setParams(updated,{replace:true});}
   },[tests,chosen]);
   useEffect(()=>{
-    if(!labs||pkg)return;
+    if(!labs)return;
     const eligible=labParam?labs.find(l=>l.id===labParam):null;
     if(eligible){if(lab?.id!==eligible.id){setLab(eligible);setCentreId(eligible.locations.find(c=>String(c.id)===params.get('centre'))?.id??eligible.locations[0]?.id??null);}else setLab(eligible);}
-    else if(labParam){setLab(null);setCentreId(null);const updated=latestParams();updated.delete('lab');navigationParams.current=updated;setParams(updated,{replace:true});}
+    // Opening a laboratory from browse is valid before any tests are selected. Keep the
+    // lab in the URL so its catalogue can render; only reject it once selected tests
+    // prove that the laboratory cannot fulfil the basket.
+    else if(labParam&&chosen.length){setLab(null);setCentreId(null);const updated=latestParams();updated.delete('lab');navigationParams.current=updated;setParams(updated,{replace:true});}
     else if(lab){setLab(null);setCentreId(null);}
   },[labs,labParam,pkg]);
   const selectLab=(selected:LabHit)=>{
@@ -187,8 +189,8 @@ export default function LabBookingScreen() {
 
   const fasting = pkg ? pkg.fasting_hours : Math.max(0, ...chosen.map((c) => byCode.get(c)?.fasting_hours || 0));
   // Opened for one lab (from search): show that lab and its own tests first.
-  useEffect(() => { if (singleLabEntry.current && labParam) labPublicApi(labParam).then(setLabPage).catch(() => setLabPage(null)); }, [labParam]);
-  const labMode = singleLabEntry.current && !!labParam && !!labPage && !pkg && !rx && !hcReq;
+  useEffect(() => {let active=true;if(!labParam){setLabPage(null);setLabPageState('idle');return;}setLabPage(null);setLabPageState('loading');labPublicApi(labParam).then(value=>{if(active){setLabPage(value);setLabPageState('ready');}}).catch(()=>{if(active)setLabPageState('error');});return()=>{active=false};}, [labParam]);
+  const labMode = requestedStep===1 && !!labParam && !pkg && !rx && !hcReq;
   // In single-lab mode that lab is the lab: select it as soon as its price for these tests is known.
   useEffect(() => {
     if (!labMode || !labs || lab) return;
@@ -197,8 +199,12 @@ export default function LabBookingScreen() {
   }, [labMode, labs]); // eslint-disable-line react-hooks/exhaustive-deps
   const labModeMissing = labMode && chosen.length > 0 && !!labs && !labs.some((l) => l.id === labParam);
   const labModeSum = labMode ? chosen.reduce((n, c) => n + (labPage?.tests?.find((t) => t.code === c)?.price || 0), 0) : 0;
-  const toggle = (code: string) => setChosen((c) => (c.includes(code) ? c.filter((x) => x !== code) : [...c, code]));
+  const toggle = (code: string) => {if(pkg?.tests.some(t=>t.code===code))return;setChosen((c) => (c.includes(code) ? c.filter((x) => x !== code) : [...c, code]));};
   const home = lab?.settings?.home;
+  const [centrePrices,setCentrePrices]=useState<{key:string;prices:Record<string,number>}|null>(null);
+  const priceKey=lab?.id+':'+centreId+':'+chosen.join(',')+':'+city;
+  useEffect(()=>{if(!lab||!centreId||!chosen.length)return;let active=true;Promise.all(chosen.map(async code=>{const rows=await findLabsApi([code],city);const hit=rows.find(l=>l.id===lab.id);const centre=hit?.locations.find(c=>c.id===centreId);return [code,centre?.total??(!hit?.prices_vary?hit?.total:undefined)] as const;})).then(rows=>{if(active)setCentrePrices({key:priceKey,prices:Object.fromEntries(rows.filter((r):r is readonly[string,number]=>typeof r[1]==='number'))});}).catch(()=>undefined);return()=>{active=false;};},[priceKey]);
+  const pricedLab=lab?{...lab,prices_vary:false,selected:lab.selected.flatMap(t=>{const price=centrePrices?.key===priceKey?centrePrices.prices[t.code]:!lab.prices_vary?t.price:undefined;return price!=null?[{...t,price}]:[];})}:null;
   const [availabilityResult,setAvailabilityResult]=useState<{key:string;data:LabAvailability}|null>(null);
   const [availabilityError,setAvailabilityError]=useState<string|null>(null);
   const [availabilityBusy,setAvailabilityBusy]=useState(false);
@@ -226,93 +232,66 @@ export default function LabBookingScreen() {
   const homeOk=mode==='HOME'&&validHomePin(addr.pincode)&&!!availability?.bookable;
   const fee = mode === 'HOME' ? home?.fee || 0 : 0;
   // A lab's centres can price tests differently: the chosen centre's price is what is paid.
-  const testsTotal = pkg ? (lab?.total || 0) : (lab?.locations.find((c) => c.id === centreId)?.total ?? lab?.total ?? 0);
+  const testsTotal = (lab?.locations.find((c) => c.id === centreId)?.total ?? lab?.total ?? 0);
   const total = testsTotal + fee;
-  const scheduleTestsTotal=pkg?pkg.price:lab?.locations.find(c=>c.id===centreId)?.total??lab?.total;
+  const scheduleTestsTotal=lab?.locations.find(c=>c.id===centreId)?.total??lab?.total;
   const scheduleTotal=typeof scheduleTestsTotal==='number'&&Number.isFinite(scheduleTestsTotal)&&(mode!=='HOME'||typeof home?.fee==='number')?scheduleTestsTotal+fee:undefined;
   const addrReady = mode !== 'HOME' || (addr.line.trim().length >= 5 && addr.city.trim().length >= 2 && homeOk);
 
   const book = async () => {
-    if (submitting.current || availabilityBusy || availabilityError || step !== 4 || !lab || !centreId || !time || !times.includes(time)) return;
+    if (submitting.current || availabilityBusy || availabilityError || step !== 5 || !lab || !centreId || !time || !times.includes(time)) return;
     if (mode === 'HOME' && !addrReady) { setError('Complete the address, with a pincode this lab serves.'); return; }
-    if (pay === 'UPI' && !validUpi(upi)) { setError('Enter your UPI ID, e.g. name@okicici.'); return; }
     submitting.current = true; setBusy(true); setError(null);
     let completed=false;
     try {
+      const onlinePayment = pay === 'UPI' ? await payOnline({
+        amount: Number(scheduleTotal),
+        purpose: 'lab',
+        description: `Lab tests at ${lab.name}`,
+        prefill: {
+          name: patient?.name || reviewProfile?.fullName || undefined,
+          email: patient?.email || reviewProfile?.email || undefined,
+          contact: patient?.phone || reviewProfile?.phone || undefined,
+        },
+      }) : undefined;
       const booked=await bookLabTestsApi({
-        lab_partner_id: lab.id, location_id: centreId, test_codes: pkg ? [] : chosen, package_codes: pkg ? [pkg.code] : undefined, visit_date: date, visit_time: time, payment_mode: pay,
-        payment: pay === 'UPI' ? { payment_method: 'UPI', upi_id: upi.trim() } : undefined,
+        lab_partner_id: lab.id, location_id: centreId, test_codes: chosen, package_codes: pkg ? [pkg.code] : undefined, visit_date: date, visit_time: time, payment_mode: pay,
+        payment: pay === 'UPI' ? {...onlinePayment,payment_method:'UPI'} : undefined,
         visit_type: mode, home_address: mode === 'HOME' ? { line: addr.line.trim(), area: addr.area.trim() || undefined, landmark: addr.landmark.trim() || undefined, city: addr.city.trim(), pincode: addr.pincode, pin: homePin || undefined } : undefined,
         prescription_id: rx?.prescription_id,
         family_member_id: forWho || undefined,
         hc_lab_request_id: hcReq?.id,
+        clinical_notes: reason.trim()||undefined,
       });
       completed=true;
       navigate(`/lab-tests/booked/${encodeURIComponent(booked.id)}`,{replace:true});
-    } catch (e) { if((e as {response?:{status?:number}})?.response?.status===409){keepDay.current=date;setSlotNotice(labError(e,'This time is now full.'));setTime('');setAvailabilityTry(n=>n+1);setStep(3);}else setError(labError(e, 'Could not book. Please try again.')); } finally { if(!completed){submitting.current = false; setBusy(false);} }
+    } catch (e) { if(e instanceof PaymentCancelled)setError('Payment cancelled. You have not been charged.');else if((e as {response?:{status?:number}})?.response?.status===409){keepDay.current=date;setSlotNotice(labError(e,'This time is now full. If payment succeeded, the amount is being refunded.'));setTime('');setAvailabilityTry(n=>n+1);setStep(3);}else setError(labError(e, 'Could not book. If payment succeeded, the amount is being refunded. Please try again.')); } finally { if(!completed){submitting.current = false; setBusy(false);} }
   };
 
+  const patient:ReviewPatient|null=forWho?(()=>{const member=family.find(f=>String(f.memberUserId)===forWho);return member?{...member}:rx?.family_member_id===forWho?{name:rx.patient_name}:null;})():hcReq?.patient&&(!hcReq.patientProfileId||hcReq.patientProfileId!==reviewProfile?.patientProfileId)?{name:hcReq.patient}:reviewProfile?{name:reviewProfile.fullName,gender:reviewProfile.gender,dateOfBirth:reviewProfile.dateOfBirth,phone:reviewProfile.phone,email:reviewProfile.email}:null;
+  const normalBrowse=step===1&&!labParam&&!rx&&!hcReq;
   const card = 'bg-white rounded-2xl border border-slate-200 p-5';
   const field = 'w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10';
 
   return (
-    <div className="w-full space-y-5 pb-10">{step!==2&&<LocationBar compact purpose="find labs near you"/>}
-      <button disabled={busy} onClick={() => step > 1 ? setStep(step-1) : navigate(-1)} className="inline-flex items-center gap-1 text-sm font-bold text-slate-600"><ArrowLeft className="w-4 h-4" /> Back</button>
+    <div className="lj-flow w-full space-y-5 pb-10">{step===1&&!normalBrowse&&!labPage&&<LocationBar compact purpose="find labs near you"/>}
+      {!normalBrowse&&step<=2&&!(step===1&&labPage)&&<><button disabled={busy} onClick={() => step > 1 ? setStep(step-1) : navigate(-1)} className="inline-flex items-center gap-1 text-sm font-bold text-slate-600"><ArrowLeft className="w-4 h-4" /> Back</button>
       <div>
         <div>
-        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2"><FlaskConical className="w-6 h-6 text-teal-700" /> {labMode ? `Book tests at ${labPage!.name}` : 'Book lab tests'}</h1>
-        <p className="text-sm text-slate-500">{step===4?"Review your booking details and choose how to pay.":labMode ? "Pick your tests, then a centre visit or home collection and a time. You pay only for what you book." : "Choose your tests, compare labs near you, and visit a collection centre or have the sample collected at home."}</p>
+        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2"><FlaskConical className="w-6 h-6 text-teal-700" /> {step===2?'Select a lab':'Book lab tests'}</h1>
+        <p className="text-sm text-slate-500">{step===5?"Review your booking details and choose how to pay.":"Choose your tests, compare labs near you, and visit a collection centre or have the sample collected at home."}</p>
         </div>
 
       </div>
 
-      <LabBookingProgress step={step} />
+      </>}
+      {step>=3&&<><nav className="lj-breadcrumb"><button onClick={()=>setStep(1)}>Lab tests</button><span aria-hidden="true">&rsaquo;</span><span>{lab?.name}</span></nav><LabBookingProgress step={step} /></>}
       {linkNotice && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Some tests in this link are no longer available.</p>}
-      <h2 ref={stepHeading} tabIndex={-1} className="text-lg font-bold text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-orange-500">{['1. Select tests','2. Choose a lab','3. Choose date and time','4. Review and confirm'][step-1]}</h2>
-      {step === 1 && !labMode && !pkg && !rx && !hcReq && <div className="lab-catalogue-tabs" role="group" aria-label="Test catalogue view"><button type="button" aria-pressed={catalogueView==='tests'} onClick={()=>setCatalogueView('tests')}>Tests by category</button><button type="button" aria-pressed={catalogueView==='packages'} onClick={()=>setCatalogueView('packages')}>Health packages</button></div>}
-      {step === 1 && labPage && (
-        <section aria-label="This laboratory" className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="p-5 flex flex-wrap items-start gap-4 border-b border-slate-100">
-            <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0"><FlaskConical className="w-7 h-7" /></div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">{labPage.name}<FavoriteButton partnerId={String((labPage as any).id)} name={labPage.name} /></h2>
-              <p className="text-xs text-slate-600 mt-0.5">{['Registered laboratory', labPage.registration_number ? `Reg. No. ${labPage.registration_number}` : null].filter(Boolean).join(' · ')}</p>
-              <p className="text-xs text-slate-600 mt-1">{labPage.locations.map((l: any) => [l.name, l.area || l.city].filter(Boolean).join(', ')).join(' · ') || 'Centres being added'}</p>
-              {(labPage.settings as any)?.home?.enabled && <p className="text-xs font-semibold text-emerald-700 mt-1">Home sample collection available</p>}
-            </div>
-          </div>
-          {!!labPage.tests?.length && (
-            <div className="p-5 space-y-2">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-500">{labMode ? '1. Choose tests at this lab' : 'Tests at this lab'}</p>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                {labPage.tests.map((t) => {
-                  const on = chosen.includes(t.code);
-                  return (
-                    <li key={t.code} className={`rounded-xl border p-3 flex items-start justify-between gap-3 ${on ? 'border-teal-600 bg-teal-50/40' : 'border-slate-200'}`}>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900">{t.name}</p>
-                        <LabTestBadges
-                          fastingHours={t.fasting_hours}
-                          specimenType={(t as any).specimen_type || byCode.get(t.code)?.specimen_type}
-                          tatHours={t.tat_hours}
-                          className="mt-1"
-                        />
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-black text-slate-900">₹{t.price}</p>
-                        <button type="button" aria-pressed={on} onClick={() => toggle(t.code)} className={`mt-1 px-3 py-1 rounded-lg text-xs font-bold ${on ? 'bg-teal-700 text-white' : 'border border-teal-700 text-teal-700'}`}>{on ? 'Added' : 'Add'}</button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {labMode && chosen.length > 0 && fasting > 0 && <p className="text-xs font-semibold text-amber-900 flex items-center gap-1"><Utensils className="w-3.5 h-3.5" /> Needs {fasting} hours of fasting before the sample. Water is fine.</p>}
-              {labMode && chosen.length > 0 && !lab && !labModeMissing && <p className="text-xs text-slate-500">Checking times at this lab…</p>}
-              {labModeMissing && <p role="alert" className="text-xs font-semibold text-rose-700">This lab can’t take these tests together online right now. Remove one, or book them at another lab.</p>}
-            </div>
-          )}
-        </section>
-      )}
+      {normalBrowse&&<LabBrowse onOpen={id=>{const next=latestParams();next.set('lab',id);next.set('step','1');setParams(next);}}/>}
+      {!normalBrowse&&!(step===1&&labPage)&&<h2 ref={stepHeading} tabIndex={-1} className={(step===2?'sr-only ':'')+"text-xl font-extrabold text-slate-900 tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-orange-500"}>{!normalBrowse&&['Select tests','Select a lab','Collection method & schedule','Patient details','Review & pay'][step-1]}</h2>}
+      {step === 1 && labPage && <LabDetailSelection lab={labPage} chosen={chosen} onToggle={toggle} onContinue={()=>setStep(2)} onBack={()=>{const next=latestParams();next.delete('lab');setParams(next);}}/>}
+      {step===1&&labMode&&labPageState==='loading'&&<div className="lj-state" role="status">Loading laboratory and tests…</div>}
+      {step===1&&labMode&&labPageState==='error'&&<div className="lj-state" role="alert"><h2>Could not load this laboratory</h2><p>Please retry or return to nearby labs.</p><button onClick={()=>{const next=latestParams();next.delete('lab');setParams(next);}}>Back to labs</button></div>}
       {hcReq && (
         <section aria-label="Asked for by your care team" className="rounded-2xl border border-violet-200 bg-violet-50/50 p-4 space-y-1">
           <p className="text-sm font-black text-violet-900 flex items-center gap-1.5"><Home className="w-4 h-4" /> Tests asked for by your home care team{hcReq.patient ? ` for ${hcReq.patient}` : ''}</p>
@@ -329,18 +308,6 @@ export default function LabBookingScreen() {
         </section>
       )}
 
-      {step === 1 && family.length > 0 && (
-        <section aria-label="Who is this for" className={`${card} space-y-2`}>
-          <h2 className="text-sm font-black text-slate-900">Who are the tests for?</h2>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Patient">
-            {[{ id: '', name: 'Myself' }, ...family.map((f) => ({ id: String(f.memberUserId), name: `${f.name} (${f.relationship}${f.age !== null && f.age !== undefined ? `, ${f.age} y` : ''})` }))].map((p) => (
-              <button key={p.id || 'me'} type="button" role="radio" aria-checked={forWho === p.id} onClick={() => setForWho(p.id)} className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${forWho === p.id ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-700 border-slate-200'}`}>{p.name}</button>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-500">The report is made out to this person; you manage the booking and get the notifications.</p>
-        </section>
-      )}
-
       {step <= 2 && pkg && (
         <section aria-label="Your health package" className="rounded-2xl border border-teal-300 bg-teal-50/40 p-4 space-y-2">
           <div className="flex items-start justify-between gap-2">
@@ -349,120 +316,56 @@ export default function LabBookingScreen() {
               <h2 className="text-lg font-black text-slate-900">{pkg.name}</h2>
               <p className="text-xs text-slate-600">{pkg.lab.name}{pkg.lab.registration_number ? ` · Reg. ${pkg.lab.registration_number}` : ''}</p>
             </div>
-            <button type="button" onClick={() => { setStep(1); setPkg(null); setLab(null); }} className="text-xs font-bold text-slate-600 inline-flex items-center gap-1"><X className="w-3.5 h-3.5" /> Change</button>
+            <button type="button" onClick={() => {setPkg(null);setLab(null);updateAppointment({package:null,step:'1',lab:null,date:null,time:null});}} className="text-xs font-bold text-slate-600 inline-flex items-center gap-1"><X className="w-3.5 h-3.5" /> Change</button>
           </div>
           <PackageFacts p={pkg} />
           <ul className="grid sm:grid-cols-2 gap-1.5">{pkg.tests.map((t) => <li key={t.code} className="text-xs text-slate-700"><b>{t.name}</b> <span className="text-slate-500">· {t.parameters} parameter{t.parameters === 1 ? '' : 's'}</span>{t.about && <span className="block text-[11px] text-slate-500">{t.about}</span>}</li>)}</ul>
         </section>
       )}
 
-      {step === 1 && !labMode && !pkg && !rx && catalogueView === 'packages' && packages && packages.length > 0 && (
-        <section aria-label="Health checkups" className={`${card} space-y-3`}>
-          <div>
-            <h2 className="text-base font-black text-slate-900 flex items-center gap-1.5"><PackageCheck className="w-5 h-5 text-teal-700" /> Health checkups</h2>
-            <p className="text-xs text-slate-500">Packages from registered labs, cheaper than booking the same tests one by one. Compare labs inside each checkup.</p>
-          </div>
-          {(packages?.length || 0) > 6 || pkgQ ? (
-            <label className="relative block">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input aria-label="Search health checkups" value={pkgQ} onChange={(e) => { setPkgQ(e.target.value); setPkgShown(6); }} placeholder="Search checkups by name, lab or test (e.g. diabetes, thyroid)" className={`${field} pl-9`} />
-            </label>
-          ) : null}
-          {!pkgGroups.length && <p className="text-sm text-slate-500">No checkup matches “{pkgQ}”.</p>}
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {pkgGroups.slice(0, pkgShown).map((labs) => {
-              const p = labs[0]; const key = p.code; const open = openPkg === key;
-              return (
-                <li key={key} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-2.5 hover:border-teal-300 hover:shadow-sm transition">
-                  <div className="flex justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-base font-black text-slate-900 leading-snug line-clamp-2 min-h-[2.75rem]">{p.name}</p>
-                      <p className="text-xs text-slate-600 mt-0.5 line-clamp-2 min-h-[2rem]">{p.audience || ' '}</p>
-                      {/* Same line on every card: one lab names it; several labs say how many. */}
-                      <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 truncate"><ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" /><span className="truncate">{labs.length === 1 ? `${p.lab.name}${p.lab.registration_number ? ` · Reg. ${p.lab.registration_number}` : ''}` : `Offered by ${labs.length} registered labs`}</span></p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[11px] text-slate-500">{labs.length > 1 ? 'from' : ''}</p>
-                      <p className="text-lg font-black text-slate-900 tabular-nums leading-none">{rupees(p.price)}</p>
-                      <p className="text-[11px] text-slate-400 line-through tabular-nums">{rupees(p.separate_price)}</p>
-                      {p.saving_pct > 0 && <p className="mt-1 inline-block text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">Save {labs.length > 1 ? 'up to ' : ''}{Math.max(...labs.map((x) => x.saving_pct || 0))}%</p>}
-                    </div>
-                  </div>
-                  <PackageFacts p={p} />
-                  {openPkg === `inc:${key}` ? (
-                    <ul className="space-y-1 border-t border-slate-100 pt-2">{p.tests.map((t) => <li key={t.code} className="text-[11px] text-slate-700"><b>{t.name}</b> · {t.parameters} parameter{t.parameters === 1 ? '' : 's'}{t.about && <span className="block text-slate-500">{t.about}</span>}</li>)}</ul>
-                  ) : <p className="text-[11px] text-slate-600 line-clamp-2">{p.tests.map((t) => t.name).join(' · ')}</p>}
-                  {open && (
-                    <ul className="border-t border-slate-100 pt-2 space-y-1.5" aria-label={`Labs offering ${p.name}`}>
-                      {labs.slice(0, 8).map((x) => (
-                        <li key={x.code} className="flex items-center gap-2 text-xs">
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="flex-1 min-w-0"><b className="text-slate-800 block truncate">{x.lab.name}</b>{x.lab.registration_number && <span className="text-slate-500">Reg. {x.lab.registration_number}</span>}</span>
-                          <span className="font-black tabular-nums text-slate-900">{rupees(x.price)}</span>
-                          <button type="button" onClick={() => choosePackage(x)} className="px-2.5 py-1 rounded-lg border border-teal-700 text-teal-800 font-bold hover:bg-teal-50">Book</button>
-                        </li>
-                      ))}
-                      {labs.length > 8 && <li className="text-[11px] text-slate-500">+ {labs.length - 8} more labs; search by lab name above.</li>}
-                    </ul>
-                  )}
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
-                    <button type="button" aria-expanded={openPkg === `inc:${key}`} onClick={() => setOpenPkg(openPkg === `inc:${key}` ? null : `inc:${key}`)} className="text-xs font-bold text-slate-600 inline-flex items-center gap-0.5 whitespace-nowrap">{openPkg === `inc:${key}` ? 'Hide tests' : `What's included (${p.test_count})`}<ChevronDown className={`w-3.5 h-3.5 ${openPkg === `inc:${key}` ? 'rotate-180' : ''}`} /></button>
-                    {labs.length > 1 ? (
-                      <button type="button" aria-expanded={open} onClick={() => setOpenPkg(open ? null : key)} className="px-3 py-1.5 rounded-lg bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap">{open ? 'Hide labs' : `Compare ${labs.length} labs`}<ChevronDown className={`w-3.5 h-3.5 ${open ? 'rotate-180' : ''}`} /></button>
-                    ) : (
-                      <button type="button" onClick={() => choosePackage(p)} className="px-3 py-1.5 rounded-lg bg-teal-700 text-white text-xs font-bold whitespace-nowrap">Book now</button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          {pkgGroups.length > pkgShown && <button type="button" onClick={() => setPkgShown(pkgShown + 6)} className="w-full py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">Show more checkups ({pkgGroups.length - pkgShown} more)</button>}
-          
-        </section>
-      )}
+      {!labMode && !normalBrowse && (<>
+      <BookingForChip family={family} value={forWho} onChange={setForWho}/>{step === 1 && <LabTestSelection city={city} patientPin={searchArea?.pincode||addr.pincode} estimate={combinedEstimate(labs)} estimateLoading={labs===null} selectedPackage={pkg} tests={tests} chosen={chosen} onToggle={toggle} onClear={()=>setChosen([])} onContinue={()=>setStep(2)} query={q} onQuery={setQ} packages={packages} onPackage={choosePackage} error={error} onRetry={()=>setCatalogueRetry(n=>n+1)} onSelectOffer={(code,selected)=>{const codes=Array.from(new Set([...chosen,code]));setChosen(codes);selectLab(selected);setStep(2);}} />}
 
-      {step === 1 && !labMode && !pkg && !rx && catalogueView === 'packages' && (!packages || !packages.length) && <section className={card}><p role="status" className="text-sm text-slate-500">{packages ? 'No health packages are available right now. Choose individual tests instead.' : 'Loading health packages...'}</p></section>}
-      {!pkg && !labMode && (<>
-      {step === 1 && (catalogueView === 'tests' || !!rx || !!hcReq) && <LabTestSelection tests={tests} chosen={chosen} onToggle={toggle} onClear={()=>setChosen([])} onContinue={()=>setStep(2)} query={q} onQuery={setQ} />}
-
-      {step === 2 && chosen.length > 0 && (
-        <LabComparison savedLocation={comparisonAddress?.pin?{...comparisonAddress.pin,label:[comparisonAddress.addressLine2,comparisonAddress.city,comparisonAddress.pincode].filter(Boolean).join(", ")}:null} patientPin={comparisonAddress?.pincode} labs={labs} pinnedId={rx?.hospital_lab?.id || labParam || null} error={labsErr} onRetry={() => setLabsTry(n=>n+1)} city={city} onCity={setCity} selectedId={lab?.id || null} onSelect={selectLab} selectedLab={lab} selectedTests={chosen.map(code=>({code,name:byCode.get(code)?.name||code,fasting_hours:byCode.get(code)?.fasting_hours,patient_instructions:byCode.get(code)?.patient_instructions}))} onChange={()=>setStep(1)} onContinue={()=>setStep(3)} canContinue={!!lab && !!centreId && !!labs?.some(l=>l.id===lab.id && l.locations.some(c=>c.id===centreId)) && !labsErr} busy={busy}/>
+      {step === 2 && (chosen.length > 0||!!pkg) && (
+        <LabComparison packageSelection={pkg} onRemoveTests={codes=>setChosen(current=>current.filter(c=>!codes.includes(c)))} savedLocation={comparisonAddress?.pin?{...comparisonAddress.pin,label:[comparisonAddress.addressLine2,comparisonAddress.city,comparisonAddress.pincode].filter(Boolean).join(", ")}:null} patientPin={searchArea?.pincode||addr.pincode} labs={labs} pinnedId={rx?.hospital_lab?.id || labParam || null} error={labsErr} onRetry={() => setLabsTry(n=>n+1)} city={city} onCity={setCity} selectedId={lab?.id || null} onSelect={selectLab} selectedLab={lab} selectedTests={chosen.map(code=>({code,name:byCode.get(code)?.name||code,fasting_hours:byCode.get(code)?.fasting_hours,patient_instructions:byCode.get(code)?.patient_instructions}))} onChange={()=>setStep(1)} onContinue={()=>setStep(3)} canContinue={!!lab && !!centreId && !!labs?.some(l=>l.id===lab.id && l.locations.some(c=>c.id===centreId)) && !labsErr} busy={busy}/>
 
       )}
       </>)}
 
-      {step === 2 && (pkg || labMode) && <section aria-label="Choose a lab" className={card}><h3 className="font-bold">{lab?.name || 'Checking selected lab...'}</h3><p className="mt-2 text-sm text-slate-500">{lab?.locations.map(c=>[c.name,c.address,c.city].filter(Boolean).join(', ')).join(' / ') || 'Centre details not provided'}</p>{lab && <p className="mt-2 font-bold">{rupees(lab.total)}</p>}{labModeMissing && <p role="alert">This lab cannot offer the selected tests together. Go back to change your tests.</p>}</section>}
-      {step === 3 && lab && <LabSchedule lab={lab} centreId={centreId} onCentre={id=>{setCentreId(id);updateAppointment({centre:String(id),date:null,time:null});}} mode={mode} onMode={setMode}
-        tests={pkg?pkg.tests.map(t=>({code:t.code,name:t.name,fasting_hours:pkg.fasting_hours,patient_instructions:null})):chosen.flatMap(code=>byCode.get(code)?[byCode.get(code)!]:[])}
+      {step === 2 && (labMode) && <section aria-label="Choose a lab" className={card}><h3 className="font-bold">{lab?.name || 'Checking selected lab...'}</h3><p className="mt-2 text-sm text-slate-500">{lab?.locations.map(c=>[c.name,c.address,c.city].filter(Boolean).join(', ')).join(' / ') || 'Centre details not provided'}</p>{lab && <p className="mt-2 font-bold">{rupees(lab.total)}</p>}{labModeMissing && <p role="alert">This lab cannot offer the selected tests together. Go back to change your tests.</p>}</section>}
+      {(step === 3) && lab && <LabSchedule notes={reason} onNotes={setReason} nextLabel="Continue to patient details" lab={pricedLab||lab} centreId={centreId} onCentre={id=>{setCentreId(id);updateAppointment({centre:String(id),date:null,time:null});}} mode={mode} onMode={setMode}
+        tests={[...(pkg?pkg.tests.map(t=>({code:t.code,name:t.name,fasting_hours:pkg.fasting_hours,patient_instructions:byCode.get(t.code)?.patient_instructions||null})):[]),...chosen.flatMap(code=>byCode.get(code)?[byCode.get(code)!]:[])]}
         date={date} time={time} onDate={value=>{keepDay.current=null;setDate(value);}} onTime={value=>{setSlotNotice(null);setTime(value);}} onChangeLab={()=>setStep(2)} onContinue={()=>setStep(4)}
         availability={availability} loading={availabilityBusy||(!availability&&!availabilityError&&(mode==='LAB_VISIT'||validHomePin(addr.pincode)))} error={availabilityError} onRetry={()=>setAvailabilityTry(n=>n+1)} notice={slotNotice}
         address={[addr.line,addr.area,addr.city,addr.pincode].filter(Boolean).join(', ')} pincode={addr.pincode} addressReady={addrReady} savedLocation={comparisonAddress?.pin}
         testsTotal={scheduleTestsTotal} total={scheduleTotal} busy={busy}
-        addressFields={<div className="mt-3 space-y-3">{savedAddresses.length>0&&<label className="lab-schedule-centre">Saved collection address<select aria-label="Saved collection address" value={savedAddresses.find(a=>a.addressLine1===addr.line&&a.pincode===addr.pincode)?.addressId||''} onChange={e=>{const a=savedAddresses.find(a=>a.addressId===e.target.value);if(a){setAddr({line:a.addressLine1||'',area:a.addressLine2||'',landmark:a.landmark||'',city:a.city||'',pincode:a.pincode||''});setHomePin(a.pin||null);updateAppointment({address:a.addressId,pincode:a.pincode,date:null,time:null});}}}><option value="">Enter another address</option>{savedAddresses.map(a=><option key={a.addressId} value={a.addressId}>{[a.label,a.addressLine1,a.city,a.pincode].filter(Boolean).join(', ')}</option>)}</select></label>}
+        addressFields={<div className="mt-3 space-y-3"><p className="text-sm">{[addr.line,addr.city,addr.pincode].filter(Boolean).join(', ')}</p><details className="lj-address-edit"><summary>Change / Add new address</summary><div className="mt-3 space-y-3">{savedAddresses.length>0&&<label className="lab-schedule-centre">Saved collection address<ThemedSelect aria-label="Saved collection address" value={savedAddresses.find(a=>a.addressLine1===addr.line&&a.pincode===addr.pincode)?.addressId||''} onChange={e=>{const a=savedAddresses.find(a=>a.addressId===e.target.value);if(!a){setAddr({line:'',area:'',landmark:'',city:city,pincode:addr.pincode});setHomePin(null);updateAppointment({address:null,date:null,time:null});}if(a){setAddr({line:a.addressLine1||'',area:a.addressLine2||'',landmark:a.landmark||'',city:a.city||'',pincode:a.pincode||''});setHomePin(a.pin||null);updateAppointment({address:a.addressId,pincode:a.pincode,date:null,time:null});}}}><option value="">Enter another address</option>{savedAddresses.map(a=><option key={a.addressId} value={a.addressId}>{[a.label,a.addressLine1,a.city,a.pincode].filter(Boolean).join(', ')}</option>)}</ThemedSelect></label>}
             <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2" aria-label="Collection address">
               <input aria-label="House / flat and street" value={addr.line} onChange={(e) => setAddr({ ...addr, line: e.target.value.slice(0, 120) })} placeholder="House / flat no. and street" className={`${field} sm:col-span-2`} />
               <input aria-label="Area" value={addr.area} onChange={(e) => setAddr({ ...addr, area: e.target.value.slice(0, 60) })} placeholder="Area / locality" className={field} />
               <input aria-label="Landmark (optional)" value={addr.landmark} onChange={(e) => setAddr({ ...addr, landmark: e.target.value.slice(0, 60) })} placeholder="Landmark (optional)" className={field} />
               <input aria-label="City" value={addr.city} onChange={(e) => setAddr({ ...addr, city: e.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 40) })} placeholder="City" className={field} />
               <input aria-label="Pincode" inputMode="numeric" value={addr.pincode} onChange={(e) => {const pin=e.target.value.replace(/\D/g, '').slice(0, 6);setAddr({...addr,pincode:pin});setHomePin(null);updateAppointment({pincode:pin,address:null,date:null,time:null});}} placeholder="6-digit pincode" className={field} />
-              
-              <HomePinField value={homePin} onChange={setHomePin} who="sample collector" />
-            </fieldset></div>}/ >}
 
-      {step === 4 && lab && <LabReview lab={lab} centreId={centreId}
-        items={pkg?[{code:pkg.code,name:pkg.name,price:pkg.price}]:chosen.flatMap(code=>{const test=byCode.get(code);return test?[{code,name:test.name,price:lab.prices_vary?undefined:lab.selected.find(t=>t.code===code)?.price}]:[];})}
+              <HomePinField value={homePin} onChange={setHomePin} who="sample collector" />
+            </fieldset></div></details></div>}/ >}
+
+      {step===4&&lab&&<LabPatientDetails family={family} patient={patient} who={forWho} onPatient={setForWho} reason={reason} onReason={setReason} rx={rx} onRx={setRx} loading={profileBusy} error={profileError} onRetry={()=>setProfileTry(n=>n+1)} onContinue={()=>setStep(5)}/>}
+      {step === 5 && lab && <LabReview reason={reason} packageSaving={pkg&&pkg.separate_price>pkg.price?pkg.saving:undefined} lab={pricedLab||lab} centreId={centreId}
+        items={[...(pkg?[{code:pkg.code,name:pkg.name,price:pkg.price}]:[]),...chosen.flatMap(code=>{const test=byCode.get(code);return test?[{code,name:test.name,price:pricedLab?.selected.find(t=>t.code===code)?.price}]:[];})]}
         preparationTests={pkg?pkg.tests.flatMap(t=>byCode.get(t.code)?[byCode.get(t.code)!]:[]):chosen.flatMap(code=>byCode.get(code)?[byCode.get(code)!]:[])}
         date={date} time={time} slotMinutes={availability?.slot_minutes} visit={mode} address={[addr.line,addr.area,addr.landmark,addr.city,addr.pincode].filter(Boolean).join(', ')}
-        patient={forWho?(()=>{const member=family.find(f=>String(f.memberUserId)===forWho);return member?{...member}:rx?.family_member_id===forWho?{name:rx.patient_name}:null;})():hcReq?.patient&&(!hcReq.patientProfileId||hcReq.patientProfileId!==reviewProfile?.patientProfileId)?{name:hcReq.patient}:reviewProfile?{name:reviewProfile.fullName,gender:reviewProfile.gender,dateOfBirth:reviewProfile.dateOfBirth,phone:reviewProfile.phone,email:reviewProfile.email}:null}
+        patient={patient}
         patientLoading={profileBusy} patientError={profileError} onRetryPatient={()=>setProfileTry(n=>n+1)} family={family} defaultPatientLabel={hcReq?.patient||undefined} forWho={forWho} onPatient={setForWho}
-        testsTotal={scheduleTestsTotal} homeFee={home?.fee} total={scheduleTotal} pay={pay} onPay={setPay} upi={upi} onUpi={setUpi} onEdit={setStep} onBook={book} busy={busy} error={error}
-        disabledReason={reviewDisabledReason({busy,checking:availabilityBusy,availabilityError,slotValid:times.includes(time),addressReady:addrReady,pay,upi,hasTests:!!pkg||chosen.length>0,hasCentre:!!centreId,total:scheduleTotal})}/ >}
-      {error && !(step === 4 && lab) && <p role="alert" className="text-sm font-semibold text-rose-700">{error}</p>}
-      <nav aria-label="Booking step navigation" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <button type="button" disabled={busy} onClick={()=>step > 1 ? setStep(step-1) : navigate('/lab-bookings')} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">{step > 1 ? 'Back to previous step' : 'My lab bookings'}</button>
-        {step < 3 && !(step === 2 && !pkg && !labMode) && !(step === 1 && !labMode && !pkg && catalogueView === 'tests') && <button type="button" disabled={busy || (step === 1 ? !chosen.length && !pkg : step === 2 ? !lab || !centreId || !!labsErr : !lab || !centreId || !time || !times.includes(time) || !addrReady)} onClick={()=>setStep(step+1)} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{step === 1 ? 'Continue to select centre' : step === 2 ? 'Continue to date and time' : 'Continue to review'}</button>}
-      </nav>
+        testsTotal={scheduleTestsTotal} homeFee={home?.fee} total={scheduleTotal} pay={pay} onPay={setPay} upi={upi} onUpi={setUpi} onEdit={value=>setStep(value)} onBook={book} busy={busy} error={error}
+        disabledReason={reviewDisabledReason({busy,checking:availabilityBusy||profileBusy,availabilityError,slotValid:times.includes(time),addressReady:addrReady,pay,upi,hasTests:!!pkg||chosen.length>0,hasCentre:!!centreId,total:scheduleTotal})}/ >}
+      {!normalBrowse && error && !(step === 5 && lab) && <p role="alert" className="text-sm font-semibold text-rose-700">{error}</p>}
+      {!normalBrowse && step === 1 && !labPage && (
+        <nav aria-label="Booking step navigation" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <button type="button" disabled={busy} onClick={()=>step > 1 ? setStep(step-1) : navigate('/lab-bookings')} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">{step > 1 ? 'Back to previous step' : 'My lab bookings'}</button>
+          {!(step === 1 && !labMode && !pkg) && <button type="button" disabled={busy || (!chosen.length && !pkg)} onClick={()=>setStep(step+1)} className="rounded-xl bg-orange-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">Continue to select centre</button>}
+        </nav>
+      )}
     </div>
   );
 }

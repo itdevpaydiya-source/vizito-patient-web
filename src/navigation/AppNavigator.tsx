@@ -21,9 +21,11 @@ import VerifyReportScreen from '../presentation/modules/labs/VerifyReportScreen'
 import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
 import FindBloodScreen from '../presentation/modules/bloodbank/FindBloodScreen';
 import RequestBloodScreen from '../presentation/modules/bloodbank/RequestBloodScreen';
+import MyBloodRequestsScreen from '../presentation/modules/bloodbank/MyBloodRequestsScreen';
 import EmergencyBookings from '../presentation/modules/bookings/EmergencyBookings';
 import DonateBloodScreen from '../presentation/modules/bloodbank/DonateBloodScreen';
 import BookAmbulanceScreen from '../presentation/modules/ambulance/BookAmbulanceScreen';
+import MyAmbulanceTripsScreen from '../presentation/modules/ambulance/MyAmbulanceTripsScreen';
 
 import UrgentAmbulanceScreen from '../presentation/modules/ambulance/UrgentAmbulanceScreen';
 import UniversalBookingScreen from '../presentation/modules/booking/UniversalBookingScreen';
@@ -41,6 +43,7 @@ import OrderBuilderScreen from '../presentation/modules/pharmacy/OrderBuilderScr
 import OrderDetailScreen from '../presentation/modules/pharmacy/OrderDetailScreen';
 import FamilyProfilesScreen from '../presentation/modules/family/FamilyProfilesScreen';
 import ReviewsScreen from '../presentation/modules/reviews/ReviewsScreen';
+import VideoConsultationScreen from '../presentation/modules/video/VideoConsultationScreen';
 
 // Medical Equipment Rental Module Screens
 import {
@@ -76,6 +79,8 @@ const LoginWrapper = () => {
   const { setRole } = useRole();
 
   return (
+    <>
+      {new URLSearchParams(window.location.search).get('closed') === '1' && <p role="status" className="ph-success" style={{ margin: '16px auto', maxWidth: 620 }}>Your account is closed. You are signed out everywhere.</p>}
     <AuthModule
       onLoginSuccess={(userData) => {
         localStorage.setItem(
@@ -100,6 +105,7 @@ const LoginWrapper = () => {
       }}
       onRegisterClick={() => navigate('/auth/register')}
     />
+    </>
   );
 };
 
@@ -164,7 +170,7 @@ const AppNavigator = () => {
         <Route path="/homecare-services" element={<UniversalBookingScreen />} />
         <Route path="/ambulance-dispatch" element={<Navigate to="/urgent-ambulance" replace />} />
         <Route path="/book-ambulance" element={<BookAmbulanceScreen />} />
-        <Route path="/ambulance-trips" element={<EmergencyBookings kind="ambulance" />} />
+        <Route path="/ambulance-trips" element={<MyAmbulanceTripsScreen />} />
         <Route path="/urgent-ambulance" element={<UrgentAmbulanceScreen />} />
         <Route path="/lab-tests" element={<LabBookingScreen />} />
         <Route path="/lab-tests/booked/:orderId" element={<LabBookingConfirmation />} />
@@ -173,7 +179,7 @@ const AppNavigator = () => {
         {/* Blood Bank */}
         <Route path="/find-blood" element={<FindBloodScreen />} />
         <Route path="/request-blood" element={<RequestBloodScreen />} />
-        <Route path="/blood-requests" element={<EmergencyBookings kind="blood" />} />
+        <Route path="/blood-requests" element={<MyBloodRequestsScreen />} />
         <Route path="/donate-blood" element={<DonateBloodScreen />} />
         {/* Medical Equipment Rental Module */}
         <Route path="/equipment-rental" element={<EquipmentCatalogueScreen />} />
@@ -196,6 +202,9 @@ const AppNavigator = () => {
         <Route path="/my-consultations" element={<AppointmentsRoute />} />
         <Route path="/bookings" element={<MyConsultationsScreen />} />
         <Route path="/appointments" element={<AppointmentsRoute />} />
+        <Route path="/video-consultation/:bookingId" element={<VideoConsultationScreen />} />
+        <Route path="/video-consultation/:bookingId/call" element={<VideoConsultationScreen />} />
+        <Route path="/video-consultation/:bookingId/waiting-room" element={<VideoConsultationScreen />} />
         <Route path="/pharmacy-orders" element={<PharmacyOrdersScreen />} />
         <Route path="/pharmacy-orders/new" element={<OrderBuilderScreen />} />
         <Route path="/pharmacy-orders/:id" element={<OrderDetailScreen />} />

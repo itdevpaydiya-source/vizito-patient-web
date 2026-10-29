@@ -1,9 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import apiClient from './index';
+import {getPatientProfileApi} from './patientHelper';
 import type { BasketLine } from '../presentation/modules/pharmacy/medicineBasket';
 export interface SavedPharmacyBasket { pharmacyId: string; pharmacyName?: string | null; version: number; lines: BasketLine[] }
 const normalize = (basket: SavedPharmacyBasket): SavedPharmacyBasket => ({ ...basket, lines: basket.lines.map(line => ({ ...line, medicine: { ...line.medicine, mrp: line.medicine.mrp == null ? NaN : Number(line.medicine.mrp) } })) });
+export interface PharmacyDraft {lines:BasketLine[];pharmacyId?:string;prescriptionId?:string;requestId?:string;subject?:string;prescriptionSource?:'vizito'|'upload';documentId?:string;documentName?:string;documentSubject?:string}
+export const pharmacyDraftKey=(patientId:string)=>`vizito_pharmacy_draft:${patientId}`;
+export function readPharmacyDraft(value:string|null):PharmacyDraft{try{const draft=JSON.parse(value||'null');if(!draft||!Array.isArray(draft.lines))return {lines:[]};return {...draft,lines:draft.lines.filter((l:any)=>l?.medicine&&typeof l.medicine.id==='string'&&Number.isSafeInteger(l.quantity)&&l.quantity>0)};}catch{return {lines:[]};}}
 interface BasketState {
+  draft:PharmacyDraft; draftReady:boolean; draftError:string|null; updateDraft:(next:PharmacyDraft|((current:PharmacyDraft)=>PharmacyDraft))=>boolean;
   baskets: Record<string, SavedPharmacyBasket>; loading: boolean; saving: boolean; error: string | null;
   update: (pharmacyId: string, lines: BasketLine[]) => boolean;
   isPersisted: (pharmacyId: string) => boolean;
@@ -12,6 +17,9 @@ interface BasketState {
 const Context = createContext<BasketState | null>(null);
 const session = () => localStorage.getItem('vizito_token') || localStorage.getItem('vizito_user') || '';
 export function PharmacyBasketProvider({children}: {children: ReactNode}) {
+  const [draft,setDraft]=useState<PharmacyDraft>({lines:[]});
+  const draftRef=useRef(draft),draftKey=useRef('');
+  const [draftReady,setDraftReady]=useState(false),[draftError,setDraftError]=useState<string|null>(null);
   const [baskets, setBaskets] = useState<Record<string, SavedPharmacyBasket>>({});
   const current = useRef(baskets);
   const confirmed = useRef<Record<string, SavedPharmacyBasket>>({});
@@ -29,7 +37,8 @@ export function PharmacyBasketProvider({children}: {children: ReactNode}) {
     const token = session();
     const epoch = ++generation.current;
     owner.current = token;
-    setLoading(true); setError(null); blocked.current = true;
+    setLoading(true); setError(null); blocked.current = true;setDraftReady(false);setDraftError(null);draftKey.current='';
+    try {const profile=await getPatientProfileApi();if(epoch===generation.current&&session()===token&&profile?.patientProfileId){draftKey.current=pharmacyDraftKey(profile.patientProfileId);const value=readPharmacyDraft(localStorage.getItem(draftKey.current));draftRef.current=value;setDraft(value);setDraftReady(true);}}catch{if(epoch===generation.current)setDraftError('Your medicine draft could not be loaded. Retry before adding medicines.');}
     try {
       await queue.current;
       if (!token) { if (epoch === generation.current) { publish({}); blocked.current = false; } return; }
@@ -45,7 +54,7 @@ export function PharmacyBasketProvider({children}: {children: ReactNode}) {
   }, []);
   useEffect(() => {
     void reload();
-    const changed = () => { if (owner.current !== session()) { publish({}); confirmed.current = {}; versions.current = {}; void reload(); } };
+    const changed = () => { if (owner.current !== session()) { publish({}); confirmed.current = {}; versions.current = {};draftRef.current={lines:[]};setDraft({lines:[]});setDraftReady(false); void reload(); } };
     window.addEventListener('vizito-auth-changed', changed); window.addEventListener('storage', changed);
     return () => { generation.current++; window.removeEventListener('vizito-auth-changed', changed); window.removeEventListener('storage', changed); };
   }, [reload]);
@@ -76,7 +85,8 @@ export function PharmacyBasketProvider({children}: {children: ReactNode}) {
     });
     return true;
   };
-  return <Context.Provider value={{baskets,loading,saving,error,update,reload,isPersisted:(id)=>!!current.current[id] && current.current[id] === confirmed.current[id],flush:()=>queue.current}}>{children}</Context.Provider>;
+  const updateDraft=(next:PharmacyDraft|((current:PharmacyDraft)=>PharmacyDraft))=>{if(!draftKey.current||!draftReady||session()!==owner.current)return false;const value=typeof next==='function'?next(draftRef.current):next;try{localStorage.setItem(draftKey.current,JSON.stringify(value));draftRef.current=value;setDraft(value);setDraftError(null);return true;}catch{setDraftError('Your basket could not be saved in this browser. Allow local storage and retry.');return false;}};
+  return <Context.Provider value={{draft,draftReady,draftError,updateDraft,baskets,loading,saving,error,update,reload,isPersisted:(id)=>!!current.current[id] && current.current[id] === confirmed.current[id],flush:()=>queue.current}}>{children}</Context.Provider>;
 }
 export function usePharmacyBaskets() {
   const context = useContext(Context);

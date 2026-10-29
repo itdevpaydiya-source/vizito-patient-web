@@ -1,3 +1,4 @@
+import VizitoDialog from '../../../components/dialogs/VizitoDialog';
 import React, { useState } from 'react';
 import { X, PhoneCall, AlertTriangle, ShieldAlert, HeartPulse, CheckCircle2 } from 'lucide-react';
 import { hcTriggerSosApi } from '../../../../services/homecareHelper';
@@ -48,16 +49,10 @@ export default function EmergencySosSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Emergency Support"
-        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full border border-rose-200 shadow-2xl overflow-hidden flex flex-col"
-        data-testid="emergency-sos-sheet"
-      >
-        {/* Urgent Header */}
-        <div className="bg-gradient-to-r from-rose-700 via-rose-800 to-red-900 text-white p-5 sm:p-6 relative">
+    <VizitoDialog title="Emergency Services & SOS" onClose={onClose} className="portal-migrated">
+{/* Urgent Header */}
+
+<div className="bg-gradient-to-r from-rose-700 via-rose-800 to-red-900 text-white p-5 sm:p-6 relative">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
@@ -75,8 +70,9 @@ export default function EmergencySosSheet({
           </p>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 space-y-4">
+{/* Content Body */}
+
+<div className="p-6 space-y-4">
           {/* Government Emergency Numbers FIRST */}
           <div className="space-y-2.5">
             <div className="text-[11px] font-extrabold uppercase tracking-wider text-rose-800">
@@ -173,8 +169,9 @@ export default function EmergencySosSheet({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+{/* Footer */}
+
+<div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -183,7 +180,6 @@ export default function EmergencySosSheet({
             Dismiss
           </button>
         </div>
-      </div>
-    </div>
+</VizitoDialog>
   );
 }

@@ -3,7 +3,7 @@ import {istToday,slotLabel} from './labScheduleDetails';
 export type LabVisitType='LAB_VISIT'|'HOME';
 export const validReviewPrice=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 export const validUpi=(value:string)=>/^[\w.-]{2,}@[a-zA-Z]{2,}$/.test(value.trim());
-export const reviewPaymentOptions=(visit:LabVisitType)=>[{value:'UPI' as const,label:'Pay now (UPI)'},{value:'CASH' as const,label:visit==='HOME'?'Pay the collector':'Pay at the centre'}];
+export const reviewPaymentOptions=(visit:LabVisitType)=>[{value:'UPI' as const,label:'Pay online'},{value:'CASH' as const,label:visit==='HOME'?'Pay the collector':'Pay at the centre'}];
 export const reviewButtonLabel=(pay:'UPI'|'CASH',visit:LabVisitType,total?:number,busy=false)=>busy?'Booking…':pay==='UPI'?validReviewPrice(total)?`Pay ${rupees(total)} and confirm booking`:'Confirm booking':visit==='HOME'?'Book home collection':'Book visit';
 export function reviewDisabledReason(p:{busy:boolean;checking:boolean;availabilityError?:string|null;slotValid:boolean;addressReady:boolean;pay:'UPI'|'CASH';upi:string;hasTests:boolean;hasCentre:boolean;total?:number}) {
  if(p.busy)return 'Your booking is being processed. Please wait.';
@@ -14,7 +14,6 @@ export function reviewDisabledReason(p:{busy:boolean;checking:boolean;availabili
  if(!p.slotValid)return 'Choose an available appointment before confirming.';
  if(!p.addressReady)return 'Complete your home collection address before confirming.';
  if(p.pay==='UPI'&&!validReviewPrice(p.total))return 'Return to lab selection to check the payable amount.';
- if(p.pay==='UPI'&&!validUpi(p.upi))return 'Enter a valid UPI ID to confirm your booking.';
  return null;
 }
 export function appointmentRange(time:string,minutes?:number) {

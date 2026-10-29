@@ -11,8 +11,8 @@ it('renders preparation exactly once and omits instructions when no data is supp
  const absent=renderToStaticMarkup(<LabReview {...props} preparationTests={[]}/>);expect(absent).not.toContain('5. Test preparation');
  const fallback=renderToStaticMarkup(<LabReview {...props} preparationTests={[{code:'T',name:'API test',fasting_hours:8,patient_instructions:null}]}/>);expect(fallback).toContain('Fasting 8 hours needed');
 });
-it('offers only UPI and the correct pay-later choice for each visit type',()=>{
- expect(reviewPaymentOptions('LAB_VISIT').map(p=>p.label)).toEqual(['Pay now (UPI)','Pay at the centre']);expect(reviewPaymentOptions('HOME').map(p=>p.label)).toEqual(['Pay now (UPI)','Pay the collector']);
+it('offers only secure online payment and the correct pay-later choice for each visit type',()=>{
+ expect(reviewPaymentOptions('LAB_VISIT').map(p=>p.label)).toEqual(['Pay online','Pay at the centre']);expect(reviewPaymentOptions('HOME').map(p=>p.label)).toEqual(['Pay online','Pay the collector']);
  const html=renderToStaticMarkup(<LabReview {...props} visit="HOME" homeFee={25} total={148}/>);expect(html).toContain('Pay the collector');expect(html).not.toContain('Pay at the centre');expect(html).not.toContain('Net banking');expect(html).toContain('Home collection fee');
  expect(renderToStaticMarkup(<LabReview {...props} homeFee={25}/>)).not.toContain('Home collection fee');
 });
@@ -23,7 +23,7 @@ it('cannot render a simulation note in production',()=>{
 it('uses actual totals in payment labels and gives required-input reasons',()=>{
  expect(reviewButtonLabel('UPI','LAB_VISIT',123)).toBe('Pay ₹123 and confirm booking');expect(reviewButtonLabel('CASH','LAB_VISIT',123)).toBe('Book visit');expect(reviewButtonLabel('CASH','HOME',148)).toBe('Book home collection');expect(reviewButtonLabel('CASH','HOME',148,true)).toBe('Booking…');
  const input={busy:false,checking:false,slotValid:true,addressReady:true,pay:'UPI' as const,upi:'patient@upi',hasTests:true,hasCentre:true,total:123};
- expect(reviewDisabledReason(input)).toBeNull();expect(reviewDisabledReason({...input,total:undefined})).toContain('payable amount');expect(reviewDisabledReason({...input,upi:''})).toContain('UPI ID');expect(reviewDisabledReason({...input,slotValid:false})).toContain('available appointment');expect(reviewDisabledReason({...input,addressReady:false})).toContain('home collection address');expect(reviewDisabledReason({...input,busy:true})).toContain('processed');
+ expect(reviewDisabledReason(input)).toBeNull();expect(reviewDisabledReason({...input,total:undefined})).toContain('payable amount');expect(reviewDisabledReason({...input,upi:''})).toBeNull();expect(reviewDisabledReason({...input,slotValid:false})).toContain('available appointment');expect(reviewDisabledReason({...input,addressReady:false})).toContain('home collection address');expect(reviewDisabledReason({...input,busy:true})).toContain('processed');
  const html=renderToStaticMarkup(<LabReview {...props} disabledReason="Choose an available appointment before confirming."/>);expect(html).toContain('disabled=""');expect(html).toContain('Choose an available appointment before confirming.');
 });
 it('omits missing pharmacy, patient and price elements instead of fabricating values',()=>{

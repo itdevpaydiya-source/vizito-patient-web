@@ -1,5 +1,7 @@
+import BookingForChip,{useBookingFamily} from '../family/BookingForChip';
+import { payOnline, PaymentCancelled, type PaidOnline } from '../../../services/razorpayCheckout';
 import LocationBar from '../../components/location/LocationBar';
-import HomeCareJourney from './HomeCareJourney';
+import HomeCareV2 from './HomeCareV2';
 import {Toast} from '../../components/motion/Motion';
 import { useCallback, useEffect, useState } from 'react';
 import HomePinField from '../../components/location/HomePinField';
@@ -97,7 +99,7 @@ export default function HomeCareScreen() {
     setRebookOrder(null);
     // Keep what the patient searched for (agency from the header search, words) across care types.
     const keep: Record<string, string> = {};
-    for (const k of ['agency', 'q']) { const v = params.get(k); if (v && t !== 'mine') keep[k] = v; }
+    for (const k of ['agency', 'q', 'family_member_id']) { const v = params.get(k); if (v && t !== 'mine') keep[k] = v; }
     setParams({ tab: t, ...keep, ...(track === 'longterm' && t !== 'mine' ? { track: 'longterm' } : {}) }, { replace: true });
   };
 
@@ -136,7 +138,7 @@ export default function HomeCareScreen() {
   };
 
   if (params.get('tab') === 'mine') return <HomeCareVisits onBookAgain={handleBookAgain} doctorVisits={<Mine/>}/>;
-  if(!['doctor'].includes(tab)) return <HomeCareJourney referral={referral} prefill={rebookOrder} onDoctor={()=>setParams({tab:'doctor'})} onReferral={r=>{setReferral(r);setParams({tab:referralTab(r)});}}/>;
+  if(!['doctor'].includes(tab)) return <HomeCareV2 referral={referral} prefill={rebookOrder}/>;
 
   return (
     <div className="w-full space-y-6 pb-12">
@@ -752,6 +754,8 @@ export default function HomeCareScreen() {
 }
 
 function Book({ onBooked }: { onBooked: () => void }) {
+  const [familyMemberId,setFamilyMemberId]=useState('');
+  const {family:bookingFamily,error:familyError}=useBookingFamily(setFamilyMemberId);
   const [pincode, setPincode] = useState('');
   const [doctors, setDoctors] = useState<HomeVisitDoctor[] | null>(null);
   const [doc, setDoc] = useState<HomeVisitDoctor | null>(null);
@@ -784,25 +788,26 @@ function Book({ onBooked }: { onBooked: () => void }) {
     if (!doc || !time) return;
     if (addr.line.trim().length < 5 || addr.city.trim().length < 2) { setErr('Enter your house/flat, street and city.'); return; }
     if (reason.trim().length < 5) { setErr('Tell the doctor briefly why you need a home visit.'); return; }
-    if (pay === 'UPI') {
-      const upiRes = validateUpiId(upi);
-      if (!upiRes.ok) { setErr(upiRes.message); return; }
-    }
     setBusy(true); setErr(null);
+    let payment: PaidOnline | undefined;
+    if (pay === 'UPI') {
+      try { payment = await payOnline({ amount: Number(doc.fee), purpose: 'home_visit', description: `Home visit by ${doc.name}` }); }
+      catch (e) { setErr(e instanceof PaymentCancelled ? e.message : `${(e as Error)?.message || 'The payment failed.'} You can try again or choose to pay later.`); setBusy(false); return; }
+    }
     try {
       setDone(await bookHomeVisitApi({
-        doctor_partner_id: doc.doctor_partner_id, visit_date: date, visit_time: time, reason: reason.trim(),
+        family_member_id:familyMemberId||undefined, doctor_partner_id: doc.doctor_partner_id, visit_date: date, visit_time: time, reason: reason.trim(),
         address: { ...(visitPin ? { pin: visitPin } : {}), line: addr.line.trim(), area: addr.area.trim() || undefined, landmark: addr.landmark.trim() || undefined, city: addr.city.trim(), pincode },
-        payment_mode: pay, payment: pay === 'UPI' ? { payment_method: 'UPI', upi_id: upi.trim() } : undefined,
+        payment_mode: pay, payment,
       }));
-    } catch (e) { setErr(labError(e, 'Could not book. Please try again.')); } finally { setBusy(false); }
+    } catch (e) { setErr(`${labError(e, 'Could not book. Please try again.')}${payment ? ' Your payment is being refunded (5–7 working days).' : ''}`); } finally { setBusy(false); }
   };
 
   if (done) {
     return (
-      <div className={`${card} text-center space-y-2`}>
+      <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className={`${card} text-center space-y-2`}>
         <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-        <h2 className="text-xl font-black text-slate-900">Home visit booked</h2>
+        <h2 className="text-xl font-black text-slate-900">Home visit booked</h2><p>{done.patient?.family_member_id?`Booking for ${done.patient.name} (${done.patient.relationship})`:`Booking for ${done.patient?.name||'yourself'}`}</p>
         <p className="text-sm font-bold text-slate-800">{done.doctor_name}</p>
         <p className="text-sm text-slate-700">{dayLong(done.visit_date)} at {label12(done.visit_time)}</p>
         <p className="text-sm text-slate-600">{done.address}</p>
@@ -819,7 +824,7 @@ function Book({ onBooked }: { onBooked: () => void }) {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={search} className={`${card} space-y-3`} aria-label="Find a doctor">
+      <BookingForChip family={bookingFamily} value={familyMemberId} onChange={setFamilyMemberId}/>{familyError&&<p role="alert">{familyError}</p>}<form onSubmit={search} className={`${card} space-y-3`} aria-label="Find a doctor">
         <h2 className="text-sm font-black text-slate-900">1. Where should the doctor come?</h2>
         <div className="flex gap-2">
           <input aria-label="Your pincode" inputMode="numeric" maxLength={6} value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} onBlur={() => { if (pincode) { const p = validatePinCode(pincode); if (!p.ok) setErr(p.message); } }} placeholder="Your 6-digit pincode" className={field} />
@@ -869,11 +874,10 @@ function Book({ onBooked }: { onBooked: () => void }) {
             <textarea value={reason} onChange={(e) => setReason(e.target.value.slice(0, 300))} rows={2} placeholder="e.g. Father, 78, fever for 3 days and too weak to travel" className={`${field} mt-1`} />
           </label>
           <div className="flex gap-2" role="radiogroup" aria-label="Payment">
-            <button type="button" role="radio" aria-checked={pay === 'UPI'} onClick={() => setPay('UPI')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'UPI' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay now (UPI)</button>
+            <button type="button" role="radio" aria-checked={pay === 'UPI'} onClick={() => setPay('UPI')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'UPI' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay online now</button>
             <button type="button" role="radio" aria-checked={pay === 'CASH'} onClick={() => setPay('CASH')} className={`px-3 py-2 rounded-xl border text-sm font-bold ${pay === 'CASH' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-700'}`}>Pay the doctor</button>
           </div>
-          {pay === 'UPI' && <TestPaymentNote />}
-          {pay === 'UPI' && <input aria-label="UPI ID" value={upi} onChange={(e) => setUpi(e.target.value.replace(/\s/g, '').toLowerCase())} onBlur={() => { if (upi) { const u = validateUpiId(upi); if (!u.ok) setErr(u.message); } }} placeholder="yourname@upi" className={field} />}
+          {pay === 'UPI' && <p className="text-xs text-slate-500">Pay securely with UPI, card or net banking in the next step.</p>}
           <CancellationRefundPolicy service="homecare" className="mt-2" />
           {err && <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>}
           <button type="button" disabled={busy} onClick={book} className="w-full px-4 py-3 rounded-xl bg-teal-700 text-white text-sm font-bold disabled:opacity-60">{busy ? 'Booking…' : pay === 'UPI' ? `Pay ${rupees(doc.fee)} & book` : 'Book home visit'}</button>

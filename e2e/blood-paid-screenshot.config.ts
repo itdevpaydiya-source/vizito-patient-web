@@ -1,0 +1,1 @@
+import{defineConfig}from'@playwright/test';export default defineConfig({testDir:'.',testMatch:'blood-paid-screenshot.spec.ts',workers:1,reporter:'list',use:{baseURL:'http://localhost:5174',headless:true}});

@@ -32,7 +32,18 @@ export interface DoctorVisit extends BookingActions {
   reason_for_visit: string | null;
   prescription: { id: string; number: string | null; finalized_at: string | null } | null;
   timeline: { code: 'BOOKED'|'PAYMENT'|'CHECKED_IN'|'CONSULTATION'|'PRESCRIPTION'|'CANCELLED'; label: string; state: 'completed'|'current'|'pending'; occurred_at: string | null }[];
-  video: { how: 'DOCTOR_CALLS'; can_join: false; join_url: null; call_expected_from: string | null; call_expected_until: string | null; message: string; mode_used: string | null } | null;
+  video: {
+    how: 'DOCTOR_CALLS' | 'WAITING_ROOM' | 'IN_APP_VIDEO' | string;
+    can_join: boolean;
+    join_url: string | null;
+    room_name?: string | null;
+    video_started_at?: string | null;
+    video_ended_at?: string | null;
+    call_expected_from: string | null;
+    call_expected_until: string | null;
+    message: string;
+    mode_used: string | null;
+  } | null;
 }
 export interface DashboardBooking {
   visit?: DoctorVisit | null;

@@ -1,3 +1,5 @@
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FlaskConical, Stethoscope, Target, TrendingDown, AlertTriangle, ShieldAlert, CheckCircle2, ClipboardList, Pill } from 'lucide-react';
@@ -217,12 +219,13 @@ function MedicineRequests({ o, onChanged }: { o: HcOrder; onChanged?: (o: HcOrde
       ))}
 
       {activeReq && (
-        <div role="dialog" aria-modal="true" aria-label="Send prescription to a pharmacy" className="rounded-xl border border-teal-200 bg-white p-3.5 space-y-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
+        <VizitoDialog title="Send prescription to a pharmacy" onClose={()=>setActiveReq(null)}>
+<div className="flex items-center justify-between">
             <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Send prescription for {activeReq.items}</p>
             <button type="button" onClick={() => setActiveReq(null)} className="text-xs font-bold text-slate-400 hover:text-slate-600">Close</button>
           </div>
-          {loading ? (
+
+{loading ? (
             <p className="text-xs text-slate-500">Checking your prescriptions…</p>
           ) : prescriptions && matchingRx.length === 0 ? (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 space-y-1">
@@ -234,7 +237,7 @@ function MedicineRequests({ o, onChanged }: { o: HcOrder; onChanged?: (o: HcOrde
             <div className="space-y-2 text-xs">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">Select your prescription</label>
-                <select
+                <ThemedSelect
                   aria-label="Select prescription"
                   value={pickRx}
                   onChange={(e) => setPickRx(e.target.value)}
@@ -254,12 +257,12 @@ function MedicineRequests({ o, onChanged }: { o: HcOrder; onChanged?: (o: HcOrde
                       </option>
                     );
                   })}
-                </select>
+                </ThemedSelect>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">Choose a pharmacy</label>
-                <select
+                <ThemedSelect
                   aria-label="Choose a pharmacy"
                   value={pickPh}
                   onChange={(e) => setPickPh(e.target.value)}
@@ -271,7 +274,7 @@ function MedicineRequests({ o, onChanged }: { o: HcOrder; onChanged?: (o: HcOrde
                       {ph.name}{ph.address ? ` · ${ph.address}` : ''}
                     </option>
                   ))}
-                </select>
+                </ThemedSelect>
               </div>
 
               {err && <p role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{err}</p>}
@@ -296,7 +299,7 @@ function MedicineRequests({ o, onChanged }: { o: HcOrder; onChanged?: (o: HcOrde
               </div>
             </div>
           )}
-        </div>
+</VizitoDialog>
       )}
     </div>
   );
@@ -378,10 +381,10 @@ export function Problems({ o, onReported }: { o: HcOrder; onReported: (msg: stri
         <div role="region" aria-label="Report a problem" className="rounded-xl border border-rose-200 bg-rose-50/40 p-3 space-y-2">
           <p className="text-[11px] text-rose-900 font-semibold">For an emergency call 108 first. Serious reports and complaints about a professional also go to Vizito support.</p>
           <div className="grid sm:grid-cols-2 gap-2">
-            <label className="text-[11px] font-bold text-slate-600">Kind of problem<select value={type} onChange={(e) => setType(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Choose…</option>{opts && FAMILY_TYPES.map((k) => <option key={k} value={k}>{opts.incident_types[k]}</option>)}</select></label>
-            <label className="text-[11px] font-bold text-slate-600">How serious<select value={severity} onChange={(e) => setSeverity(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Choose…</option>{opts && Object.entries(opts.severity).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+            <label className="text-[11px] font-bold text-slate-600">Kind of problem<ThemedSelect value={type} onChange={(e) => setType(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Choose…</option>{opts && FAMILY_TYPES.map((k) => <option key={k} value={k}>{opts.incident_types[k]}</option>)}</ThemedSelect></label>
+            <label className="text-[11px] font-bold text-slate-600">How serious<ThemedSelect value={severity} onChange={(e) => setSeverity(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Choose…</option>{opts && Object.entries(opts.severity).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</ThemedSelect></label>
           </div>
-          {given.length > 0 && <label className="block text-[11px] font-bold text-slate-600">Which visit (optional)<select value={visitId} onChange={(e) => setVisitId(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Not about one visit</option>{given.map((v) => <option key={v.id} value={v.id}>Visit {v.seq} · {short(`${v.date}T00:00:00`)}{v.professional ? ` · ${v.professional.name}` : ''}</option>)}</select></label>}
+          {given.length > 0 && <label className="block text-[11px] font-bold text-slate-600">Which visit (optional)<ThemedSelect value={visitId} onChange={(e) => setVisitId(e.target.value)} className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Not about one visit</option>{given.map((v) => <option key={v.id} value={v.id}>Visit {v.seq} · {short(`${v.date}T00:00:00`)}{v.professional ? ` · ${v.professional.name}` : ''}</option>)}</ThemedSelect></label>}
           <label className="block text-[11px] font-bold text-slate-600">Tell us what happened<textarea rows={3} value={text} onChange={(e) => setText(e.target.value.slice(0, 1000))} placeholder="What happened, when, and how the patient is now" className="block w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-normal" /></label>
           {err && <p role="alert" className="text-xs font-semibold text-rose-700">{err}</p>}
           <div className="flex gap-2"><button disabled={busy} onClick={send} className="px-3 py-2 rounded-lg bg-rose-600 text-white text-xs font-bold disabled:opacity-50">{busy ? 'Sending…' : 'Send report'}</button><button onClick={() => setOpen(false)} className="px-3 py-2 text-xs font-bold text-slate-600">Cancel</button></div>

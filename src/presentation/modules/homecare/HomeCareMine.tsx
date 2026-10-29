@@ -1,4 +1,6 @@
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { paidLabel, refundText } from '../../../config/payments';
 import {
   KeyRound,
@@ -20,7 +22,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import {
-  hcMineApi,
+  hcMinePageApi,
   hcCancelApi,
   hcPauseOrderApi,
   hcRescheduleApi,
@@ -42,6 +44,7 @@ import HomeCareInvoiceModal from './components/HomeCareInvoiceModal';
 import CaregiverReplacementModal from './components/CaregiverReplacementModal';
 import EmergencySosSheet from './components/EmergencySosSheet';
 import RescheduleShiftModal from './components/RescheduleShiftModal';
+import VizitoPagination from '../../components/navigation/VizitoPagination';
 
 const label12 = (t: string) => {
   const [h, m] = t.split(':').map(Number);
@@ -64,13 +67,15 @@ export default function HomeCareMine({
   const [orders, setOrders] = useState<HcOrder[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(openId);
+  const [params,setParams]=useSearchParams(),page=Math.max(1,Number(params.get('homeCarePage'))||1),pageSize=params.get('homeCarePageSize')==='20'?20 as const:10 as const;
+  const [total,setTotal]=useState(0);
 
   const load = useCallback(() => {
     setErr(null);
-    hcMineApi()
-      .then(setOrders)
+    hcMinePageApi({page,page_size:pageSize})
+      .then(result=>{setOrders(result.items);setTotal(result.total);})
       .catch((e) => setErr(labError(e, 'Could not load your home care bookings.')));
-  }, []);
+  }, [page,pageSize]);
 
   useEffect(() => {
     load();
@@ -126,6 +131,7 @@ export default function HomeCareMine({
           />
         ))}
       </ul>
+      <VizitoPagination page={page} pageSize={pageSize} total={total} onPageChange={value=>setParams(current=>{const next=new URLSearchParams(current);value===1?next.delete('homeCarePage'):next.set('homeCarePage',String(value));return next;})} onPageSizeChange={value=>setParams(current=>{const next=new URLSearchParams(current);next.set('homeCarePageSize',String(value));next.delete('homeCarePage');return next;})} label="home care bookings" />
     </div>
   );
 }
@@ -461,22 +467,19 @@ export function OrderCard({
                 </button>
               </div>
             ) : (
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-label="Pause care"
-                className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
+              <VizitoDialog title="Pause care" onClose={()=>setPausing(false)}>
+<div className="flex items-center justify-between">
                   <p className="text-xs font-black text-amber-950 uppercase tracking-wider">Pause care</p>
                   <button type="button" onClick={() => setPausing(false)} className="text-xs font-bold text-slate-500">
                     Cancel
                   </button>
                 </div>
-                <p className="text-xs text-slate-600">
+
+<p className="text-xs text-slate-600">
                   Remaining visits will move to the restart date. You can pause 1 to 30 days.
                 </p>
-                <div className="grid sm:grid-cols-2 gap-2">
+
+<div className="grid sm:grid-cols-2 gap-2">
                   <label className="text-[11px] font-bold text-slate-700">
                     Pause from
                     <input
@@ -500,7 +503,8 @@ export function OrderCard({
                     />
                   </label>
                 </div>
-                <label className="block text-[11px] font-bold text-slate-700">
+
+<label className="block text-[11px] font-bold text-slate-700">
                   Reason (required)
                   <input
                     aria-label="Reason for pause"
@@ -510,12 +514,14 @@ export function OrderCard({
                     className="block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs mt-0.5"
                   />
                 </label>
-                {pauseErr && (
+
+{pauseErr && (
                   <p role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">
                     {pauseErr}
                   </p>
                 )}
-                <div className="flex gap-2 pt-1">
+
+<div className="flex gap-2 pt-1">
                   <button
                     disabled={pauseBusy || !pauseReason.trim()}
                     onClick={handlePause}
@@ -527,7 +533,7 @@ export function OrderCard({
                     Keep care
                   </button>
                 </div>
-              </div>
+</VizitoDialog>
             ))}
 
           {/* Cancellation section */}

@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'.',testMatch:'ambulance-journey.spec.ts',timeout:480000,expect:{timeout:10000},workers:1,retries:0,reporter:[['list']],use:{baseURL:'http://localhost:5174',browserName:'chromium',headless:true,launchOptions:{args:['--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows']},screenshot:'only-on-failure',trace:'retain-on-failure'}});
