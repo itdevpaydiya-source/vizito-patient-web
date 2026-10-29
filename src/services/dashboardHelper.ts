@@ -46,6 +46,7 @@ export interface DashboardBooking {
   endTime?: string | null; // Actual appointment end_time; never an assumed duration.
   timeSlot: string | null;
   appointmentType: string | null; // VIDEO_CALL / IN_CLINIC / HOME_VISIT
+  serviceType: string | null;     // original booking.service_type; used to preserve mode on reschedule
   location: string | null;        // facility address captured at booking time
   providerId: string | null;      // partner_id (no name is stored on the booking)
   facilityId: number | null;      // the branch/clinic the visit is at (reschedule stays there)
@@ -101,6 +102,7 @@ function mapBooking(b: any): DashboardBooking {
     endTime: appt?.end_time ?? null,
     timeSlot: appt?.time_slot ?? null,
     appointmentType: appt?.appointment_type ?? null,
+    serviceType: b?.service_type ?? null,
     location: appt?.location || null,
     providerId: b?.partner_id ?? null,
     facilityId: appt?.facility_id != null ? Number(appt.facility_id) : null,

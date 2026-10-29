@@ -23,10 +23,16 @@ const ReschedulePanel: React.FC<{
   useEffect(() => {
     if (!booking.providerId) return;
     setSlots(null); setPicked(null); setError(null);
-    getProviderSlotsApi(booking.providerId, day, booking.facilityId || undefined, booking.hospitalPartnerId || undefined)
+    getProviderSlotsApi(
+      booking.providerId,
+      day,
+      booking.facilityId || undefined,
+      booking.hospitalPartnerId || undefined,
+      booking.serviceType || booking.appointmentType || undefined,
+    )
       .then((list) => setSlots(list.filter((s) => !(s as any).is_booked && (!booking.facilityId || Number(s.facility_id) === booking.facilityId))))
       .catch(() => setError('Could not load free times for this day.'));
-  }, [day, booking.providerId, booking.facilityId, booking.hospitalPartnerId]);
+  }, [day, booking.providerId, booking.facilityId, booking.hospitalPartnerId, booking.serviceType, booking.appointmentType]);
 
   const confirm = async () => {
     if (!picked) return;

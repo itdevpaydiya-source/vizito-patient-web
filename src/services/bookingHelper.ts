@@ -187,11 +187,12 @@ export const getOfferedModesApi = async (doctorPartnerId: string, date: string):
 };
 
 export const getProviderSlotsWithPauseApi = async (
-  doctorPartnerId: string, date: string, facilityId?: number, hospitalPartnerId?: string,
+  doctorPartnerId: string, date: string, facilityId?: number, hospitalPartnerId?: string, consultationType?: string,
 ): Promise<{ slots: AvailableSlot[]; paused: (import('./types').ProviderPause & { by: 'doctor' | 'hospital' }) | null }> => {
   const params: Record<string, string> = { date };
   if (facilityId) params.facility_id = String(facilityId);
   if (hospitalPartnerId) params.hospital_partner_id = hospitalPartnerId;
+  if (consultationType) params.consultation_type = consultationType;
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_SLOTS(doctorPartnerId), { params });
   const paused = (res as any)?.data?.paused || null;
   const list = unwrap<AvailableSlot[]>(res);
@@ -205,10 +206,12 @@ export const getProviderSlotsApi = async (
   facilityId?: number,
   // Hospital flow: the hospital that credentialed this doctor at the branch.
   hospitalPartnerId?: string,
+  consultationType?: string,
 ): Promise<AvailableSlot[]> => {
   const params: Record<string, string> = { date };
   if (facilityId) params.facility_id = String(facilityId);
   if (hospitalPartnerId) params.hospital_partner_id = hospitalPartnerId;
+  if (consultationType) params.consultation_type = consultationType;
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_SLOTS(doctorPartnerId), { params });
   const list = unwrap<AvailableSlot[]>(res);
   const rawList = Array.isArray(list) ? list : [];

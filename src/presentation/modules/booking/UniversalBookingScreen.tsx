@@ -5,6 +5,7 @@ import { useSearchArea, nearest, formatDistance, metresBetween } from '../../../
 import LocationBar from '../../components/location/LocationBar';
 import FavoriteButton from '../../components/FavoriteButton';
 import DoctorTrustDetails from '../../components/DoctorTrustDetails';
+import MediaImage from '../../components/MediaImage';
 import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
 import { personNameInput } from '../../../utils/inputFilters';
@@ -419,10 +420,10 @@ export default function UniversalBookingScreen() {
     finally { setReviewsLoading(false); }
   }, []);
 
-  const loadSlots = useCallback(async (partnerId: string, date: string, facilityId?: number) => {
+  const loadSlots = useCallback(async (partnerId: string, date: string, facilityId?: number, mode?: 'In Person' | 'Video') => {
     setSlotsLoading(true); setSelectedSlot(null); setSlotsPaused(null);
     try {
-      const r = await getProviderSlotsWithPauseApi(partnerId, date, facilityId, isHospital ? selectedProvider?.id : undefined);
+      const r = await getProviderSlotsWithPauseApi(partnerId, date, facilityId, isHospital ? selectedProvider?.id : undefined, mode ?? consultType);
       setSlots(r.slots);
       setDatesWithSlots((prev) => ({ ...prev, [date]: r.slots.some((s) => !s.is_booked) }));
       if (r.paused) setSlotsPaused(`${r.paused.by === 'hospital' ? 'This hospital is' : 'This doctor is'} ${pauseText(r.paused).replace(/^Not/, 'not')}.${r.paused.reason ? ` (${r.paused.reason})` : ''}`);
@@ -430,16 +431,17 @@ export default function UniversalBookingScreen() {
       setSlots([]);
       setDatesWithSlots((prev) => ({ ...prev, [date]: false }));
     } finally { setSlotsLoading(false); }
-  }, [isHospital, selectedProvider?.id]);
+  }, [isHospital, selectedProvider?.id, consultType]);
 
-  // Pre-fetch 7-day slot availability for the date carousel indicator (BUG-4)
+  // Pre-fetch slot availability for every date the carousel renders (14), so an empty second
+  // week is greyed out too instead of looking bookable (TC-47).
   useEffect(() => {
     if (!bookingDoctorPartnerId) {
       setDatesWithSlots({});
       return;
     }
     let cancelled = false;
-    const days = upcomingDates(7).map((d) => d.value);
+    const days = upcomingDates(14).map((d) => d.value);
     (async () => {
       const results: Record<string, boolean> = {};
       await Promise.all(
@@ -450,6 +452,7 @@ export default function UniversalBookingScreen() {
               d,
               isHospital ? selectedBranch?.facility_id : undefined,
               isHospital ? selectedProvider?.id : undefined,
+              consultType,
             );
             results[d] = r.slots.some((s) => !s.is_booked);
           } catch {
@@ -464,7 +467,7 @@ export default function UniversalBookingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookingDoctorPartnerId, isHospital, selectedBranch?.facility_id, selectedProvider?.id]);
+  }, [bookingDoctorPartnerId, isHospital, selectedBranch?.facility_id, selectedProvider?.id, consultType]);
 
   // Load a branch's departments (resets any downstream department/doctor/slot picks). Doctors
   // themselves are deferred until a date is confirmed (see confirmHospitalDate) — #22 requires date
@@ -965,8 +968,14 @@ export default function UniversalBookingScreen() {
 
             {/* Selected provider header */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                {isHospital ? <Building2 className="w-5 h-5" /> : <span className="font-black text-sm">{initials(selectedProvider?.name || '')}</span>}
+              <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0">
+                <MediaImage
+                  src={selectedProvider?.logo}
+                  name={selectedProvider?.name || (isHospital ? 'Hospital' : 'Doctor')}
+                  kind={isHospital ? 'business' : 'doctor'}
+                  businessType={isHospital ? 'hospital' : 'doctor'}
+                  className="w-11 h-11 rounded-xl"
+                />
               </div>
               <div className="min-w-0">
                 <h3 className="font-extrabold text-slate-800 truncate">{selectedProvider?.name}</h3>
@@ -1111,14 +1120,10 @@ export default function UniversalBookingScreen() {
               </div>
             )}
 
-            {/* DOCTOR-DIRECT: doctor summary card — name, specialty, experience, qualification,
-                and a compact rating line (reusing the same `reviews` summary the full Ratings &
-                Reviews section below uses, so this isn't a second, separate rating fetch — just a
-                short pointer to the same data). No photo field exists anywhere in the doctor data
-                model (DoctorDetail has no image/avatar url), so the initials avatar is what's real. */}
+            {/* Doctor summary card uses the stored profile photo, with initials as the honest fallback. */}
             {!isHospital && providerDetail?.doctor && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5 flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg shrink-0">{initials(bookingDoctorName || 'DR')}</div>
+                {providerDetail.image_url ? <MediaImage src={providerDetail.image_url} name={bookingDoctorName || 'Doctor'} kind="doctor" className="w-14 h-14 rounded-2xl" /> : <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg shrink-0">{initials(bookingDoctorName || 'DR')}</div>}
                 <div className="min-w-0 flex-1">
                   <h3 className="font-extrabold text-slate-800 text-base">{formatDoctorName(providerDetail.doctor.full_name || bookingDoctorName)}</h3>
                   {providerDetail.doctor.specialization && (
@@ -1188,7 +1193,7 @@ export default function UniversalBookingScreen() {
                   <SectionTitle icon={Calendar}>Consultation & Date</SectionTitle>
                   <div className="grid grid-cols-2 gap-3">
                     {(['In Person', 'Video'] as const).map((t) => (
-                      <button key={t} onClick={() => setConsultType(t)} className={`p-2.5 rounded-xl border text-sm font-bold ${consultType === t ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
+                      <button key={t} onClick={() => { setConsultType(t); if (bookingDoctorPartnerId) loadSlots(bookingDoctorPartnerId, selectedDate, isHospital ? selectedBranch?.facility_id : undefined, t); }} className={`p-2.5 rounded-xl border text-sm font-bold ${consultType === t ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 text-slate-600'}`}>
                         {t === 'Video' ? '📹 Video' : '🏥 In-Clinic'}
                       </button>
                     ))}
@@ -1196,14 +1201,19 @@ export default function UniversalBookingScreen() {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {upcomingDates(14).map((d) => {
                       const hasSlots = datesWithSlots[d.value];
+                      const checked = Object.prototype.hasOwnProperty.call(datesWithSlots, d.value);
                       return (
                         <button
                           key={d.value}
+                          disabled={checked && !hasSlots}
+                          aria-label={`${d.weekday} ${d.label}${checked ? (hasSlots ? ', slots available' : ', no slots available') : ', checking availability'}`}
                           onClick={() => changeDate(d.value)}
                           className={`relative shrink-0 w-16 py-2 rounded-xl border text-center transition-all ${
                             selectedDate === d.value
                               ? 'border-teal-600 bg-teal-50 text-teal-800 shadow-xs'
-                              : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                              : hasSlots
+                                ? 'border-emerald-400 bg-emerald-50 text-emerald-800 hover:border-emerald-500'
+                                : 'border-slate-200 text-slate-400 disabled:bg-slate-100 disabled:cursor-not-allowed'
                           }`}
                         >
                           <span className="block text-[10px] font-bold uppercase">{d.weekday}</span>
