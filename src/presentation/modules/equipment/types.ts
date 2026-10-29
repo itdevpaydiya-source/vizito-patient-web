@@ -183,6 +183,8 @@ export interface PatientRentalOrder {
   status: RentalOrderStatus;
   paymentStatus: RentalPaymentStatus;
   paymentMethod?: string;
+  /** Paid online at booking (Razorpay); refund is set once a cancellation refund has started. */
+  onlinePayment?: { method: string; reference: string; paidAt: string; refund: { status: 'REFUND_STARTED' | 'REFUND_FAILED'; amount: number; at: string } | null } | null;
   createdAt: string;
   deliveryAddress: {
     recipientName: string;
@@ -193,6 +195,7 @@ export interface PatientRentalOrder {
     instructions?: string;
   };
   deliveryTimeline: DeliveryTimelineStep[];
+  deliveryCode?: string;
   allocatedAssetId?: string;
   providerConfirmationStatus?: 'pending' | 'accepted' | 'declined';
   rejectionReason?: string;

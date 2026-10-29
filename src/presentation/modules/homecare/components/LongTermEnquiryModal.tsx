@@ -1,3 +1,5 @@
+import ThemedSelect from '../../../components/forms/ThemedSelect';
+import BookingForChip,{useFamilyBookingSelection} from '../../family/BookingForChip';
 import BookingDialog from '../../bookings/BookingDialog';
 import React, { useState, useEffect } from 'react';
 import HomePinField from '../../../components/location/HomePinField';
@@ -56,6 +58,7 @@ export default function LongTermEnquiryModal({
   // Family Members & Recipient
   const [familyMembers, setFamilyMembers] = useState<PatientFamilyMember[]>([]);
   const [familyMemberId, setFamilyMemberId] = useState<string>('');
+  useFamilyBookingSelection(familyMembers,setFamilyMemberId);
 
   // Form State
   const [agenciesList, setAgenciesList] = useState<{ id: string; name: string }[]>(agencies);
@@ -262,7 +265,7 @@ export default function LongTermEnquiryModal({
             No instant automated matching. A clinical coordinator will call within 30 minutes to review needs and arrange a home assessment.
           </p>
 
-          {/* Stepper Indicator */}
+          <BookingForChip family={familyMembers} value={familyMemberId} onChange={setFamilyMemberId}/>{/* Stepper Indicator */}
           <div className="flex items-center gap-2 mt-4">
             {[1, 2, 3].map((s) => (
               <button
@@ -336,7 +339,7 @@ export default function LongTermEnquiryModal({
                   Healthcare Partner Agency
                 </label>
                 {agenciesList.length > 0 ? (
-                  <select
+                  <ThemedSelect
                     id="lt-agency-select"
                     value={agencyId || (agenciesList[0]?.id || '')}
                     onChange={(e) => setAgencyId(e.target.value)}
@@ -349,7 +352,7 @@ export default function LongTermEnquiryModal({
                         {ag.name}
                       </option>
                     ))}
-                  </select>
+                  </ThemedSelect>
                 ) : (
                   <div className="space-y-2">
                   {!preselectedAgencyName && (
@@ -550,7 +553,7 @@ export default function LongTermEnquiryModal({
                   <label htmlFor="lt-duration" className="block text-xs font-bold text-slate-700 mb-1">
                     Care Duration
                   </label>
-                  <select
+                  <ThemedSelect
                     id="lt-duration"
                     value={durationDays}
                     onChange={(e) => setDurationDays(Number(e.target.value))}
@@ -561,7 +564,7 @@ export default function LongTermEnquiryModal({
                     <option value={30}>1 Month (30 shifts continuous)</option>
                     <option value={60}>2 Months (60 shifts)</option>
                     <option value={90}>3 Months (90 shifts)</option>
-                  </select>
+                  </ThemedSelect>
                 </div>
               </div>
 

@@ -1,3 +1,4 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import { useEffect, useState } from 'react';
 import {
   labAvailabilityApi,
@@ -146,7 +147,7 @@ export default function LabReschedule({
           <>
             <label>
               New date
-              <select
+              <ThemedSelect
                 aria-label="New lab date"
                 value={date}
                 onChange={(e) => {
@@ -163,7 +164,7 @@ export default function LabReschedule({
                     {dateLabel(day.date)}
                   </option>
                 ))}
-              </select>
+              </ThemedSelect>
             </label>
             <div className="lab-schedule-slots">
               <LabTimeSlotOptions

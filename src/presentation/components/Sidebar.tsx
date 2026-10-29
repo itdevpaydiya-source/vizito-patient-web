@@ -6,7 +6,9 @@ import {useBookingActivity} from '../../services/BookingActivityContext';
 import './Sidebar.css';
 interface SidebarProps {isOpen?:boolean;onClose?:()=>void}
 export function sidebarDestination(path:string){
- if(['/bookings','/lab-bookings','/my-consultations','/appointments','/pharmacy-orders','/ambulance-trips','/blood-requests'].some(p=>path===p||path.startsWith(p+'/'))&&path!=='/pharmacy-orders/new')return '/bookings';
+ if(path==='/ambulance-trips'||path.startsWith('/ambulance-trips/'))return '/book-ambulance';
+ if(['/bookings','/lab-bookings','/my-consultations','/appointments','/ambulance-trips','/blood-requests'].some(p=>path===p||path.startsWith(p+'/')))return '/bookings';
+ if(path.startsWith('/pharmacy-orders'))return '/pharmacy-orders/new';
  if(path.startsWith('/equipment-rental/orders'))return '/bookings';
  if(path.startsWith('/equipment-rental'))return '/equipment-rental';
  if(['/find-blood','/request-blood','/donate-blood'].includes(path))return '/find-blood';

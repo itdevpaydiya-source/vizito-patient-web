@@ -2,3 +2,10 @@
 .patient-app-layout{background:var(--page-bg);--bg-card:var(--card-bg);--border-color:var(--card-border)}.patient-app-layout>.patient-content>.patient-header{background:var(--header-bg);border-color:var(--card-border)}.patient-app-layout main{background:var(--page-bg)}
 /* Shared surface utilities consume the same tokens; component layout/typography remain intact. */
 .patient-app-layout .bg-white{background-color:var(--card-bg)}.patient-app-layout .border-slate-200{border-color:var(--card-border)}
+
+.portal-help-search{position:relative!important;display:flex!important;align-items:center;gap:8px}.portal-help-search>svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;pointer-events:none;color:#698d91}.portal-help-search>input{padding-left:43px!important;width:100%;min-width:0}.portal-help-search>button{flex:none}
+
+/* B7: reserve a separate row for favourites; timings/actions cannot sit beneath it. */
+.hj-card .hj-card-actions{position:relative;padding-top:48px!important}.hj-card .hj-card-actions>button[aria-pressed]{position:absolute!important;top:0!important;right:0!important;left:auto!important;transform:none!important}.hj-cards.grid .hj-card-actions{min-height:130px}
+
+.portal-help-search{padding:0!important}.portal-help-search>input{min-height:46px;padding-top:12px!important;padding-bottom:12px!important}.portal-help-search>button{margin-right:12px}

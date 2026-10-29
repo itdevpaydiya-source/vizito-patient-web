@@ -1,3 +1,4 @@
+import {exploreAssets} from '../../../assets/explore';
 ﻿import type {AvailableSlot,Branch} from '../../../services/bookingHelper';
 import {formatSlotTime,getBranchesApi,getBranchDoctorsApi,getProviderSlotsWithPauseApi} from '../../../services/bookingHelper';
 import type {HospitalFacts,ProviderItem} from '../../../services/types';
@@ -13,10 +14,10 @@ export const verifiedNabh=(h?:HospitalFacts|null)=>!!h?.accreditations.some(a=>a
 export const bookableSlots=(slots:AvailableSlot[],date:string)=>slots.filter(s=>!s.is_booked&&Date.parse(`${(s.slot_date||date).slice(0,10)}T${s.start_time.slice(0,5)}:00+05:30`)>Date.now());
 export const address=(b?:Branch)=>[b?.address_line_1,b?.area,b?.city,b?.state,b?.pincode].filter(Boolean).join(', ');
 export const mapLink=(b?:Branch)=>b?.pin?directionsUrl(b.pin):address(b)?addressSearchUrl(address(b)):null;
-export function Hours({facts}:{facts?:HospitalFacts|null}){return facts?.opd_hours.length?<div className="hj-hours"><h3>OPD Timings</h3>{facts.opd_hours.map(h=><div key={h.day}><span>{h.day.slice(0,3)}</span><span>{h.is_closed?'Closed':h.open&&h.close?`${formatSlotTime(h.open)} – ${formatSlotTime(h.close)}`:''}</span></div>)}</div>:null;}
+export function Hours({facts}:{facts?:HospitalFacts|null}){const rows=facts?.opd_hours||[],groups:{first:string;last:string;hours:string}[]=[];for(const row of rows){const day=row.day.slice(0,1).toUpperCase()+row.day.slice(1,3).toLowerCase(),hours=row.is_closed?'Closed':row.open&&row.close?`${formatSlotTime(row.open)} – ${formatSlotTime(row.close)}`:'Hours not provided',previous=groups.at(-1);if(previous?.hours===hours)previous.last=day;else groups.push({first:day,last:day,hours});}return <div className="hj-hours"><h3>OPD Timings</h3>{groups.length?groups.map(g=><div key={`${g.first}-${g.last}`}><span>{g.first===g.last?g.first:`${g.first} – ${g.last}`}</span><span>{g.hours}</span></div>):<p>Hours not provided</p>}</div>;}
 export function Badges({facts}:{facts?:HospitalFacts|null}){return <div className="hj-chips">{verifiedNabh(facts)&&<span className="hj-verified"><ShieldCheck/>NABH Accredited</span>}{facts?.emergency_24x7===true&&<span><HeartPulse/>24x7 Emergency</span>}{facts?.cashless_available===true&&<span><ShieldCheck/>Cashless insurance</span>}</div>;}
 export function Rating({rating}:{rating?:ProviderItem['rating']}){return rating&&rating.count>0?<p className="hj-rating"><Star/>{rating.average.toFixed(1)} <span>({rating.count} reviews)</span></p>:null;}
-export function HospitalImage({provider}:{provider:ProviderItem}){return <div className="hj-image"><MediaImage src={provider.logo} name={provider.name} kind="business" businessType="hospital"/>{!provider.logo&&<small>Hospital illustration</small>}</div>;}
+export function HospitalImage({provider}:{provider:ProviderItem}){return <div className="hj-image">{provider.logo&&<MediaImage src={provider.logo} name={provider.name} kind="business" businessType="hospital"/>}{!provider.logo&&<img src={exploreAssets.tiles.hospitalsClinics} alt="" className="hj-fallback"/>}</div>;}
 export async function todayAvailable(p:ProviderItem){if(p.pause)return false;for(const b of await getBranchesApi(p.id)){for(const d of await getBranchDoctorsApi(b.facility_id)){const r=await getProviderSlotsWithPauseApi(d.doctor_partner_id,hospitalToday(),b.facility_id,p.id);if(!r.paused&&bookableSlots(r.slots,hospitalToday()).length)return true;}}return false;}
 
 

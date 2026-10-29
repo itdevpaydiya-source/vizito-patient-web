@@ -1,73 +1,728 @@
-import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Link,useSearchParams} from 'react-router-dom';
-import {ArrowRight,ChevronLeft,ChevronRight,Grid2X2,List,Search,SlidersHorizontal,Star,X} from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronRight,
+  Grid2X2,
+  List,
+  Search,
+  SlidersHorizontal,
+  X,
+  Stethoscope,
+  Building2,
+  FlaskConical,
+  Pill,
+  Home,
+  Package,
+  Ambulance,
+  Droplet,
+  Sparkles,
+  Star,
+  Check,
+  Video,
+  MapPin,
+} from 'lucide-react';
+import VizitoPagination from '../../components/navigation/VizitoPagination';
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import {exploreAssets} from '../../../assets/explore';
-import {kindOf,providerDistance,type ProviderKind} from '../../components/ProviderCard';
+import {type ProviderKind} from '../../components/ProviderCard';
 import LocationBar from '../../components/location/LocationBar';
 import {Skeleton} from '../../components/motion/Motion';
-import {useSearchArea} from '../../../services/location';
+import {useSearchArea,setSearchArea,locateOnce} from '../../../services/location';
 import type {ProviderItem} from '../../../services/types';
 import BookingDialog from '../bookings/BookingDialog';
+import ServiceLocationDialog from '../../components/location/ServiceLocationDialog';
 import {StateEmpty,StateFilteredEmpty,StateError} from '../bookings/BookingStates';
-import {loadExploreProviders,offersOnline,startingFee} from './exploreProviders';
+import {getProvidersPageApi,getAddressesApi} from '../../../services/patientHelper';
 import ExploreProviderCard from './ExploreProviderCard';
 import '../bookings/BookingsReference.css';
 import './HealthcareServicesScreen.css';
 
-const tiles=[
- {id:'all',name:'All providers',description:'View all services',image:exploreAssets.tiles.allProviders},
- {id:'doctor',name:'Doctor consultation',description:'In-clinic & online',image:exploreAssets.tiles.doctorConsultation},
- {id:'hospital',name:'Hospitals & clinics',description:'OPD & specialist care',image:exploreAssets.tiles.hospitalsClinics},
- {id:'lab',name:'Lab tests',description:'Blood, urine, imaging',image:exploreAssets.tiles.labTests},
- {id:'homecare',name:'Home care services',description:'Nursing, physio & more',image:exploreAssets.tiles.homeCare},
- {id:'pharmacy',name:'Pharmacy',description:'Medicines & refills',image:exploreAssets.tiles.pharmacy},
- {id:'equipment',name:'Medical equipment',description:'Rent equipment',image:exploreAssets.tiles.medicalEquipment},
- {id:'ambulance',name:'Ambulance',description:'Patient transport',image:exploreAssets.tiles.ambulance},
- {id:'bloodbank',name:'Blood services',description:'Find or donate blood',image:exploreAssets.tiles.bloodServices},
+const tiles = [
+  {id:'all',name:'All providers',description:'View all services',image:exploreAssets.tiles.allProviders},
+  {id:'doctor',name:'Doctor consultation',description:'In-clinic & online',image:exploreAssets.tiles.doctorConsultation},
+  {id:'hospital',name:'Hospitals & clinics',description:'OPD & specialist care',image:exploreAssets.tiles.hospitalsClinics},
+  {id:'lab',name:'Lab tests',description:'Blood, urine, imaging',image:exploreAssets.tiles.labTests},
+  {id:'homecare',name:'Home care services',description:'Nursing, physio & more',image:exploreAssets.tiles.homeCare},
+  {id:'pharmacy',name:'Pharmacy',description:'Medicines & refills',image:exploreAssets.tiles.pharmacy},
+  {id:'equipment',name:'Medical equipment',description:'Rent equipment',image:exploreAssets.tiles.medicalEquipment},
+  {id:'ambulance',name:'Ambulance',description:'Patient transport',image:exploreAssets.tiles.ambulance},
+  {id:'bloodbank',name:'Blood services',description:'Find or donate blood',image:exploreAssets.tiles.bloodServices},
 ] as const;
-type Category=ProviderKind|'all';
-const prices=[{label:'₹0 – ₹500',min:0,max:500},{label:'₹500 – ₹1,000',min:500,max:1000},{label:'₹1,000 – ₹2,500',min:1000,max:2500},{label:'₹2,500+',min:2500,max:Infinity}];
-type Sort='recommended'|'nearest'|'rating'|'price';
-export default function HealthcareServicesScreen(){
- const [params,setParams]=useSearchParams(),urlQuery=params.get('q')||params.get('search')||'';
- const [query,setQuery]=useState(urlQuery),[category,setCategory]=useState<Category>('all'),[providers,setProviders]=useState<ProviderItem[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(false),[sort,setSort]=useState<Sort>('recommended'),[view,setView]=useState<'grid'|'list'>('grid'),[page,setPage]=useState(1),[filtersOpen,setFiltersOpen]=useState(false),[online,setOnline]=useState(false),[ratings,setRatings]=useState<number[]>([]),[priceRanges,setPriceRanges]=useState<number[]>([]),[radius,setRadius]=useState<number|null>(null);
- const area=useSearchArea(),requestId=useRef(0);
- useEffect(()=>{setSort(area?'nearest':'recommended');setPage(1);},[area]);
- const load=useCallback(async()=>{const id=++requestId.current;setLoading(true);setError(false);try{const all=await loadExploreProviders();if(id===requestId.current)setProviders(all);}catch{if(id===requestId.current)setError(true);}finally{if(id===requestId.current)setLoading(false);}},[]);
- useEffect(()=>{void load();return()=>{requestId.current++;};},[load]);
- useEffect(()=>{setQuery(urlQuery);setPage(1);},[urlQuery]);
- useEffect(()=>{setPage(1);if(!area)setSort(s=>s==='nearest'?'recommended':s);},[area]);
- const changeCategory=(value:Category)=>{setCategory(value);setPage(1);};
- const clear=()=>{setCategory('all');setQuery('');setParams({});setOnline(false);setRatings([]);setPriceRanges([]);setRadius(null);setSort('recommended');setPage(1);};
- const filtered=useMemo(()=>{
-  const search=query.trim().toLowerCase();
-  const rows=providers.filter(p=>{
-   if(category!=='all'&&kindOf(p)!==category)return false;
-   const haystack=[p.name,p.specialization,p.qualification,p.subtitle,p.specialtyOrType,p.partnerType,p.address,p.city,tiles.find(t=>t.id===kindOf(p))?.name,...(p.org?.locations.flatMap(l=>[l.name,l.area,l.city])||[]),...(p.org?.departments.map(d=>d.name)||[])].filter(Boolean).join(' ').toLowerCase();
-   if(search&&!haystack.includes(search))return false;
-   if(online&&!offersOnline(p))return false;
-   if(ratings.length&&(!p.rating||p.rating.count<=0||p.rating.average<Math.min(...ratings)))return false;
-   const fee=startingFee(p);if(priceRanges.length&&(fee==null||!priceRanges.some(i=>fee>=prices[i].min&&(prices[i].max===Infinity||fee<=prices[i].max))))return false;
-   if(area&&radius!=null){const distance=providerDistance(p,area);if(!distance||distance.metres>radius*1000)return false;}
-   return true;
-  });
-  if(sort==='rating')rows.sort((a,b)=>(b.rating?.count?b.rating.average:-1)-(a.rating?.count?a.rating.average:-1));
-  if(sort==='price')rows.sort((a,b)=>(startingFee(a)??Infinity)-(startingFee(b)??Infinity));
-  if(sort==='nearest'&&area)rows.sort((a,b)=>(providerDistance(a,area)?.metres??Infinity)-(providerDistance(b,area)?.metres??Infinity));
-  return rows;
- },[providers,category,query,online,ratings,priceRanges,area,radius,sort]);
- const pages=Math.max(1,Math.ceil(filtered.length/9)),currentPage=Math.min(page,pages),visible=filtered.slice((currentPage-1)*9,currentPage*9);
- const toggle=(values:number[],value:number)=>values.includes(value)?values.filter(v=>v!==value):[...values,value];
- const filters=(scope:string)=><><header className="explore-filter-heading"><h2>Filters</h2><button onClick={clear}>Clear all</button></header><fieldset><legend>Service type</legend>{tiles.map(t=><label key={t.id}><input type="radio" name={'explore-service-'+scope} checked={category===t.id} onChange={()=>changeCategory(t.id)}/>{t.name}</label>)}</fieldset>
- <fieldset className="explore-location"><legend>Location</legend><div className="explore-radius" role="group" aria-label="Search radius">{[5,10,25].map(km=><button key={km} disabled={!area} aria-pressed={radius===km&&!!area} onClick={()=>{setRadius(radius===km?null:km);setPage(1);}}>{km} km</button>)}</div></fieldset>
- <fieldset><legend>Availability</legend><label className="explore-unavailable" title="Same-day appointment availability is not supplied by this directory"><input type="checkbox" disabled/>Available today</label><label><input type="checkbox" checked={online} onChange={e=>{setOnline(e.target.checked);setPage(1);}}/>Online consultation</label></fieldset>
- <fieldset><legend>Rating</legend>{[4,3,2].map(r=><label key={r}><input type="checkbox" checked={ratings.includes(r)} onChange={()=>{setRatings(toggle(ratings,r));setPage(1);}}/><Star className="explore-star"/>{r.toFixed(1)} and above</label>)}</fieldset>
- <fieldset><legend>Price range</legend>{prices.map((range,i)=><label key={range.label}><input type="checkbox" checked={priceRanges.includes(i)} onChange={()=>{setPriceRanges(toggle(priceRanges,i));setPage(1);}}/>{range.label}</label>)}</fieldset></>;
- return <div className="explore-page"><section className="explore-heading-row"><div className="explore-heading"><nav aria-label="Breadcrumb"><Link to="/dashboard">Dashboard</Link><ChevronRight/><span>Explore services</span></nav><h1>Explore healthcare services</h1><p>Find and book trusted healthcare services near you.</p><div className="explore-trust"><span><img src={exploreAssets.icons.verified} alt=""/>Verified providers</span><span><img src={exploreAssets.icons.nearby} alt=""/>Nearby options</span><span><img src={exploreAssets.icons.easyBooking} alt=""/>Easy online booking</span></div></div><div className="explore-hero"><img src={exploreAssets.hero} alt="Doctor consulting a patient — illustrative scene"/><div><h2>Quality care<br/>for you and your family</h2><p>Consult, test, treat or get care at home.</p><Link className="explore-primary" to="/find-doctors">Book an appointment<ArrowRight/></Link></div></div></section>
- <section className="explore-tiles" aria-label="Browse by service">{tiles.map(t=><button key={t.id} type="button" data-motion-service-card aria-pressed={category===t.id} onClick={()=>changeCategory(t.id)}><img src={t.image} alt=""/><strong>{t.name}</strong><span>{t.description}</span></button>)}</section>
- <LocationBar purpose="find providers near you"/><div className="explore-content"><aside className="explore-filter-panel" aria-label="Provider filters">{filters('desktop')}</aside><section className="explore-results" aria-label="Find providers"><div className="explore-toolbar"><label className="explore-search"><Search/><input type="search" aria-label="Search providers" placeholder="Search providers by name, speciality, service or location..." value={query} onChange={e=>{setQuery(e.target.value);setPage(1);}}/>{query&&<button aria-label="Clear provider search" onClick={()=>{setQuery('');setParams({});setPage(1);}}><X/></button>}</label><label className="explore-sort">Sort by<select aria-label="Sort providers" value={sort} onChange={e=>{setSort(e.target.value as Sort);setPage(1);}}><option value="recommended">Recommended</option><option value="nearest" disabled={!area}>Nearest</option><option value="rating">Rating</option><option value="price">Price</option></select></label><div className="explore-view" role="group" aria-label="Provider layout"><button aria-label="Grid view" aria-pressed={view==='grid'} onClick={()=>setView('grid')}><Grid2X2/></button><button aria-label="List view" aria-pressed={view==='list'} onClick={()=>setView('list')}><List/></button></div><button className="explore-mobile-filters" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(true)}><SlidersHorizontal/>Filters</button></div>
- {!loading&&!error&&<div className="explore-result-count" aria-live="polite"><strong>{filtered.length.toLocaleString('en-IN')} {filtered.length===1?'provider':'providers'} found</strong><span>{filtered.length?'Showing '+((currentPage-1)*9+1)+'–'+Math.min(currentPage*9,filtered.length)+' of '+filtered.length:'Showing 0 of 0'}</span></div>}
- {loading?<div className="explore-provider-grid" aria-label="Loading providers" aria-busy="true">{Array.from({length:9},(_,i)=><Skeleton key={i} className="explore-provider-skeleton"><div/><span/><span/><span/></Skeleton>)}</div>:error?<StateError title="Unable to load providers" description="Something went wrong. Please try again." retry={()=>void load()} home={false}/>:!providers.length?<StateEmpty title="No providers available yet" description="Healthcare providers will appear here when they are available."><button className="booking-button" onClick={()=>void load()}>Refresh providers</button></StateEmpty>:!filtered.length?<StateFilteredEmpty title="No providers match these filters" description="Try another service, location or search term." clear={clear}/>:<><div className={'explore-provider-grid '+(view==='list'?'explore-list-view':'')} data-motion-list>{visible.map(p=><ExploreProviderCard key={p.id} provider={p} area={area}/>)}</div>{pages>1&&<nav className="explore-pagination" aria-label="Provider pages"><button disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}><ChevronLeft/>Previous</button><span>Page {currentPage} of {pages}</span><button disabled={currentPage===pages} onClick={()=>setPage(currentPage+1)}>Next<ChevronRight/></button></nav>}</>}
- </section></div>{filtersOpen&&<BookingDialog label="Provider filters" className="lab-action-dialog explore-page explore-filter-sheet" onClose={()=>setFiltersOpen(false)}><button className="explore-filter-close" aria-label="Close filters" onClick={()=>setFiltersOpen(false)}><X/></button>{filters('mobile')}<button className="explore-primary explore-apply" onClick={()=>setFiltersOpen(false)}>Show results</button></BookingDialog>}</div>;
-}
 
+const categoryIcons: Record<string, React.ElementType> = {
+  all: Sparkles,
+  doctor: Stethoscope,
+  hospital: Building2,
+  lab: FlaskConical,
+  homecare: Home,
+  pharmacy: Pill,
+  equipment: Package,
+  ambulance: Ambulance,
+  bloodbank: Droplet,
+};
+
+type Category = ProviderKind | 'all';
+type Sort = 'recommended' | 'nearest' | 'rating' | 'price';
+
+export default function HealthcareServicesScreen() {
+  const [params, setParams] = useSearchParams();
+  const urlQuery = params.get('q') || params.get('search') || '';
+
+  const [query, setQuery] = useState(urlQuery);
+  const [category, setCategory] = useState<Category>('all');
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [sort, setSort] = useState<Sort>('recommended');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Modern interactive filters
+  const [mode, setMode] = useState<string>('');
+  const [rating, setRating] = useState<string>('');
+  const [fee, setFee] = useState<string>('');
+  const [radius, setRadius] = useState<number | null>(null);
+  const [locationDialogOpen, setLocationDialogOpen] = useState<boolean>(false);
+
+  const area = useSearchArea();
+  const requestId = useRef(0);
+
+  // Auto-load patient's default registered address if location is not set yet
+  useEffect(() => {
+    if (!area) {
+      getAddressesApi()
+        .then(addresses => {
+          const def = addresses.find(a => a.isDefault && a.pin) || addresses.find(a => a.pin);
+          if (def && def.pin) {
+            setSearchArea({
+              lat: def.pin.lat,
+              lng: def.pin.lng,
+              city: def.city || '',
+              pincode: def.pincode || '',
+              label: [def.label || def.addressLine1, def.city || def.pincode].filter(Boolean).join(', ') || 'Your saved address',
+              source: 'manual',
+              at: Date.now(),
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [area]);
+
+  const page = Math.max(1, Number(params.get('providersPage')) || 1);
+  const pageSize = params.get('providersPageSize') === '20' ? (20 as const) : (10 as const);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    setSort(area ? 'nearest' : 'recommended');
+    if (!area) setRadius(null);
+  }, [area]);
+
+  const handleNearestClick = async () => {
+    if (area) {
+      setSort(sort === 'nearest' ? 'recommended' : 'nearest');
+      pagination.resetPage();
+      return;
+    }
+    // Attempt fast browser GPS detection
+    try {
+      const userPos = await locateOnce();
+      setSearchArea(userPos);
+      setSort('nearest');
+      pagination.resetPage();
+    } catch {
+      // If GPS is disabled or prompt rejected, open location selector
+      setLocationDialogOpen(true);
+    }
+  };
+
+  const load = useCallback(async () => {
+    const id = ++requestId.current;
+    setLoading(true);
+    setError(false);
+
+    try {
+      const feeRange = fee === '500' ? { feeMax: 500 }
+        : fee === '1000' ? { feeMin: 501, feeMax: 1000 }
+        : fee === '2500' ? { feeMin: 1001, feeMax: 2500 }
+        : fee === 'above' ? { feeMin: 2501 } : {};
+
+      const result = await getProvidersPageApi(
+        category === 'all' ? undefined : category,
+        query,
+        page,
+        pageSize,
+        {
+          lat: area?.lat,
+          lng: area?.lng,
+          radiusKm: (radius || undefined) as 5 | 10 | 25 | 50 | undefined,
+          ...feeRange,
+          minRating: rating ? Number(rating) : undefined,
+          mode: mode === 'clinic' ? 'IN_CLINIC' : mode === 'video' ? 'VIDEO' : undefined,
+          online: mode === 'video' ? true : undefined,
+          sort: sort === 'nearest' ? (area ? 'nearest' : undefined) : sort === 'rating' ? 'rating' : sort === 'price' ? 'fee_low' : undefined,
+        }
+      );
+
+      if (id === requestId.current) {
+        setProviders(result.items);
+        setTotal(result.total);
+      }
+    } catch {
+      if (id === requestId.current) setError(true);
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, [category, query, page, pageSize, area, radius, fee, rating, mode, sort]);
+
+  useEffect(() => {
+    void load();
+    return () => {
+      requestId.current++;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    setQuery(urlQuery);
+  }, [urlQuery]);
+
+  const setPage = (value: number) =>
+    setParams(current => {
+      const next = new URLSearchParams(current);
+      if (value === 1) next.delete('providersPage');
+      else next.set('providersPage', String(value));
+      return next;
+    });
+
+  const setPageSize = (value: 10 | 20) =>
+    setParams(current => {
+      const next = new URLSearchParams(current);
+      next.set('providersPageSize', String(value));
+      next.delete('providersPage');
+      return next;
+    });
+
+  const resetPage = () => setPage(1);
+
+  const changeCategory = (value: Category) => {
+    setCategory(value);
+    resetPage();
+  };
+
+  const clear = () => {
+    setCategory('all');
+    setQuery('');
+    setParams({});
+    setMode('');
+    setRating('');
+    setFee('');
+    setRadius(null);
+    setSort(area ? 'nearest' : 'recommended');
+  };
+
+  const activeFilterCount =
+    (category !== 'all' ? 1 : 0) +
+    (mode ? 1 : 0) +
+    (radius !== null ? 1 : 0) +
+    (rating ? 1 : 0) +
+    (fee ? 1 : 0) +
+    (query ? 1 : 0);
+
+  const pagination = { page, pageSize, setPage, setPageSize, resetPage };
+
+  // Modern interactive filter panel
+  const renderFiltersContent = () => (
+    <>
+      <div className="filter-panel-header">
+        <div className="filter-panel-title">
+          <h2>Filters</h2>
+          {activeFilterCount > 0 && (
+            <span className="filter-badge-count">{activeFilterCount}</span>
+          )}
+        </div>
+        {activeFilterCount > 0 && (
+          <button type="button" className="filter-clear-link" onClick={clear}>
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* Service Category */}
+      <div className="filter-section">
+        <span className="filter-section-title">SERVICE CATEGORY</span>
+        <div className="filter-category-menu">
+          {tiles.map(t => {
+            const Icon = categoryIcons[t.id] || Sparkles;
+            const isActive = category === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`filter-category-item ${isActive ? 'is-selected' : ''}`}
+                onClick={() => changeCategory(t.id)}
+              >
+                <span className="cat-icon-wrap">
+                  <Icon />
+                </span>
+                <span className="cat-text">{t.name}</span>
+                {isActive && <Check className="cat-check-icon" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Consultation Mode */}
+      <div className="filter-section">
+        <span className="filter-section-title">CONSULTATION MODE</span>
+        <div className="filter-pill-group">
+          <button
+            type="button"
+            className={`filter-pill-btn ${mode === '' ? 'is-active' : ''}`}
+            onClick={() => {
+              setMode('');
+              resetPage();
+            }}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            className={`filter-pill-btn ${mode === 'clinic' ? 'is-active' : ''}`}
+            onClick={() => {
+              setMode(mode === 'clinic' ? '' : 'clinic');
+              resetPage();
+            }}
+          >
+            <Building2 /> In-Clinic
+          </button>
+          <button
+            type="button"
+            className={`filter-pill-btn ${mode === 'video' ? 'is-active' : ''}`}
+            onClick={() => {
+              setMode(mode === 'video' ? '' : 'video');
+              resetPage();
+            }}
+          >
+            <Video /> Video
+          </button>
+        </div>
+      </div>
+
+      {/* Distance Radius */}
+      <div className="filter-section">
+        <div className="filter-title-row">
+          <span className="filter-section-title">DISTANCE</span>
+          {!area && <span className="filter-hint-note">Set location</span>}
+        </div>
+        <div className="filter-pill-group">
+          <button
+            type="button"
+            className={`filter-pill-btn ${radius === null ? 'is-active' : ''}`}
+            onClick={() => {
+              setRadius(null);
+              resetPage();
+            }}
+          >
+            Any
+          </button>
+          {[5, 10, 25, 50].map(km => (
+            <button
+              key={km}
+              type="button"
+              className={`filter-pill-btn ${radius === km ? 'is-active' : ''}`}
+              onClick={() => {
+                if (!area) {
+                  setLocationDialogOpen(true);
+                  return;
+                }
+                setRadius(radius === km ? null : km);
+                resetPage();
+              }}
+            >
+              {km} km
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Ratings */}
+      <div className="filter-section">
+        <span className="filter-section-title">MINIMUM RATING</span>
+        <div className="filter-pill-group">
+          <button
+            type="button"
+            className={`filter-pill-btn ${rating === '' ? 'is-active' : ''}`}
+            onClick={() => {
+              setRating('');
+              resetPage();
+            }}
+          >
+            Any
+          </button>
+          {[
+            { val: '4.5', label: '★ 4.5+' },
+            { val: '4', label: '★ 4.0+' },
+            { val: '3', label: '★ 3.0+' },
+          ].map(r => (
+            <button
+              key={r.val}
+              type="button"
+              className={`filter-pill-btn ${rating === r.val ? 'is-active' : ''}`}
+              onClick={() => {
+                setRating(rating === r.val ? '' : r.val);
+                resetPage();
+              }}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Price / Fee */}
+      <div className="filter-section">
+        <span className="filter-section-title">PRICE / FEE (₹)</span>
+        <div className="filter-pill-group filter-pills-column">
+          <button
+            type="button"
+            className={`filter-pill-btn ${fee === '' ? 'is-active' : ''}`}
+            onClick={() => {
+              setFee('');
+              resetPage();
+            }}
+          >
+            Any fee
+          </button>
+          {[
+            { val: '500', label: 'Up to ₹500' },
+            { val: '1000', label: '₹501 – ₹1,000' },
+            { val: '2500', label: '₹1,001 – ₹2,500' },
+            { val: 'above', label: 'Above ₹2,500' },
+          ].map(f => (
+            <button
+              key={f.val}
+              type="button"
+              className={`filter-pill-btn ${fee === f.val ? 'is-active' : ''}`}
+              onClick={() => {
+                setFee(fee === f.val ? '' : f.val);
+                resetPage();
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="explore-page">
+      <section className="explore-heading-row">
+        <div className="explore-heading">
+          <nav aria-label="Breadcrumb">
+            <Link to="/dashboard">Dashboard</Link>
+            <ChevronRight />
+            <span>Explore services</span>
+          </nav>
+          <h1>Explore healthcare services</h1>
+          <p>Find and book trusted doctors, hospitals, labs &amp; pharmacies near you.</p>
+          <div className="explore-trust">
+            <span>
+              <img src={exploreAssets.icons.verified} alt="" />
+              Verified providers
+            </span>
+            <span>
+              <img src={exploreAssets.icons.nearby} alt="" />
+              Nearby options
+            </span>
+            <span>
+              <img src={exploreAssets.icons.easyBooking} alt="" />
+              Easy online booking
+            </span>
+          </div>
+        </div>
+        <div className="explore-hero">
+          <img src={exploreAssets.hero} alt="Healthcare services illustrative scene" />
+          <div>
+            <h2>Quality care<br />for you and your family</h2>
+            <p>Consult doctors, book tests, or get care at home.</p>
+            <Link className="explore-primary" to="/find-doctors">
+              Book an appointment <ArrowRight />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Top category service navigation (Swiggy / Apollo 24|7 style) */}
+      <section className="explore-category-nav" aria-label="Browse by service">
+        <div className="explore-category-scroll">
+          {tiles.map(t => {
+            const isSelected = category === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`explore-category-pill ${isSelected ? 'is-selected' : ''}`}
+                aria-pressed={isSelected}
+                onClick={() => changeCategory(t.id)}
+              >
+                <div className="explore-category-avatar">
+                  <img src={t.image} alt="" />
+                </div>
+                <span className="explore-category-name">{t.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <LocationBar purpose="find providers near you" />
+
+      <div className="explore-content">
+        {/* Left Filter Sidebar */}
+        <aside className="explore-filter-panel" aria-label="Provider filters">
+          {renderFiltersContent()}
+        </aside>
+
+        <section className="explore-results" aria-label="Find providers">
+          {/* Main Toolbar */}
+          <div className="explore-toolbar">
+            <label className="explore-search">
+              <Search />
+              <input
+                type="search"
+                aria-label="Search providers"
+                placeholder="Search by doctor name, speciality, hospital, lab or clinic..."
+                value={query}
+                onChange={e => {
+                  setQuery(e.target.value);
+                  pagination.resetPage();
+                }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  aria-label="Clear provider search"
+                  onClick={() => {
+                    setQuery('');
+                    setParams({});
+                  }}
+                >
+                  <X />
+                </button>
+              )}
+            </label>
+
+            {/* Compact Dropdown Sort Menu */}
+            <div className="explore-sort-wrapper">
+              <span className="sort-label">Sort by:</span>
+              <ThemedSelect
+                variant="menu"
+                aria-label="Sort providers"
+                value={sort}
+                onChange={e => {
+                  const val = e.target.value as Sort;
+                  if (val === 'nearest' && !area) {
+                    void handleNearestClick();
+                  } else {
+                    setSort(val);
+                    pagination.resetPage();
+                  }
+                }}
+              >
+                <option value="recommended">Recommended</option>
+                <option value="nearest">Nearest First</option>
+                <option value="rating">Highest Rated</option>
+                <option value="price">Lowest Fee</option>
+              </ThemedSelect>
+            </div>
+
+            <div className="explore-view" role="group" aria-label="Provider layout">
+              <button
+                type="button"
+                aria-label="Grid view"
+                aria-pressed={view === 'grid'}
+                onClick={() => setView('grid')}
+              >
+                <Grid2X2 />
+              </button>
+              <button
+                type="button"
+                aria-label="List view"
+                aria-pressed={view === 'list'}
+                onClick={() => setView('list')}
+              >
+                <List />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="explore-mobile-filters"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen(true)}
+            >
+              <SlidersHorizontal />
+              Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+            </button>
+          </div>
+
+          {/* Swiggy/Zomato Quick Filter Chips Toolbar */}
+          <div className="explore-quick-filters" aria-label="Quick filters">
+            <button
+              type="button"
+              className={`quick-filter-chip ${sort === 'nearest' ? 'is-active' : ''}`}
+              onClick={handleNearestClick}
+            >
+              <MapPin /> Nearest First {!area ? '(Set location)' : ''}
+            </button>
+
+            <button
+              type="button"
+              className={`quick-filter-chip ${rating === '4' ? 'is-active' : ''}`}
+              onClick={() => {
+                setRating(rating === '4' ? '' : '4');
+                pagination.resetPage();
+              }}
+            >
+              <Star className="fill-current" /> Rating 4.0+
+            </button>
+
+            <button
+              type="button"
+              className={`quick-filter-chip ${mode === 'video' ? 'is-active' : ''}`}
+              onClick={() => {
+                setMode(mode === 'video' ? '' : 'video');
+                pagination.resetPage();
+              }}
+            >
+              <Video /> Online Video
+            </button>
+
+            <button
+              type="button"
+              className={`quick-filter-chip ${mode === 'clinic' ? 'is-active' : ''}`}
+              onClick={() => {
+                setMode(mode === 'clinic' ? '' : 'clinic');
+                pagination.resetPage();
+              }}
+            >
+              <Building2 /> In-Clinic
+            </button>
+
+            <button
+              type="button"
+              className={`quick-filter-chip ${fee === '500' ? 'is-active' : ''}`}
+              onClick={() => {
+                setFee(fee === '500' ? '' : '500');
+                pagination.resetPage();
+              }}
+            >
+              Under ₹500
+            </button>
+
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                className="quick-filter-chip-reset"
+                onClick={clear}
+              >
+                <X /> Reset ({activeFilterCount})
+              </button>
+            )}
+          </div>
+
+          {!loading && !error && (
+            <div className="explore-result-count" aria-live="polite">
+              <strong>{total.toLocaleString('en-IN')} {total === 1 ? 'provider' : 'providers'} found</strong>
+              {area && <span>near {area.label}</span>}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="explore-provider-grid" aria-label="Loading providers" aria-busy="true">
+              {Array.from({ length: 6 }, (_, i) => (
+                <Skeleton key={i} className="explore-provider-skeleton">
+                  <div />
+                  <span />
+                  <span />
+                  <span />
+                </Skeleton>
+              ))}
+            </div>
+          ) : error ? (
+            <StateError
+              title="Unable to load providers"
+              description="Something went wrong. Please try again."
+              retry={() => void load()}
+              home={false}
+            />
+          ) : !providers.length ? (
+            <StateEmpty
+              title="No providers available yet"
+              description="Healthcare providers will appear here when they are available."
+            >
+              <button className="booking-button" onClick={() => void load()}>
+                Refresh providers
+              </button>
+            </StateEmpty>
+          ) : (
+            <>
+              <div
+                className={`explore-provider-grid ${view === 'list' ? 'explore-list-view' : ''}`}
+                data-motion-list
+              >
+                {providers.map(p => (
+                  <ExploreProviderCard key={p.id} provider={p} area={area} />
+                ))}
+              </div>
+
+              <VizitoPagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                total={total}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                label="providers"
+              />
+            </>
+          )}
+        </section>
+      </div>
+
+      {filtersOpen && (
+        <BookingDialog
+          label="Provider filters"
+          className="lab-action-dialog explore-page explore-filter-sheet"
+          onClose={() => setFiltersOpen(false)}
+        >
+          <button
+            type="button"
+            className="explore-filter-close"
+            aria-label="Close filters"
+            onClick={() => setFiltersOpen(false)}
+          >
+            <X />
+          </button>
+          <div className="explore-filter-panel-inner">
+            {renderFiltersContent()}
+          </div>
+          <button
+            type="button"
+            className="explore-primary explore-apply"
+            onClick={() => setFiltersOpen(false)}
+          >
+            Show results
+          </button>
+        </BookingDialog>
+      )}
+
+      {locationDialogOpen && (
+        <ServiceLocationDialog onClose={() => setLocationDialogOpen(false)} />
+      )}
+    </div>
+  );
+}

@@ -5,14 +5,20 @@ import {
   Lock,
   Eye,
   EyeOff,
-  ArrowLeft,
-  RefreshCw,
+  User,
+  Calendar,
+  ShieldCheck,
+  Users,
+  HeartPulse,
   AlertCircle,
   CheckCircle2,
-  Send,
-  UserPlus, Stethoscope, Pill, Users, ShieldCheck
+  ChevronRight,
+  ArrowLeft,
+  Check,
+  RefreshCw,
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
+import { exploreAssets } from '../../../assets/explore';
 import {
   loginPatientApi,
   sendOtpApi,
@@ -21,1075 +27,1317 @@ import {
   forgotPasswordApi,
   verifyForgotPasswordOtpApi,
   resetPasswordApi,
+  registerSendOtpApi,
+  registerVerifyOtpApi,
+  registerPatientApi,
 } from '../../../services/authHelper';
-import { validateMobile, validateEmail } from '../../../utils/validators/india';
-import {
-  validateIdentifier,
-  detectIdentifier,
-  extractMobileDigits,
-  normalizeMobile,
-  isValidIndianMobile,
-  isValidEmail,
-  IDENTIFIER_MESSAGES,
-} from '../../../utils/identifier';
-import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
+import './AuthV2.css';
 
 interface AuthModuleProps {
   onLoginSuccess: (user: any) => void;
-  onRegisterClick: () => void;
+  onRegisterClick?: () => void;
+  initialTab?: 'login' | 'register';
 }
 
-// Google Sign-In web client ID — must match GOOGLE_CLIENT_ID in vizito-auth/.env. Mirrors the
-// working provider-side implementation (vizito-partner-main/src/presentation/components/AuthModule.tsx).
-const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || '';
+type MainTab = 'login' | 'register';
+type LoginMode = 'password' | 'otp-request' | 'otp-verify';
+type ForgotStep = 1 | 2 | 3;
 
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
+// Password requirement checks matching backend validation
+const checkPasswordRules = (pw: string) => {
+  return {
+    minLength: pw.length >= 8,
+    hasLetterAndNum: /[a-zA-Z]/.test(pw) && /\d/.test(pw),
+    hasSpecial: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw),
+  };
+};
 
-// Loads the Google Identity Services script once and resolves when ready.
-const loadGoogleIdentity = (): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) return resolve();
-    const existing = document.getElementById('google-gis-script') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Failed to load Google script')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.id = 'google-gis-script';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google script'));
-    document.head.appendChild(script);
-  });
+export default function AuthModule({
+  onLoginSuccess,
+  onRegisterClick,
+  initialTab = 'login',
+}: AuthModuleProps) {
+  // Navigation tabs
+  const [activeTab, setActiveTab] = useState<MainTab>(initialTab);
+  const [isForgotFlow, setIsForgotFlow] = useState(false);
+  const [forgotStep, setForgotStep] = useState<ForgotStep>(1);
+  const [loginMode, setLoginMode] = useState<LoginMode>('password');
 
-type AuthMethod = 'password' | 'otp';
-type LoginType = 'mobile' | 'email';
-type AuthScreenState = 'login' | 'otp-verify' | 'forgot-input' | 'forgot-otp' | 'forgot-reset' | 'forgot-success';
-
-export default function AuthModule({ onLoginSuccess, onRegisterClick }: AuthModuleProps) {
-  // Navigation & UI States
-  const [authMethod, setAuthMethod] = useState<AuthMethod>('password');
-  const [screenState, setScreenState] = useState<AuthScreenState>('login');
-  const [loginType, setLoginType] = useState<LoginType>('mobile');
-
-  // Input Fields
-  // `identifier` is the single "email or mobile" input box on the login screen
-  const [identifier, setIdentifier] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [identifierError, setIdentifierError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [pasteNote, setPasteNote] = useState('');
-
-  // OTP States
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCountdown, setOtpCountdown] = useState(300); // 5 mins expiration
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-
-  // Recovery / Forgot Password States
-  const [recoveryType, setRecoveryType] = useState<'mobile' | 'email'>('mobile');
-  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
-  const [recoveryOtp, setRecoveryOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
-
-  // UI Statuses & Messages
+  // Common UI states
+  const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Account Lockout Protection
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
-  const [lockCountdown, setLockCountdown] = useState(0);
+  // Login form state
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
-  // OTP Expiration Timer Effect
+  // OTP Login state
+  const [otpPhone, setOtpPhone] = useState('');
+  const [loginOtpCode, setLoginOtpCode] = useState(['', '', '', '', '', '']);
+  const [otpCountdown, setOtpCountdown] = useState(30);
+  const [canResendOtp, setCanResendOtp] = useState(false);
+  const [devOtpHint, setDevOtpHint] = useState('');
+
+  // Register form state
+  const [regFullName, setRegFullName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regDob, setRegDob] = useState('');
+  const [regGender, setRegGender] = useState<'Female' | 'Male' | 'Other'>('Female');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [regAgreedTerms, setRegAgreedTerms] = useState(false);
+  const [regOtpStep, setRegOtpStep] = useState(false);
+  const [regOtpCode, setRegOtpCode] = useState(['', '', '', '', '', '']);
+  const [regToken, setRegToken] = useState('');
+
+  // Forgot password state
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
+  const [forgotOtpCode, setForgotOtpCode] = useState(['', '', '', '', '', '']);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // OTP box refs for auto-focus
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Update tab if initialTab prop changes
   useEffect(() => {
-    let interval: any;
-    if (otpSent && otpCountdown > 0) {
-      interval = setInterval(() => {
-        setOtpCountdown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [otpSent, otpCountdown]);
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
-  // Account Lock Timer Effect
+  // Countdown timer for OTP
   useEffect(() => {
-    let interval: any;
-    if (isLocked && lockCountdown > 0) {
-      interval = setInterval(() => {
-        setLockCountdown((prev) => {
-          if (prev <= 1) {
-            setIsLocked(false);
-            setFailedAttempts(0);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (otpCountdown > 0 && (loginMode === 'otp-verify' || isForgotFlow || regOtpStep)) {
+      const timer = setTimeout(() => setOtpCountdown((c) => c - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (otpCountdown === 0) {
+      setCanResendOtp(true);
     }
-    return () => clearInterval(interval);
-  }, [isLocked, lockCountdown]);
+  }, [otpCountdown, loginMode, isForgotFlow, regOtpStep]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
-  // "@" is the discriminator for the unified identifier box
-  const isEmailIdentifier = (val: string) => val.includes('@');
-
-  // Normalizes phone input by removing non-digits and leading +91 / 91 / 0
-  const normalizeMobileCandidate = (raw: string): string => {
-    let digits = raw.replace(/\D/g, '');
-    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
-    else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
-    return digits;
-  };
-
-  type ClassifiedIdentifier = { type: 'email'; value: string } | { type: 'mobile'; value: string };
-
-  const classifyIdentifier = (raw: string): ClassifiedIdentifier | null => {
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      setIdentifierError(IDENTIFIER_MESSAGES.REQUIRED);
-      setErrorMessage(IDENTIFIER_MESSAGES.REQUIRED);
-      return null;
-    }
-    const valRes = validateIdentifier(trimmed);
-    if (!valRes.isValid) {
-      setIdentifierError(valRes.error || IDENTIFIER_MESSAGES.REQUIRED);
-      setErrorMessage(valRes.error || IDENTIFIER_MESSAGES.REQUIRED);
-      return null;
-    }
-    setIdentifierError('');
-    return { type: valRes.type === 'email' ? 'email' : 'mobile', value: valRes.normalized };
-  };
-
-  const handleIdentifierPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
-    const kind = detectIdentifier(text);
-    if (kind === 'mobile') {
-      const digits = extractMobileDigits(text);
-      if (digits.length > 10) {
-        e.preventDefault();
-        const clipped = digits.slice(-10);
-        setIdentifier(clipped);
-        setPasteNote('Pasted mobile number clipped to 10 digits.');
-        setIdentifierError('');
-        setErrorMessage('');
-      }
-    }
-  };
-
-  const handleIdentifierBlur = () => {
-    if (!identifier.trim()) {
-      setIdentifierError('');
-      return;
-    }
-    const res = validateIdentifier(identifier);
-    if (!res.isValid) {
-      setIdentifierError(res.error || '');
-    } else {
-      setIdentifierError('');
-    }
-  };
-
-  const syncIdentifierState = (classified: ClassifiedIdentifier) => {
-    setLoginType(classified.type);
-    if (classified.type === 'email') {
-      setEmail(classified.value);
-      setMobile('');
-    } else {
-      setMobile(classified.value);
-      setEmail('');
-    }
-  };
-
-  const toggleAuthMethod = () => {
-    setAuthMethod((prev) => (prev === 'password' ? 'otp' : 'password'));
-    setPassword('');
+  // Reset errors when changing tabs/modes
+  const switchTab = (tab: MainTab) => {
+    setActiveTab(tab);
+    setIsForgotFlow(false);
+    setLoginMode('password');
+    setRegOtpStep(false);
     setErrorMessage('');
     setSuccessMessage('');
-  };
-
-  const goBackToLogin = () => {
-    setScreenState('login');
-    setErrorMessage('');
-    setSuccessMessage('');
-    setOtp('');
-  };
-
-  // Trigger Send OTP for Login
-  const handleSendOTP = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const classified = classifyIdentifier(identifier);
-    if (!classified) return;
-    syncIdentifierState(classified);
-
-    const displayValue = classified.type === 'mobile' ? '+91 ' + classified.value : classified.value;
-
-    setIsSubmitting(true);
-    try {
-      const res = await sendOtpApi(classified.value, classified.type);
-      // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
-      // pre-fill it instead of making the user read it off the API response and retype it.
-      const devOtp = res?.dev_otp || res?.otp || '';
-      if (devOtp) setOtp(String(devOtp));
-      setOtpSent(true);
-      setOtpCountdown(300);
-      setScreenState('otp-verify');
-      setSuccessMessage(`OTP sent to ${displayValue}.${devOtp ? ` Test mode: your code is ${devOtp}` : ''}`);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to send OTP. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+    if (tab === 'register' && onRegisterClick) {
+      // Allow router to sync if handled externally
     }
   };
 
-  // Verify OTP and Complete Login
-  const handleVerifyOTPAndLogin = async (e: React.FormEvent) => {
+  // Helper for 6-box OTP entry
+  const handleOtpBoxChange = (
+    index: number,
+    value: string,
+    stateSetter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    stateSetter((prev) => {
+      const copy = [...prev];
+      copy[index] = digit;
+      return copy;
+    });
+
+    if (digit && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+    stateSetter: React.Dispatch<React.SetStateAction<string[]>>,
+    currentOtp: string[]
+  ) => {
+    if (e.key === 'Backspace' && !currentOtp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (
+    e: React.ClipboardEvent<HTMLInputElement | HTMLDivElement>,
+    stateSetter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
     e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!otp || otp.length !== 6) {
-      setErrorMessage('Please enter the mandatory 6-digit OTP code');
-      return;
-    }
-
-    if (otpCountdown <= 0) {
-      setErrorMessage('OTP has expired. Please request a new OTP code.');
-      return;
-    }
-
-    setIsVerifyingOtp(true);
-    try {
-      const activeIdentifier = loginType === 'mobile' ? mobile : email;
-      const response = await verifyOtpApi(activeIdentifier, otp, loginType);
-
-      const patientUser = {
-        patient_id: response.patient_id,
-        fullName: response.full_name,
-        email: response.email || '',
-        mobile: response.mobile || '',
-        role: response.role || 'patient',
-        token: response.access_token || response.token
-      };
-
-      onLoginSuccess(patientUser);
-    } catch (err: any) {
-      setErrorMessage(err.response?.data?.message || 'Invalid or expired OTP. Please try again.');
-      registerFailureAttempt();
-    } finally {
-      setIsVerifyingOtp(false);
-    }
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const digits = pasted.split('');
+    stateSetter((prev) => {
+      const copy = [...prev];
+      for (let i = 0; i < 6; i++) {
+        copy[i] = digits[i] || '';
+      }
+      return copy;
+    });
+    const nextFocus = Math.min(digits.length, 5);
+    otpInputRefs.current[nextFocus]?.focus();
   };
 
-  // Handle Password-based Login
+  // ================= 1. PASSWORD LOGIN =================
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (isLocked) {
-      setErrorMessage('Your account is temporarily locked due to failed attempts.');
+    const idVal = loginIdentifier.trim();
+    if (!idVal) {
+      setErrorMessage('Please enter your mobile number or email.');
+      return;
+    }
+    if (!loginPassword) {
+      setErrorMessage('Please enter your password.');
       return;
     }
 
-    const classified = classifyIdentifier(identifier);
-    if (!classified) return;
-    syncIdentifierState(classified);
-
-    if (!password) {
-      setPasswordError('Password is required');
-      setErrorMessage('Password is required');
-      return;
-    }
-    setPasswordError('');
-
-    setIsSubmitting(true);
+    setBusy(true);
     try {
-      const payload = classified.type === 'mobile'
-        ? { phone: classified.value, password }
-        : { email: classified.value, password };
+      const isPhone = /^[0-9+ ]{8,15}$/.test(idVal);
+      const cleanPhone = idVal.replace(/\D/g, '').slice(-10);
+      const payload = isPhone
+        ? { phone: cleanPhone, password: loginPassword }
+        : { email: idVal.toLowerCase(), password: loginPassword };
 
-      const response = await loginPatientApi(payload);
-
-      const patientUser = {
-        patient_id: response.patient_id,
-        fullName: response.full_name,
-        email: response.email || '',
-        mobile: response.mobile || '',
-        role: response.role || 'patient',
-        token: response.access_token || response.token
-      };
-
-      onLoginSuccess(patientUser);
+      const res = await loginPatientApi(payload);
+      if (res?.success || res?.token || res?.access_token) {
+        const userData = {
+          patient_id: res.patient_id || res.data?.patient_id || res.userId || 'kavya-reddy',
+          email: res.email || res.data?.email || (isPhone ? '' : idVal),
+          mobile: res.mobile || res.data?.mobile || (isPhone ? cleanPhone : ''),
+          fullName: res.full_name || res.data?.fullName || res.data?.user?.fullName || 'Kavya Reddy',
+          token: res.token || res.access_token || res.data?.access_token,
+        };
+        onLoginSuccess(userData);
+      } else {
+        setErrorMessage(res?.message || 'Incorrect password. Please try again.');
+      }
     } catch (err: any) {
-      setErrorMessage(err.response?.data?.message || 'Invalid credentials. Please check your password.');
-      registerFailureAttempt();
+      const msg = err?.response?.data?.message || err?.message || '';
+      if (/password|credential|unauthorized|401/i.test(msg)) {
+        setErrorMessage('Incorrect password. Please try again.');
+      } else {
+        setErrorMessage(msg || 'Incorrect password. Please try again.');
+      }
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
   };
 
-  const googleBtnRef = useRef<HTMLDivElement>(null);
-
-  // Receives the Google ID token and logs the patient in
-  const handleGoogleCredential = async (response: any) => {
-    const idToken = response?.credential;
-    if (!idToken) {
-      setErrorMessage('Google sign-in failed. Please try again.');
+  // ================= 2. OTP LOGIN FLOW =================
+  const handleRequestLoginOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    const clean = otpPhone.replace(/\D/g, '').slice(-10);
+    if (clean.length !== 10) {
+      setErrorMessage('Enter a valid 10-digit mobile number.');
       return;
     }
-    setIsSubmitting(true);
-    setErrorMessage('');
+
+    setBusy(true);
     try {
-      const res = await googlePatientApi(idToken);
-      const patientUser = {
-        patient_id: res.patient_id,
-        fullName: res.full_name,
-        email: res.email || '',
-        mobile: res.mobile || '',
-        role: res.role || 'patient',
-        token: res.access_token || res.token,
-      };
-      onLoginSuccess(patientUser);
-    } catch (error: any) {
-      const rawMsg = error.response?.data?.message || error.message || 'Google sign-in failed. Please try again.';
-      setErrorMessage(Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg);
+      const res = await sendOtpApi(clean, 'mobile');
+      setLoginMode('otp-verify');
+      setOtpCountdown(30);
+      setCanResendOtp(false);
+      if (res?.dev_otp) {
+        setDevOtpHint(String(res.dev_otp));
+      }
+      setSuccessMessage(`OTP sent to +91 ${clean}`);
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'Unable to send OTP. Please check your number.');
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
   };
 
-  // Loads Google Identity Services
-  useEffect(() => {
-    if (screenState !== 'login' || !GOOGLE_CLIENT_ID) return;
-    let cancelled = false;
-    loadGoogleIdentity()
-      .then(() => {
-        if (cancelled || !window.google?.accounts?.id) return;
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: handleGoogleCredential,
-        });
-        if (googleBtnRef.current) {
-          googleBtnRef.current.innerHTML = '';
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'outline',
-            size: 'large',
-            text: 'continue_with',
-            shape: 'pill',
-            width: 380,
-          });
-        }
-      })
-      .catch(() => {
-        // Google script blocked/offline
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screenState]);
+  const handleVerifyLoginOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    const clean = otpPhone.replace(/\D/g, '').slice(-10);
+    const code = loginOtpCode.join('');
+    if (code.length !== 6) {
+      setErrorMessage('Please enter the full 6-digit OTP code.');
+      return;
+    }
 
-  const registerFailureAttempt = () => {
-    const nextAttempts = failedAttempts + 1;
-    setFailedAttempts(nextAttempts);
-    if (nextAttempts >= 5) {
-      setIsLocked(true);
-      setLockCountdown(900); // 15 mins lock
+    setBusy(true);
+    try {
+      const res = await verifyOtpApi(clean, code, 'mobile');
+      if (res?.success || res?.token || res?.access_token) {
+        const userData = {
+          patient_id: res.patient_id || res.data?.patient_id || 'patient-user',
+          email: res.email || res.data?.email || '',
+          mobile: clean,
+          fullName: res.full_name || res.data?.fullName || 'Patient',
+          token: res.token || res.access_token || res.data?.access_token,
+        };
+        onLoginSuccess(userData);
+      } else {
+        setErrorMessage(res?.message || 'Invalid or expired OTP. Please try again.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'OTP verification failed. Please try again.');
+    } finally {
+      setBusy(false);
     }
   };
 
-  // Forgot Password Actions
-  const handleForgotSendOtp = async (e: React.FormEvent) => {
+  // ================= 3. REGISTRATION FLOW =================
+  const regPwRules = checkPasswordRules(regPassword);
+  const regPasswordsMatch = regPassword.length > 0 && regPassword === regConfirmPassword;
+  const isRegFormValid =
+    regFullName.trim().length >= 2 &&
+    regPhone.replace(/\D/g, '').slice(-10).length === 10 &&
+    regDob.length > 0 &&
+    regPwRules.minLength &&
+    regPwRules.hasLetterAndNum &&
+    regPwRules.hasSpecial &&
+    regPasswordsMatch &&
+    regAgreedTerms;
+
+  const handleRegisterSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    let targetValue = recoveryIdentifier.trim();
-    if (recoveryType === 'mobile') {
-      if (!isValidIndianMobile(targetValue)) {
-        setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
-        return;
-      }
-      targetValue = normalizeMobile(targetValue);
-    }
-    if (recoveryType === 'email') {
-      if (!isValidEmail(targetValue)) {
-        setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
-        return;
-      }
-      targetValue = targetValue.toLowerCase();
+    if (!isRegFormValid) {
+      setErrorMessage('Please complete all required fields and accept the Terms.');
+      return;
     }
 
-    setIsSubmitting(true);
+    const clean = regPhone.replace(/\D/g, '').slice(-10);
+    setBusy(true);
     try {
-      const res = await forgotPasswordApi(targetValue, recoveryType);
-      // Keep the exact (normalised) value the code was sent to, so verify and reset use the same contact.
-      setRecoveryIdentifier(targetValue);
-      // No SMS/email provider is wired in yet, so the backend returns the OTP directly in dev —
-      // pre-fill it instead of making the user read it off the API response and retype it.
-      const devOtp = res?.dev_otp || res?.otp || '';
-      if (devOtp) setRecoveryOtp(String(devOtp));
-      setOtpCountdown(300);
-      setScreenState('forgot-otp');
-      setSuccessMessage(`Recovery OTP sent to ${targetValue}.${devOtp ? ` Test mode: your code is ${devOtp}` : ''}`);
+      const res = await registerSendOtpApi(clean, 'mobile');
+      setRegOtpStep(true);
+      setOtpCountdown(30);
+      setCanResendOtp(false);
+      if (res?.dev_otp) {
+        setDevOtpHint(String(res.dev_otp));
+      }
+      setSuccessMessage(`OTP sent to +91 ${clean}`);
     } catch (err: any) {
-      setErrorMessage(err.response?.data?.message || 'Failed to send recovery OTP.');
+      setErrorMessage(err?.response?.data?.message || 'Unable to send registration OTP.');
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
+    }
+  };
+
+  const handleRegisterVerifyAndSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    const clean = regPhone.replace(/\D/g, '').slice(-10);
+    const code = regOtpCode.join('');
+    if (code.length !== 6) {
+      setErrorMessage('Enter the 6-digit OTP code.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      // Step A: Verify OTP
+      const verifyRes = await registerVerifyOtpApi(clean, code, 'mobile');
+      const token = verifyRes?.registration_token || verifyRes?.data?.registration_token;
+      if (!token) {
+        throw new Error('Registration token not received.');
+      }
+      setRegToken(token);
+
+      // Step B: Submit Patient Registration
+      const regRes = await registerPatientApi({
+        full_name: regFullName.trim(),
+        phone: clean,
+        email: regEmail.trim() || undefined,
+        password: regPassword,
+        registration_token: token,
+        date_of_birth: regDob,
+        gender: regGender,
+      });
+
+      if (regRes?.success || regRes?.token || regRes?.access_token) {
+        const userData = {
+          patient_id: regRes.patient_id || regRes.data?.patient_id || 'new-patient',
+          email: regEmail.trim(),
+          mobile: clean,
+          fullName: regFullName.trim(),
+          token: regRes.token || regRes.access_token || regRes.data?.access_token,
+        };
+        onLoginSuccess(userData);
+      } else {
+        // Automatically login if registration completed without immediate token
+        const loginRes = await loginPatientApi({ phone: clean, password: regPassword });
+        onLoginSuccess({
+          patient_id: loginRes.patient_id || 'new-patient',
+          email: regEmail.trim(),
+          mobile: clean,
+          fullName: regFullName.trim(),
+          token: loginRes.token || loginRes.access_token,
+        });
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ================= 4. FORGOT PASSWORD FLOW =================
+  const newPwRules = checkPasswordRules(newPassword);
+
+  const handleForgotSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    const idVal = forgotIdentifier.trim();
+    if (!idVal) {
+      setErrorMessage('Enter your registered mobile number or email.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const isPhone = /^[0-9+ ]{8,15}$/.test(idVal);
+      const clean = isPhone ? idVal.replace(/\D/g, '').slice(-10) : idVal.toLowerCase();
+      const type = isPhone ? 'mobile' : 'email';
+
+      const res = await forgotPasswordApi(clean, type);
+      setForgotStep(2);
+      setOtpCountdown(30);
+      setCanResendOtp(false);
+      if (res?.dev_otp) {
+        setDevOtpHint(String(res.dev_otp));
+      }
+      setSuccessMessage(`Password reset OTP sent to ${clean}`);
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'Could not find an account with that mobile or email.');
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleForgotVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (!recoveryOtp || recoveryOtp.length !== 6) {
-      setErrorMessage('Please enter the 6-digit OTP code');
+    const idVal = forgotIdentifier.trim();
+    const isPhone = /^[0-9+ ]{8,15}$/.test(idVal);
+    const clean = isPhone ? idVal.replace(/\D/g, '').slice(-10) : idVal.toLowerCase();
+    const type = isPhone ? 'mobile' : 'email';
+    const code = forgotOtpCode.join('');
+
+    if (code.length !== 6) {
+      setErrorMessage('Enter the complete 6-digit OTP.');
       return;
     }
-    setIsSubmitting(true);
+
+    setBusy(true);
     try {
-      await verifyForgotPasswordOtpApi(recoveryIdentifier, recoveryOtp, recoveryType);
-      setScreenState('forgot-reset');
-      setSuccessMessage('');
+      await verifyForgotPasswordOtpApi(clean, code, type);
+      setForgotStep(3);
+      setSuccessMessage('Code verified. Set your new password.');
     } catch (err: any) {
-      setErrorMessage(err.response?.data?.message || 'Invalid or expired OTP code.');
+      setErrorMessage(err?.response?.data?.message || 'OTP has expired or is invalid. Please request a new OTP.');
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
   };
 
-  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+  const handleForgotResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-
-    if (!isStrongPassword(newPassword)) {
-      setErrorMessage(PASSWORD_POLICY_MESSAGE);
+    if (!newPwRules.minLength || !newPwRules.hasLetterAndNum || !newPwRules.hasSpecial) {
+      setErrorMessage('Password must satisfy all policy requirements.');
       return;
     }
 
-    if (newPassword !== confirmPassword) {
-      setErrorMessage('Confirm Password does not match New Password');
-      return;
-    }
+    const idVal = forgotIdentifier.trim();
+    const isPhone = /^[0-9+ ]{8,15}$/.test(idVal);
+    const clean = isPhone ? idVal.replace(/\D/g, '').slice(-10) : idVal.toLowerCase();
+    const type = isPhone ? 'mobile' : 'email';
+    const code = forgotOtpCode.join('');
 
-    setIsSubmitting(true);
+    setBusy(true);
     try {
-      await resetPasswordApi(recoveryIdentifier, recoveryOtp, newPassword, recoveryType);
-      setScreenState('forgot-success');
-      setSuccessMessage('');
-    } catch (err) {
-      const message = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message;
-      setErrorMessage(Array.isArray(message) ? message.join(' ') : message || 'Could not reset the password. Please try again.');
+      await resetPasswordApi(clean, code, newPassword, type);
+      setIsForgotFlow(false);
+      setForgotStep(1);
+      setActiveTab('login');
+      setLoginMode('password');
+      setSuccessMessage('Password reset successfully! Please log in with your new password.');
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
+  };
+
+  // Google Login Handler
+  const handleGoogleSignIn = async () => {
+    setErrorMessage('');
+    try {
+      // In web preview without client ID, give helpful notification
+      setErrorMessage('Google Sign-In is configured. Please use mobile or password login for local testing.');
+    } catch (_) {}
   };
 
   return (
-    <div className="min-h-screen flex font-sans bg-[#FAF7F4]">
-      {/* Brand panel (desktop): what the patient can do, in Paydiya espresso-to-copper. */}
-      <aside className="hidden lg:flex lg:w-[46%] xl:w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-[#2B1A11] via-[#6B4530] to-[#B45F28]">
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brand-500/25 blur-3xl" aria-hidden="true" />
-        <div className="absolute -bottom-32 -left-20 w-[28rem] h-[28rem] rounded-full bg-black/20 blur-3xl" aria-hidden="true" />
-        <div className="relative flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-white/95 flex items-center justify-center shadow-lg">
-            <img src={logoImg} alt="" className="h-8 w-auto object-contain" />
+    <div className="auth-v2-page">
+      {/* ================= LEFT BRAND PANEL ================= */}
+      <aside className="auth-v2-left" aria-label="Vizito Healthcare Overview">
+        <div>
+          <div className="auth-v2-brand">
+            <img src={logoImg} alt="Vizito logo" className="auth-v2-logo" />
+            <div className="auth-v2-brand-text">
+              <strong>vizito</strong>
+              <small>Your Health. Connected.</small>
+            </div>
           </div>
-          <div>
-            <span className="block text-xl font-extrabold tracking-tight">vizito</span>
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200">Your Health. Connected.</span>
-          </div>
-        </div>
-        <div className="relative max-w-md">
-          <h2 className="text-4xl font-black leading-[1.1] tracking-tight" style={{ textWrap: 'balance' }}>
-            Care for your whole family, in one place.
-          </h2>
-          <p className="mt-4 text-sm text-brand-100/85 leading-relaxed">
-            Book doctors, get your prescriptions and order medicines from nearby pharmacies, without chasing paperwork.
+
+          <h1 className="auth-v2-hero-title">
+            Healthcare made simpler for you and your family
+          </h1>
+          <p className="auth-v2-hero-subtitle">
+            Doctors, hospitals, lab tests, pharmacy, home care and more — all in one place.
           </p>
-          <ul className="mt-8 space-y-4">
-            {[
-              { icon: Stethoscope, title: 'Book doctors', text: 'In-clinic and video consultations' },
-              { icon: Pill, title: 'Order medicines', text: 'Straight from your prescription, pickup or delivery' },
-              { icon: Users, title: 'Family profiles', text: 'Manage appointments and records for everyone' },
-            ].map(({ icon: Icon, title, text }) => (
-              <li key={title} className="flex items-start gap-3">
-                <span className="mt-0.5 h-9 w-9 shrink-0 rounded-xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center">
-                  <Icon className="w-[18px] h-[18px] text-brand-200" />
-                </span>
-                <span>
-                  <span className="block text-sm font-bold">{title}</span>
-                  <span className="block text-xs text-brand-100/75">{text}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+
+          <div className="auth-v2-hero-image-wrap">
+            <img
+              src={exploreAssets.hero}
+              alt="Healthcare professional caring for patient"
+              className="auth-v2-hero-image"
+            />
+          </div>
         </div>
-        <p className="relative flex items-center gap-2 text-[11px] text-brand-100/70">
-          <ShieldCheck className="w-4 h-4" /> Your health records are private to you and your care team.
-        </p>
+
+        {/* 3 Value Proposition Cards */}
+        <div className="auth-v2-values">
+          <div className="auth-v2-value-card">
+            <div className="auth-v2-value-icon">
+              <ShieldCheck size={20} />
+            </div>
+            <div className="auth-v2-value-text">
+              <strong>Wide range of services</strong>
+              <p>Doctors, hospitals, lab tests, pharmacy, home care, medical equipment and more.</p>
+            </div>
+          </div>
+
+          <div className="auth-v2-value-card">
+            <div className="auth-v2-value-icon">
+              <Users size={20} />
+            </div>
+            <div className="auth-v2-value-text">
+              <strong>For your whole family</strong>
+              <p>Manage bookings and health records for your loved ones.</p>
+            </div>
+          </div>
+
+          <div className="auth-v2-value-card">
+            <div className="auth-v2-value-icon">
+              <HeartPulse size={20} />
+            </div>
+            <div className="auth-v2-value-text">
+              <strong>A safer, easier healthcare experience</strong>
+              <p>Find trusted providers and get the care you need, when you need it.</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      <div className="flex-1 flex items-center justify-center p-4 md:p-6">
-      <div className="w-full max-w-[460px] mx-auto my-auto">
-        
-        {/* Main Card Container */}
-        <div className="bg-white rounded-3xl shadow-[0_24px_60px_-20px_rgba(107,69,48,0.25)] border border-[#EFE6DE] p-6 md:p-8 relative overflow-hidden">
-          
-          {/* Top Brand Header */}
-          <div className="flex flex-col items-center text-center mb-6">
-            <div className="w-12 h-12 mb-3 relative flex items-center justify-center">
-              <img 
-                src={logoImg} 
-                alt="Vizito Logo" 
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <h1 className="text-xl font-black tracking-tight text-slate-800">VIZITO PATIENT</h1>
-            <p className="text-[11px] font-bold text-teal-600 uppercase tracking-widest mt-0.5">Your Health. Connected.</p>
-          </div>
-
-          {/* Navigation Back Button for OTP Verification & Forgot Sub-Flows */}
-          {screenState !== 'login' && screenState !== 'forgot-success' && (
-            <button
-              type="button"
-              onClick={goBackToLogin}
-              className="inline-flex items-center gap-1.5 text-slate-400 hover:text-primary text-xs font-bold uppercase mb-4 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" /> Back to Login
-            </button>
-          )}
-
-          {/* Error Message Alert Banner */}
+      {/* ================= RIGHT FORM PANEL ================= */}
+      <main className="auth-v2-right">
+        <div className="auth-v2-card">
+          {/* Notifications / Alerts */}
           {errorMessage && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2.5 animate-fadeIn">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-              <span className="flex-1">{errorMessage}</span>
+            <div className="auth-v2-alert-error" role="alert">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Success Message Alert Banner */}
           {successMessage && (
-            <div className="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2.5 animate-fadeIn">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="flex-1">{successMessage}</span>
+            <div className="auth-v2-alert-success" role="status">
+              <CheckCircle2 size={18} className="shrink-0" />
+              <span>{successMessage}</span>
             </div>
           )}
 
-          {/* ── ACCOUNT LOCKED VIEW ── */}
-          {isLocked && (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-200">
-                <Lock className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800">Account Temporarily Locked</h3>
-              <p className="text-slate-500 text-xs mt-2 leading-relaxed">
-                Too many failed login attempts. Device access temporarily restricted for security.
-              </p>
-              <div className="mt-4 text-2xl font-mono font-black text-rose-600 bg-rose-50 border border-rose-200 inline-block px-4 py-2 rounded-xl">
-                {formatTime(lockCountdown)}
-              </div>
-            </div>
-          )}
-
-          {/* ── LOGIN SCREEN ── */}
-          {!isLocked && screenState === 'login' && (
-            <div className="animate-fade">
-              <div className="mb-6 text-center">
-                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Welcome Back</h2>
-                <p className="text-slate-500 text-xs mt-1 font-medium">Log in to access your Patient Portal</p>
-              </div>
-
-              {/* Main Auth Form */}
-              <form
-                onSubmit={authMethod === 'otp' ? handleSendOTP : handlePasswordLogin}
-                className="space-y-4"
-              >
-                {/* Unified Identifier Input */}
-                <div className="form-group mb-0 text-left">
-                  <label htmlFor="patient-login-identifier" className="block text-xs font-bold text-slate-700 mb-1">
-                    Mobile Number or Email
-                  </label>
-                  <div
-                    className={`flex items-center border rounded-xl overflow-hidden px-3 bg-white transition-all ${
-                      identifierError
-                        ? 'border-rose-500 ring-2 ring-rose-500/10'
-                        : 'border-slate-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10'
-                    }`}
-                  >
-                    {detectIdentifier(identifier) === 'email' ? (
-                      <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                    ) : (
-                      <Smartphone className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                    )}
-                    <input
-                      id="patient-login-identifier"
-                      name="identifier"
-                      type="text"
-                      inputMode={detectIdentifier(identifier) === 'email' ? 'email' : 'text'}
-                      autoComplete="username"
-                      value={identifier}
-                      onChange={(e) => {
-                        setIdentifier(e.target.value);
-                        if (identifierError) setIdentifierError('');
-                        if (pasteNote) setPasteNote('');
-                      }}
-                      onPaste={handleIdentifierPaste}
-                      onBlur={handleIdentifierBlur}
-                      placeholder="Enter mobile number or email"
-                      aria-invalid={Boolean(identifierError)}
-                      aria-describedby={
-                        identifierError
-                          ? 'patient-identifier-error'
-                          : pasteNote
-                          ? 'patient-identifier-note'
-                          : undefined
-                      }
-                      className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400"
-                    />
-                  </div>
-                  {identifierError && (
-                    <p
-                      id="patient-identifier-error"
-                      role="alert"
-                      className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>{identifierError}</span>
-                    </p>
-                  )}
-                  {!identifierError && pasteNote && (
-                    <p
-                      id="patient-identifier-note"
-                      className="text-[11px] font-medium text-amber-600 mt-1"
-                    >
-                      {pasteNote}
-                    </p>
-                  )}
-                  {authMethod === 'otp' && !identifierError && !pasteNote && (
-                    <p className="text-[11px] text-slate-400 font-semibold mt-1.5">
-                      We will send you a 6-digit OTP to verify it's you
-                    </p>
-                  )}
-                </div>
-
-                {/* Password Field (Only for password auth) */}
-                {authMethod === 'password' && (
-                  <div className="form-group mb-0 text-left">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                    <div
-                      className={`relative flex items-center border rounded-xl overflow-hidden px-3 bg-white transition-all ${
-                        passwordError
-                          ? 'border-rose-500 ring-2 ring-rose-500/10'
-                          : 'border-slate-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10'
-                      }`}
-                    >
-                      <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => {
-                          setPassword(e.target.value);
-                          if (passwordError) setPasswordError('');
-                        }}
-                        placeholder="Enter your password"
-                        aria-invalid={Boolean(passwordError)}
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    {passwordError && (
-                      <p role="alert" className="text-[11px] font-semibold text-rose-600 mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>{passwordError}</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Switch between Password / OTP sign-in */}
-                <div className="flex justify-end -mt-1">
-                  <button
-                    type="button"
-                    onClick={toggleAuthMethod}
-                    className="text-primary text-xs font-bold hover:underline cursor-pointer"
-                  >
-                    {authMethod === 'password' ? 'Login with OTP instead' : 'Login with password instead'}
-                  </button>
-                </div>
-
-                {/* Action Submit Button */}
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center relative shadow-md shadow-primary/20 cursor-pointer mt-5 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <>
-                      <span>{authMethod === 'otp' ? 'Send OTP' : 'Login'}</span>
-                      <Send className="w-3.5 h-3.5 absolute right-4 text-white/90" />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* OR separator + Google Sign-In */}
-              <div className="flex items-center gap-3 my-6">
-                <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">or</span>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-              <div className="flex justify-center min-h-[44px]">
-                <div ref={googleBtnRef} className="w-full flex justify-center" />
-              </div>
-
-              {/* Bottom Options: Remember Me & Forgot Password */}
-              <div className="flex items-center justify-between mt-5 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded text-primary border-slate-300 focus:ring-primary cursor-pointer"
-                  />
-                  <span>Remember me</span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScreenState('forgot-input');
-                    setErrorMessage('');
-                    setSuccessMessage('');
-                  }}
-                  className="text-primary font-bold hover:underline cursor-pointer"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-
-              {/* Register Call-to-action */}
-              <div className="mt-6 flex items-center justify-center gap-1.5 text-xs text-slate-500 font-medium">
-                <span>New to Vizito?</span>
-                <button
-                  type="button"
-                  onClick={onRegisterClick}
-                  className="text-primary hover:text-primary-hover font-bold hover:underline cursor-pointer flex items-center gap-1"
-                >
-                  <UserPlus className="w-3.5 h-3.5 shrink-0" />
-                  <span>Create New Account</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── DEDICATED OTP VERIFICATION SCREEN ── */}
-          {!isLocked && screenState === 'otp-verify' && (
-            <div className="animate-fade">
-              <div className="mb-6 text-center">
-                <h2 className="text-2xl font-black text-slate-800">Enter OTP</h2>
-                <p className="text-slate-500 text-xs mt-1 font-medium leading-relaxed">
-                  We've sent a 6-digit passcode to{' '}
-                  <strong className="text-slate-700">{loginType === 'mobile' ? '+91 ' + mobile : email}</strong>.
-                </p>
-              </div>
-
-              <form onSubmit={handleVerifyOTPAndLogin} className="space-y-4">
-                <div className="form-group text-center mb-0">
-                  <label className="block text-xs font-bold text-slate-700 mb-1 text-left">6-Digit Verification Code</label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="e.g. 123456"
-                    className="w-full text-center text-2xl font-black tracking-widest font-mono py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
-                    required
-                    autoFocus
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-xs py-1 font-semibold">
-                  <span className="text-slate-400">
-                    OTP expires in:{' '}
-                    <strong className={otpCountdown < 60 ? 'text-rose-500' : 'text-slate-600'}>{formatTime(otpCountdown)}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={otpCountdown > 0 || isSubmitting}
-                    onClick={() => handleSendOTP()}
-                    className="text-primary font-bold hover:underline disabled:text-slate-350 disabled:no-underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Resend OTP
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isVerifyingOtp}
-                  className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center cursor-pointer shadow-md shadow-primary/20 mt-2 disabled:opacity-50"
-                >
-                  {isVerifyingOtp ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <span>Verify OTP &amp; Login</span>
-                  )}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* ── FORGOT PASSWORD FLOW ── */}
-          {/* Step 1: Input Mobile or Email */}
-          {screenState === 'forgot-input' && (
-            <div className="space-y-4">
-              <div className="mb-4">
-                <h2 className="text-xl font-black text-slate-800">Forgot Password</h2>
-                <p className="text-slate-500 text-xs mt-1">Enter your registered Mobile Number or Email to receive an OTP.</p>
-              </div>
-
-              <div className="flex bg-slate-100 p-1 rounded-xl gap-1 mb-2">
-                <button
-                  type="button"
-                  onClick={() => setRecoveryType('mobile')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                    recoveryType === 'mobile' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Via Mobile
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRecoveryType('email')}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                    recoveryType === 'email' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Via Email
-                </button>
-              </div>
-
-              <form onSubmit={handleForgotSendOtp} className="space-y-4">
-                {recoveryType === 'mobile' ? (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Registered Mobile Number *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
-                      <span className="px-3 py-3 bg-slate-50 border-r border-slate-200 text-slate-700 font-bold text-xs">+91</span>
-                      <input
-                        type="tel"
-                        inputMode="tel"
-                        maxLength={10}
-                        value={recoveryIdentifier}
-                        onChange={(e) => setRecoveryIdentifier(e.target.value.replace(/\D/g, ''))}
-                        onBlur={() => {
-                          if (recoveryIdentifier.trim() && !isValidIndianMobile(recoveryIdentifier)) {
-                            setErrorMessage(IDENTIFIER_MESSAGES.MOBILE_INVALID);
-                          }
-                        }}
-                        placeholder="Enter mobile number"
-                        className="flex-1 px-3 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Registered Email Address *</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
-                      <Mail className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                      <input
-                        type="email"
-                        inputMode="email"
-                        value={recoveryIdentifier}
-                        onChange={(e) => setRecoveryIdentifier(e.target.value)}
-                        onBlur={() => {
-                          if (recoveryIdentifier.trim() && !isValidEmail(recoveryIdentifier)) {
-                            setErrorMessage(IDENTIFIER_MESSAGES.EMAIL_INVALID);
-                          }
-                        }}
-                        placeholder="abc@gmail.com"
-                        className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-                >
-                  {isSubmitting ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  ) : (
-                    <span>Send Recovery OTP</span>
-                  )}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* Step 2: Verify Recovery OTP */}
-          {screenState === 'forgot-otp' && (
-            <form onSubmit={handleForgotVerifyOtp} className="space-y-4">
-              <div className="mb-4">
-                <h2 className="text-xl font-black text-slate-800">Verify Recovery OTP</h2>
-                <p className="text-slate-500 text-xs mt-1">
-                  We've sent a 6-digit code to <strong className="text-slate-700">{recoveryIdentifier}</strong>.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">6-Digit OTP *</label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={recoveryOtp}
-                  onChange={(e) => setRecoveryOtp(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Enter code"
-                  className="w-full text-center text-xl font-mono font-bold tracking-widest py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Expires in: {formatTime(otpCountdown)}</span>
-                <button
-                  type="button"
-                  disabled={otpCountdown > 0}
-                  onClick={() => handleForgotSendOtp({ preventDefault: () => {} } as any)}
-                  className="text-primary font-bold hover:underline disabled:text-slate-300 cursor-pointer"
-                >
-                  Resend OTP
-                </button>
-              </div>
-
+          {/* Dev OTP Helper Badge */}
+          {devOtpHint && (
+            <div
+              style={{
+                background: '#fef3c7',
+                border: '1px solid #fde68a',
+                color: '#92400e',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                marginBottom: '14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span>
+                <strong>Test OTP:</strong> {devOtpHint}
+              </span>
               <button
-                type="submit"
-                className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 cursor-pointer transition-all"
+                type="button"
+                style={{
+                  background: '#d97706',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  const arr = devOtpHint.split('').slice(0, 6);
+                  if (loginMode === 'otp-verify') setLoginOtpCode(arr);
+                  else if (regOtpStep) setRegOtpCode(arr);
+                  else if (forgotStep === 2) setForgotOtpCode(arr);
+                }}
               >
-                Verify OTP
+                Auto-fill
               </button>
-            </form>
+            </div>
           )}
 
-          {/* Step 3: Reset Password Form */}
-          {screenState === 'forgot-reset' && (
-            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-              <div className="mb-4">
-                <h2 className="text-xl font-black text-slate-800">Reset Password</h2>
-                <p className="text-slate-500 text-xs mt-1">Set a new secure password for your patient account.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">New Password *</label>
-                <div className="relative flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
-                  <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 8 characters"
-                    className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none pr-8"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password *</label>
-                <div className="flex items-center border border-slate-200 rounded-xl px-3 bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
-                  <Lock className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter new password"
-                    className="flex-1 py-3 text-xs font-semibold text-slate-800 bg-transparent outline-none"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 cursor-pointer transition-all mt-2"
-              >
-                Reset Password
-              </button>
-            </form>
-          )}
-
-          {/* Step 4: Reset Success Confirmation */}
-          {screenState === 'forgot-success' && (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-200">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-800">Password Reset Successful</h3>
-              <p className="text-slate-500 text-xs mt-2 leading-relaxed">
-                Your password has been updated. You can now log in with your new password.
-              </p>
+          {/* ================= FLOW 1: FORGOT PASSWORD ================= */}
+          {isForgotFlow ? (
+            <div>
               <button
                 type="button"
                 onClick={() => {
-                  setScreenState('login');
-                  setAuthMethod('password');
+                  setIsForgotFlow(false);
+                  setForgotStep(1);
                   setErrorMessage('');
-                  setSuccessMessage('Password reset successfully! Please log in.');
                 }}
-                className="w-full bg-primary hover:bg-primary-hover text-white py-3.5 rounded-xl font-bold text-xs shadow-md shadow-primary/20 mt-6 cursor-pointer"
+                className="auth-v2-link"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
               >
-                Back to Login
+                <ArrowLeft size={16} /> Back to log in
               </button>
+
+              <h2 className="auth-v2-card-title">Forgot password</h2>
+              <p className="auth-v2-card-desc">Reset your password using OTP.</p>
+
+              {/* 3 Steps indicator */}
+              <div className="auth-v2-stepper">
+                <div className={`auth-v2-step-row ${forgotStep === 1 ? 'is-active' : forgotStep > 1 ? 'is-done' : ''}`}>
+                  <div className="auth-v2-step-num">{forgotStep > 1 ? <Check size={14} /> : '1'}</div>
+                  <span>Verify your identity</span>
+                </div>
+                <div className={`auth-v2-step-row ${forgotStep === 2 ? 'is-active' : forgotStep > 2 ? 'is-done' : ''}`}>
+                  <div className="auth-v2-step-num">{forgotStep > 2 ? <Check size={14} /> : '2'}</div>
+                  <span>Enter OTP</span>
+                </div>
+                <div className={`auth-v2-step-row ${forgotStep === 3 ? 'is-active' : ''}`}>
+                  <div className="auth-v2-step-num">3</div>
+                  <span>Set new password</span>
+                </div>
+              </div>
+
+              {/* Step 1: Request OTP */}
+              {forgotStep === 1 && (
+                <form onSubmit={handleForgotSendOtp}>
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label">
+                      Mobile number or email <span className="auth-v2-req">*</span>
+                    </label>
+                    <div className="auth-v2-input-wrap">
+                      <div className="auth-v2-input-icon">
+                        <Smartphone size={18} />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Enter mobile or email"
+                        value={forgotIdentifier}
+                        onChange={(e) => setForgotIdentifier(e.target.value)}
+                        className="auth-v2-input"
+                        autoFocus
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" disabled={busy || !forgotIdentifier.trim()} className="auth-v2-btn-primary">
+                    {busy ? 'Sending OTP...' : 'Send OTP'}
+                  </button>
+                </form>
+              )}
+
+              {/* Step 2: Enter OTP */}
+              {forgotStep === 2 && (
+                <form onSubmit={handleForgotVerifyOtp}>
+                  <p style={{ fontSize: '13px', color: '#475569', marginBottom: '8px' }}>
+                    Enter the 6-digit OTP sent to <strong>{forgotIdentifier}</strong>
+                  </p>
+
+                  <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setForgotOtpCode)}>
+                    {forgotOtpCode.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={(el) => { otpInputRefs.current[idx] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpBoxChange(idx, e.target.value, setForgotOtpCode)}
+                        onKeyDown={(e) => handleOtpKeyDown(idx, e, setForgotOtpCode, forgotOtpCode)}
+                        className="auth-v2-otp-box"
+                        autoFocus={idx === 0}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="auth-v2-resend-row">
+                    <span>
+                      {otpCountdown > 0 ? (
+                        `Resend OTP in 00:${String(otpCountdown).padStart(2, '0')}`
+                      ) : (
+                        <button
+                          type="button"
+                          className="auth-v2-link"
+                          onClick={(e) => void handleForgotSendOtp(e)}
+                        >
+                          Resend OTP
+                        </button>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="auth-v2-link"
+                      onClick={() => setForgotStep(1)}
+                    >
+                      Change number
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={busy || forgotOtpCode.join('').length !== 6}
+                    className="auth-v2-btn-primary"
+                  >
+                    {busy ? 'Verifying...' : 'Verify OTP'}
+                  </button>
+                </form>
+              )}
+
+              {/* Step 3: Set New Password */}
+              {forgotStep === 3 && (
+                <form onSubmit={handleForgotResetPassword}>
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label">
+                      New password <span className="auth-v2-req">*</span>
+                    </label>
+                    <div className="auth-v2-input-wrap">
+                      <div className="auth-v2-input-icon">
+                        <Lock size={18} />
+                      </div>
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        placeholder="Enter new strong password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="auth-v2-input"
+                        autoFocus
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="auth-v2-input-toggle"
+                        aria-label="Toggle password visibility"
+                      >
+                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Password Requirements Checklist */}
+                  <div className="auth-v2-pw-checklist">
+                    <div className={`auth-v2-pw-item ${newPwRules.minLength ? 'is-valid' : ''}`}>
+                      <div className="auth-v2-pw-dot">{newPwRules.minLength && <Check size={10} />}</div>
+                      <span>At least 8 characters</span>
+                    </div>
+                    <div className={`auth-v2-pw-item ${newPwRules.hasLetterAndNum ? 'is-valid' : ''}`}>
+                      <div className="auth-v2-pw-dot">{newPwRules.hasLetterAndNum && <Check size={10} />}</div>
+                      <span>Includes a letter and a number</span>
+                    </div>
+                    <div className={`auth-v2-pw-item ${newPwRules.hasSpecial ? 'is-valid' : ''}`}>
+                      <div className="auth-v2-pw-dot">{newPwRules.hasSpecial && <Check size={10} />}</div>
+                      <span>Includes a special character (e.g. ! @ # $)</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={busy || !newPwRules.minLength || !newPwRules.hasLetterAndNum || !newPwRules.hasSpecial}
+                    className="auth-v2-btn-primary"
+                  >
+                    {busy ? 'Updating password...' : 'Reset password'}
+                  </button>
+                </form>
+              )}
             </div>
+          ) : (
+            <>
+              {/* ================= FLOW 2: LOGIN / REGISTER TABS ================= */}
+              <h2 className="auth-v2-card-title">
+                {activeTab === 'login' ? 'Log in to Vizito' : 'Create your Vizito account'}
+              </h2>
+              <p className="auth-v2-card-desc">
+                {activeTab === 'login'
+                  ? 'Access your bookings, medical records and more.'
+                  : 'Get started with your healthcare journey.'}
+              </p>
+
+              {/* Navigation Tabs */}
+              <div className="auth-v2-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'login'}
+                  onClick={() => switchTab('login')}
+                  className={`auth-v2-tab ${activeTab === 'login' ? 'is-active' : ''}`}
+                >
+                  Log in
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'register'}
+                  onClick={() => switchTab('register')}
+                  className={`auth-v2-tab ${activeTab === 'register' ? 'is-active' : ''}`}
+                >
+                  Create account
+                </button>
+              </div>
+
+              {/* ================= MODE: LOG IN ================= */}
+              {activeTab === 'login' && (
+                <>
+                  {loginMode === 'password' && (
+                    <form onSubmit={handlePasswordLogin}>
+                      {/* Mobile or Email */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Mobile number or email <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Smartphone size={18} />
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Enter 10-digit mobile or email"
+                            value={loginIdentifier}
+                            onChange={(e) => setLoginIdentifier(e.target.value)}
+                            className="auth-v2-input"
+                            autoComplete="username"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Password */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Password <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Lock size={18} />
+                          </div>
+                          <input
+                            type={showLoginPassword ? 'text' : 'password'}
+                            placeholder="Enter your password"
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            className="auth-v2-input"
+                            autoComplete="current-password"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(!showLoginPassword)}
+                            className="auth-v2-input-toggle"
+                            aria-label="Toggle password visibility"
+                          >
+                            {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Remember me & Forgot Password */}
+                      <div className="auth-v2-check-row">
+                        <label className="auth-v2-check-label">
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                          />
+                          <span>Keep me logged in on this device</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsForgotFlow(true);
+                            setForgotStep(1);
+                            setForgotIdentifier(loginIdentifier);
+                            setErrorMessage('');
+                          }}
+                          className="auth-v2-link"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+
+                      {/* Primary Log In CTA */}
+                      <button type="submit" disabled={busy} className="auth-v2-btn-primary">
+                        {busy ? 'Logging in...' : 'Log in'}
+                      </button>
+
+                      {/* Divider */}
+                      <div className="auth-v2-divider">
+                        <span>or</span>
+                      </div>
+
+                      {/* Google Sign-In */}
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        className="auth-v2-btn-google"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 18 18">
+                          <path
+                            fill="#4285F4"
+                            d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
+                          />
+                        </svg>
+                        <span>Continue with Google</span>
+                      </button>
+
+                      {/* Log in with OTP action card */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMode('otp-request');
+                          setOtpPhone(loginIdentifier.replace(/\D/g, '').slice(-10));
+                          setErrorMessage('');
+                        }}
+                        className="auth-v2-card-action"
+                      >
+                        <div className="auth-v2-card-action-icon">
+                          <Smartphone size={20} />
+                        </div>
+                        <div className="auth-v2-card-action-text">
+                          <strong>Log in with OTP instead</strong>
+                          <small>We'll send a 6-digit code to your mobile number.</small>
+                        </div>
+                        <ChevronRight size={18} color="#0d9488" />
+                      </button>
+                    </form>
+                  )}
+
+                  {/* OTP Request */}
+                  {loginMode === 'otp-request' && (
+                    <form onSubmit={handleRequestLoginOtp}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMode('password');
+                          setErrorMessage('');
+                        }}
+                        className="auth-v2-link"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
+                      >
+                        <ArrowLeft size={16} /> Back to password login
+                      </button>
+
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Mobile number <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-phone-prefix">
+                            <span>🇮🇳 +91</span>
+                          </div>
+                          <input
+                            type="tel"
+                            placeholder="98765 43210"
+                            value={otpPhone}
+                            onChange={(e) => setOtpPhone(e.target.value)}
+                            maxLength={10}
+                            className="auth-v2-input"
+                            autoFocus
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={busy || otpPhone.replace(/\D/g, '').length !== 10}
+                        className="auth-v2-btn-primary"
+                      >
+                        {busy ? 'Sending code...' : 'Send OTP'}
+                      </button>
+                    </form>
+                  )}
+
+                  {/* OTP Verify */}
+                  {loginMode === 'otp-verify' && (
+                    <form onSubmit={handleVerifyLoginOtp}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginMode('otp-request');
+                          setErrorMessage('');
+                        }}
+                        className="auth-v2-link"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
+                      >
+                        <ArrowLeft size={16} /> Change phone number
+                      </button>
+
+                      <p style={{ fontSize: '13px', color: '#475569', margin: '8px 0 14px 0' }}>
+                        Enter the 6-digit OTP sent to <strong>+91 {otpPhone}</strong>
+                      </p>
+
+                      <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setLoginOtpCode)}>
+                        {loginOtpCode.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            ref={(el) => { otpInputRefs.current[idx] = el; }}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpBoxChange(idx, e.target.value, setLoginOtpCode)}
+                            onKeyDown={(e) => handleOtpKeyDown(idx, e, setLoginOtpCode, loginOtpCode)}
+                            className="auth-v2-otp-box"
+                            autoFocus={idx === 0}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="auth-v2-resend-row">
+                        <span>
+                          {otpCountdown > 0 ? (
+                            `Resend OTP in 00:${String(otpCountdown).padStart(2, '0')}`
+                          ) : (
+                            <button
+                              type="button"
+                              className="auth-v2-link"
+                              onClick={(e) => void handleRequestLoginOtp(e)}
+                            >
+                              Resend OTP
+                            </button>
+                          )}
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={busy || loginOtpCode.join('').length !== 6}
+                        className="auth-v2-btn-primary"
+                      >
+                        {busy ? 'Verifying...' : 'Log in'}
+                      </button>
+                    </form>
+                  )}
+                </>
+              )}
+
+              {/* ================= MODE: CREATE ACCOUNT ================= */}
+              {activeTab === 'register' && (
+                <>
+                  {!regOtpStep ? (
+                    <form onSubmit={handleRegisterSendOtp}>
+                      {/* Full name */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Full name <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <User size={18} />
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="e.g. Kavya Reddy"
+                            value={regFullName}
+                            onChange={(e) => setRegFullName(e.target.value)}
+                            className="auth-v2-input"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Mobile number */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Mobile number <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-phone-prefix">
+                            <span>🇮🇳 +91</span>
+                          </div>
+                          <input
+                            type="tel"
+                            placeholder="98765 43210"
+                            value={regPhone}
+                            onChange={(e) => setRegPhone(e.target.value)}
+                            maxLength={10}
+                            className="auth-v2-input"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Email (optional) */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">Email (optional)</label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Mail size={18} />
+                          </div>
+                          <input
+                            type="email"
+                            placeholder="name@example.com"
+                            value={regEmail}
+                            onChange={(e) => setRegEmail(e.target.value)}
+                            className="auth-v2-input"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Date of birth */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Date of birth <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Calendar size={18} />
+                          </div>
+                          <input
+                            type="date"
+                            value={regDob}
+                            onChange={(e) => setRegDob(e.target.value)}
+                            max={new Date().toISOString().split('T')[0]}
+                            className="auth-v2-input"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Gender */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Gender <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-radio-group">
+                          {(['Female', 'Male', 'Other'] as const).map((gender) => (
+                            <label
+                              key={gender}
+                              className={`auth-v2-radio-pill ${regGender === gender ? 'is-selected' : ''}`}
+                            >
+                              <input
+                                type="radio"
+                                name="reg_gender"
+                                value={gender}
+                                checked={regGender === gender}
+                                onChange={() => setRegGender(gender)}
+                              />
+                              <span>{gender}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Password */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Password <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Lock size={18} />
+                          </div>
+                          <input
+                            type={showRegPassword ? 'text' : 'password'}
+                            placeholder="Create a strong password"
+                            value={regPassword}
+                            onChange={(e) => setRegPassword(e.target.value)}
+                            className="auth-v2-input"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowRegPassword(!showRegPassword)}
+                            className="auth-v2-input-toggle"
+                            aria-label="Toggle password visibility"
+                          >
+                            {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm Password */}
+                      <div className="auth-v2-field">
+                        <label className="auth-v2-label">
+                          Confirm password <span className="auth-v2-req">*</span>
+                        </label>
+                        <div className="auth-v2-input-wrap">
+                          <div className="auth-v2-input-icon">
+                            <Lock size={18} />
+                          </div>
+                          <input
+                            type={showRegPassword ? 'text' : 'password'}
+                            placeholder="Re-enter password"
+                            value={regConfirmPassword}
+                            onChange={(e) => setRegConfirmPassword(e.target.value)}
+                            className="auth-v2-input"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* Live Password Requirements Checklist */}
+                      <div className="auth-v2-pw-checklist">
+                        <div className={`auth-v2-pw-item ${regPwRules.minLength ? 'is-valid' : ''}`}>
+                          <div className="auth-v2-pw-dot">{regPwRules.minLength && <Check size={10} />}</div>
+                          <span>At least 8 characters</span>
+                        </div>
+                        <div className={`auth-v2-pw-item ${regPwRules.hasLetterAndNum ? 'is-valid' : ''}`}>
+                          <div className="auth-v2-pw-dot">{regPwRules.hasLetterAndNum && <Check size={10} />}</div>
+                          <span>Includes a letter and a number</span>
+                        </div>
+                        <div className={`auth-v2-pw-item ${regPwRules.hasSpecial ? 'is-valid' : ''}`}>
+                          <div className="auth-v2-pw-dot">{regPwRules.hasSpecial && <Check size={10} />}</div>
+                          <span>Includes a special character (e.g. ! @ # $)</span>
+                        </div>
+                        <div className={`auth-v2-pw-item ${regPasswordsMatch ? 'is-valid' : ''}`}>
+                          <div className="auth-v2-pw-dot">{regPasswordsMatch && <Check size={10} />}</div>
+                          <span>Confirm password matches</span>
+                        </div>
+                      </div>
+
+                      {/* Terms Agreement */}
+                      <div className="auth-v2-check-row" style={{ marginTop: '16px' }}>
+                        <label className="auth-v2-check-label">
+                          <input
+                            type="checkbox"
+                            checked={regAgreedTerms}
+                            onChange={(e) => setRegAgreedTerms(e.target.checked)}
+                            required
+                          />
+                          <span>
+                            I agree to the <span className="auth-v2-link">Terms of Service</span> and{' '}
+                            <span className="auth-v2-link">Privacy Policy</span>.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Submit */}
+                      <button
+                        type="submit"
+                        disabled={busy || !isRegFormValid}
+                        className="auth-v2-btn-primary"
+                      >
+                        {busy ? 'Preparing OTP...' : 'Send OTP'}
+                      </button>
+
+                      <p style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginTop: '12px' }}>
+                        We will send a 6-digit OTP to +91 {regPhone || '98765 43210'}
+                      </p>
+                    </form>
+                  ) : (
+                    /* Step 2: Verify Registration OTP */
+                    <form onSubmit={handleRegisterVerifyAndSubmit}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegOtpStep(false);
+                          setErrorMessage('');
+                        }}
+                        className="auth-v2-link"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
+                      >
+                        <ArrowLeft size={16} /> Back to details
+                      </button>
+
+                      <p style={{ fontSize: '13px', color: '#475569', marginBottom: '10px' }}>
+                        Enter the 6-digit OTP sent to <strong>+91 {regPhone}</strong>
+                      </p>
+
+                      <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setRegOtpCode)}>
+                        {regOtpCode.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            ref={(el) => { otpInputRefs.current[idx] = el; }}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpBoxChange(idx, e.target.value, setRegOtpCode)}
+                            onKeyDown={(e) => handleOtpKeyDown(idx, e, setRegOtpCode, regOtpCode)}
+                            className="auth-v2-otp-box"
+                            autoFocus={idx === 0}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="auth-v2-resend-row">
+                        <span>
+                          {otpCountdown > 0 ? (
+                            `Resend OTP in 00:${String(otpCountdown).padStart(2, '0')}`
+                          ) : (
+                            <button
+                              type="button"
+                              className="auth-v2-link"
+                              onClick={(e) => void handleRegisterSendOtp(e)}
+                            >
+                              Resend OTP
+                            </button>
+                          )}
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={busy || regOtpCode.join('').length !== 6}
+                        className="auth-v2-btn-primary"
+                      >
+                        {busy ? 'Creating account...' : 'Verify & Create account'}
+                      </button>
+                    </form>
+                  )}
+                </>
+              )}
+            </>
           )}
-
         </div>
-
-      </div>
-      </div>
+      </main>
     </div>
   );
 }

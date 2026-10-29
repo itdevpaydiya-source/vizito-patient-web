@@ -7,6 +7,8 @@
 // absent until a backend contract provides them.
 export interface ProviderItem {
   hospital?: HospitalFacts | null;
+  nearestKm?: number | null;
+  distanceKnown?: boolean;
   gender?: string|null;
   languagesList?: string[];
   nextAvailable?: {date:string;time:string;facility_id:number|null}|null;
@@ -19,6 +21,9 @@ export interface ProviderItem {
   // Public profile details (doctors) and rating — only present when the backend has them.
   qualification?: string | null;
   specialization?: string | null;
+  designation?: string | null;
+  expertise?: string[];
+  superSpecialization?: string | null;
   experienceYears?: number | null;
   medicalRegistrationNumber?: string | null;
   medicalCouncilName?: string | null;
@@ -53,6 +58,8 @@ export interface HospitalFacts {
   timezone: string;
   arrival_desk: string | null;
   virtual_tour: { url: string; media_type: 'embed' | 'video' } | null;
+  cover_url?: string | null;
+  gallery?: { url: string; caption?: string | null }[];
 }
 
 export interface OrgSummary {
@@ -81,7 +88,12 @@ export type PharmacyRequestStatus = 'Requested' | 'Accepted' | 'Rejected' | 'Exp
 
 export interface PharmacyRequestItem {
   id: string;
-  prescription_id: string;
+  prescription_id: string | null;
+  document_id?: string | null;
+  requested_items?: string | null;
+  beneficiary_profile_id?: string | null;
+  beneficiary_name?: string | null;
+  beneficiary_relationship?: string | null;
   patient_id: string;
   pharmacy_partner_id: string;
   status: PharmacyRequestStatus;

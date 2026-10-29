@@ -73,6 +73,9 @@ const mapProviderItem = (p: any, serviceId?: string): ProviderItem => ({
   partnerType: String(p.partner_type || '').toLowerCase() || null,
   qualification: p.doctor?.qualification ?? null,
   specialization: p.doctor?.specialization ?? p.doctor?.primary_specialization ?? null,
+  designation: p.doctor?.designation ?? null,
+  expertise: Array.isArray(p.doctor?.expertise) ? p.doctor.expertise : [],
+  superSpecialization: p.doctor?.super_specialization ?? null,
   experienceYears: p.doctor?.years_of_experience ?? null,
   medicalRegistrationNumber: p.doctor?.medical_registration_number ?? p.doctor?.registration_number ?? p.medical_registration_number ?? null,
   medicalCouncilName: p.doctor?.medical_council_name ?? p.doctor?.council_name ?? p.medical_council_name ?? null,
@@ -91,6 +94,8 @@ const mapProviderItem = (p: any, serviceId?: string): ProviderItem => ({
   businessHours: Array.isArray(p.business_hours) ? p.business_hours : [],
   org: p.org || null,
   hospital: p.hospital || null,
+  nearestKm: p.nearest_km == null ? null : Number(p.nearest_km),
+  distanceKnown: p.distance_known === true,
 });
 
 export const getProvidersApi = async (serviceId?: string, search?: string): Promise<ProviderItem[]> => {
@@ -104,12 +109,39 @@ export const getProvidersApi = async (serviceId?: string, search?: string): Prom
 };
 
 export interface ProviderPage { items: ProviderItem[]; total: number; page: number; limit: number }
+export interface ProviderPageOptions {
+  area?: string;
+  lat?: number;
+  lng?: number;
+  radiusKm?: 5 | 10 | 25 | 50;
+  feeMin?: number;
+  feeMax?: number;
+  minRating?: number;
+  online?: boolean;
+  sort?: string;
+  gender?: string;
+  languages?: string[];
+  available?: 'today' | 'tomorrow' | 'week';
+  mode?: 'IN_CLINIC' | 'VIDEO';
+}
 /** Paged directory request for screens that should not render the entire provider catalogue at once. */
-export const getProvidersPageApi = async (serviceId: string | undefined, search: string | undefined, page: number, limit = 12, area?: string): Promise<ProviderPage> => {
+export const getProvidersPageApi = async (serviceId: string | undefined, search: string | undefined, page: number, limit = 12, options?: string|ProviderPageOptions): Promise<ProviderPage> => {
   const params: Record<string, string | number> = { page, limit };
   if (serviceId) params.service = String(providerServiceParam(serviceId));
-  if (search?.trim()) params.search = search.trim();
-  if (area?.trim()) params.area = area.trim();
+  if (search?.trim()) params.q = search.trim();
+  const opts=typeof options==='string'?{area:options}:options;
+  if (opts?.area?.trim()) params.area = opts.area.trim();
+  if (opts?.lat != null && opts?.lng != null) { params.lat=opts.lat; params.lng=opts.lng; }
+  if (opts?.radiusKm != null) params.radius_km=opts.radiusKm;
+  if (opts?.feeMin != null) params.fee_min=opts.feeMin;
+  if (opts?.feeMax != null) params.fee_max=opts.feeMax;
+  if (opts?.minRating != null) params.min_rating=opts.minRating;
+  if (opts?.online) params.mode='online';
+  if (opts?.gender) params.gender=opts.gender;
+  if (opts?.languages?.length) params.languages=opts.languages.join(',');
+  if (opts?.available) params.available=opts.available;
+  if (opts?.mode) params.mode=opts.mode;
+  if (opts?.sort) params.sort=opts.sort;
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDERS, { params });
   const envelope = res?.data;
   const list = envelope?.data;

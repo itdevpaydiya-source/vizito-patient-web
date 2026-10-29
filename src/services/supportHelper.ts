@@ -25,6 +25,8 @@ export interface TicketMessage {
 }
 
 export interface SupportTicket {
+  preferred_contact?: 'PHONE' | 'EMAIL' | null;
+  events?: {from_status:string|null;to_status:string;actor:string;at:string}[];
   id: string;
   ticket_number: string;
   kind: TicketKind;
@@ -46,6 +48,7 @@ export interface SupportTicket {
 }
 
 export interface NewTicket {
+  preferred_contact?: 'PHONE' | 'EMAIL';
   kind: TicketKind;
   category: string;
   subject: string;

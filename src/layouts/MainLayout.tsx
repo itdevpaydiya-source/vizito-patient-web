@@ -1,3 +1,4 @@
+import PortalScrollRestoration from './PortalScrollRestoration';
 import {SharedMotionLayer} from '../presentation/components/motion/Motion';
 import './LayoutTheme.css';
 import {BookingActivityProvider} from '../services/BookingActivityContext';
@@ -7,7 +8,7 @@ import { PharmacyBasketProvider } from '../services/PharmacyBasketContext';
 import Sidebar from '../presentation/components/Sidebar';
 import {
   Bell, Search, Menu, ChevronDown, User, Settings, Star, LogOut, ArrowLeft, Home,
-  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill, FlaskConical, HeartHandshake } from 'lucide-react';
+  X, Loader2, Stethoscope, Building2, ChevronRight, ArrowRight, Pill, FlaskConical, HeartHandshake, Ambulance, LifeBuoy, Package, CreditCard, CalendarDays } from 'lucide-react';
 import { useRole } from '../store/role/RoleContext';
 import { useLanguage } from '../store/language/LanguageContext';
 import { useNotifications } from '../store/notifications/NotificationsContext';
@@ -16,6 +17,26 @@ import { SERVICE_TILES, serviceRoute } from '../config/serviceTypes';
 import { fetchLabTestsApi, type LabTestDef } from '../services/labHelper';
 import { kindOf, providerRoute } from '../presentation/components/ProviderCard';
 import type { ProviderItem } from '../services/types';
+import type { PatientNotification } from '../services/notificationHelper';
+
+const bellTime = (value: string) => {
+  const date = new Date(value), now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const difference = Math.floor((today.getTime() - day.getTime()) / 86400000);
+  if (difference === 0) return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  if (difference === 1) return 'Yesterday';
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
+
+const BellRow = ({ item, open }: { item: PatientNotification; open: (item: PatientNotification) => Promise<void> }) => {
+  const T = item.type.includes('ambulance') ? Ambulance : item.type.includes('lab') ? FlaskConical : item.type.includes('support') ? LifeBuoy : item.type.includes('payment') ? CreditCard : item.type.includes('pharmacy') ? Package : CalendarDays;
+  return <button disabled={!item.target_path} onClick={() => void open(item)} className={`w-full min-h-[70px] px-3 py-2.5 text-left grid grid-cols-[40px_1fr_auto] gap-3 items-center disabled:cursor-default ${item.unread ? 'bg-teal-50/70' : 'bg-white'}`}>
+    <span className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 grid place-items-center"><T className="w-5 h-5" /></span>
+    <span className="min-w-0"><strong className="block text-xs text-slate-900 truncate">{item.title}</strong><small className="block text-[11px] text-slate-500 mt-1 truncate">{item.message}</small></span>
+    <span className="flex items-center gap-2"><time className="text-[10px] text-slate-500 whitespace-nowrap" dateTime={item.created_at}>{bellTime(item.created_at)}</time>{item.unread && <i className="w-2 h-2 rounded-full bg-orange-500" aria-label="Unread" />}</span>
+  </button>;
+};
 
 const MainLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,7 +45,9 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLanguage();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, bellItems, loading: notificationsLoading, markAllRead, markRead } = useNotifications();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const isDashboard = location.pathname === '/dashboard' || location.pathname === '/';
 
   // Global Search State
@@ -93,9 +116,10 @@ const MainLayout = () => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsSearchOpen(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) setIsNotificationsOpen(false);
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsSearchOpen(false);
+      if (e.key === 'Escape') { setIsSearchOpen(false); setIsNotificationsOpen(false); }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
@@ -131,7 +155,7 @@ const MainLayout = () => {
   return (
     <BookingActivityProvider><div className="patient-app-layout flex h-screen overflow-hidden relative" style={{ fontFamily: "var(--font-sans)" }}>
 
-      <SharedMotionLayer/>
+      <PortalScrollRestoration/><SharedMotionLayer/>
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
         <div
@@ -334,20 +358,17 @@ const MainLayout = () => {
 
           <div className="flex items-center gap-3">
             {/* Notification Bell — badge is the real unread count from the backend feed. */}
-            <button
-              onClick={() => navigate('/notifications')}
-              className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"
-              aria-label="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center shadow-sm">
-                  <span className="text-[9px] font-extrabold text-white leading-none">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                </span>
-              )}
-            </button>
+            <div className="relative" ref={notificationsRef}>
+              <button onClick={() => setIsNotificationsOpen(v => !v)} className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-full transition-colors cursor-pointer" aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`} aria-expanded={isNotificationsOpen} aria-haspopup="dialog">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 rounded-full border-2 border-white flex items-center justify-center shadow-sm"><span className="text-[9px] font-extrabold text-white leading-none">{unreadCount > 99 ? '99+' : unreadCount}</span></span>}
+              </button>
+              {isNotificationsOpen&&<section role="dialog" aria-label="Recent notifications" className="absolute right-0 mt-2 w-[min(380px,calc(100vw-24px))] bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <header className="flex items-center justify-between px-4 py-3 border-b border-slate-100"><strong className="text-sm text-slate-900">Notifications {unreadCount>0&&<span className="text-orange-600">({unreadCount} unread)</span>}</strong><button disabled={!unreadCount} onClick={()=>void markAllRead()} className="min-h-11 text-xs font-bold text-teal-700 disabled:opacity-40">Mark all as read</button></header>
+                <div className="max-h-[410px] overflow-y-auto divide-y divide-slate-100">{notificationsLoading&&!bellItems.length?<p className="p-6 text-center text-sm text-slate-500">Loading notificationsâ€¦</p>:bellItems.length?bellItems.map(n=><BellRow key={n.id} item={n} open={async item=>{if(item.unread)await markRead(item.id);if(item.target_path){setIsNotificationsOpen(false);navigate(item.target_path);}}}/>):<p className="p-7 text-center text-sm text-slate-500">No notifications yet.</p>}</div>
+                <button onClick={()=>{setIsNotificationsOpen(false);navigate('/notifications');}} className="w-full min-h-12 bg-slate-50 text-sm font-bold text-slate-800 hover:bg-teal-50">View all notifications &rarr;</button>
+              </section>}
+            </div>
 
             <div className="w-px h-6 bg-slate-200" />
 

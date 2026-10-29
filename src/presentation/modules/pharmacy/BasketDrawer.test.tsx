@@ -1,10 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactNode } from 'react';
 import BasketDrawer from './BasketDrawer';
 import type { MedicineSearchResult } from '../../../services/pharmacyOrderHelper';
+
+// VizitoDialog mounts a portal into document.body, which server rendering cannot do.
+// Stand in an inline wrapper so the drawer's own record markup can be inspected.
+vi.mock('../../components/dialogs/VizitoDialog', () => ({
+  default: ({ children }: { children: ReactNode }) => <div data-dialog>{children}</div>,
+}));
 const medicine = {id:'1',medicine_name:'Test tablet',strength:'500',strength_unit:'mg',dosage_form:'Tablet',packaging_type:'Strip',units_per_pack:10,mrp:12.5,requires_prescription:false} as MedicineSearchResult;
-const render = (m = medicine) => renderToStaticMarkup(<BasketDrawer open={false} lines={[{medicine:m,quantity:2}]} error={null} onClose={() => {}} onQuantity={() => {}} onReview={() => {}} />);
+const render = (m = medicine) => renderToStaticMarkup(<BasketDrawer open lines={[{medicine:m,quantity:2}]} error={null} onClose={() => {}} onQuantity={() => {}} onReview={() => {}} />);
 describe('basket drawer record details', () => {
+ it('renders nothing while closed', () => {
+  expect(renderToStaticMarkup(<BasketDrawer open={false} lines={[{medicine,quantity:2}]} error={null} onClose={() => {}} onQuantity={() => {}} onReview={() => {}} />)).toBe('');
+ });
  it('renders each drawer section and primary action exactly once', () => {
   const html=render();
   for(const attribute of ['aria-label="Selected pharmacy"', 'id="basket-items"', 'aria-label="Basket subtotal"', 'aria-label="Basket fulfillment"']) expect(html.split(attribute).length - 1).toBe(1);

@@ -1,3 +1,4 @@
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import { useEffect, useRef } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { getMyOrderApi } from '../../../services/pharmacyOrderHelper';
@@ -34,7 +35,7 @@ export const stepIndex = (status: string) => {
   return -1;
 };
 
-export { PharmacyOrderDetailsPage as default } from "./PharmacyOrderPages";
+export { default } from './PharmacyOrderDetailV2';
 
 export function OrderTimeline({ order }: { order: PatientOrder }) {
         return stepIndex(order.status) >= 0 ? (
@@ -95,18 +96,7 @@ export const onlinePaymentNeeded = (order: PatientOrder) => order.payment_method
 export function OrderRefundPolicy() {
   return <p className="text-xs leading-relaxed text-slate-500">You can cancel before the pharmacy starts fulfillment. Cancelling a paid order starts a refund request; completion is shown in the order payment status.</p>;
 }
-export function CancelOrderDialog({open,busy,onKeep,onConfirm}:{open:boolean;busy:boolean;onKeep:()=>void;onConfirm:()=>void}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const keep = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const node = dialog.current;
-    if (!open || !node) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    node.showModal();keep.current?.focus();
-    return () => {node.close();previous?.focus({preventScroll:true});};
-  },[open]);
-  return <dialog ref={dialog} aria-labelledby="cancel-order-title" aria-describedby="cancel-order-description" onCancel={event=>{event.preventDefault();if(!busy)onKeep();}} className="m-auto w-[calc(100%_-_2rem)] max-w-md rounded-2xl border border-slate-200 p-5 text-[#101d48] shadow-xl backdrop:bg-slate-900/40"><h2 id="cancel-order-title" className="text-lg font-bold">Cancel this order?</h2><p id="cancel-order-description" className="mt-2 text-sm text-slate-600">The pharmacy will be notified.</p><div className="mt-5 flex flex-wrap gap-3"><button ref={keep} type="button" disabled={busy} onClick={onKeep} className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold">Keep order</button><button type="button" disabled={busy} onClick={onConfirm} className="flex-1 rounded-xl border border-rose-400 px-4 py-3 text-sm font-semibold text-rose-700 disabled:opacity-50">{busy?'Cancelling...':'Cancel order'}</button></div></dialog>;
-}
+export function CancelOrderDialog({open,busy,onKeep,onConfirm}:{open:boolean;busy:boolean;onKeep:()=>void;onConfirm:()=>void}){return open?<VizitoDialog title="Cancel this order?" onClose={()=>{if(!busy)onKeep();}} footer={<><button type="button" disabled={busy} onClick={onKeep} className="booking-button">Keep order</button><button type="button" disabled={busy} onClick={onConfirm} className="booking-button primary">{busy?'Cancelling?':'Cancel order'}</button></>}><p>The pharmacy will be notified.</p></VizitoDialog>:null;}
 
 export const paymentMethodLabel = (method: string) => ({UPI:'UPI',CARD:'Card',NET_BANKING:'Net banking',WALLET:'Wallet',CASH:'Cash'}[method] || method);
 export const refundedMessage = (order: PatientOrder) => `Refunded ${orderMoney(order.total_amount)}${order.payment_method ? ` to your ${paymentMethodLabel(order.payment_method)}` : ''}`;

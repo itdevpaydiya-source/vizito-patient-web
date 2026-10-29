@@ -1,147 +1,65 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, Calendar, FlaskConical, Home, FileText, Star, Trash2, AlertCircle, LifeBuoy, ChevronRight } from 'lucide-react';
-import { useNotifications } from '../../../store/notifications/NotificationsContext';
+import {useCallback,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
+import {Link,useNavigate,useSearchParams} from 'react-router-dom';
+import {Accessibility,AlertCircle,Ambulance,Bell,CalendarDays,CheckCircle2,CreditCard,Droplet,FileText,FlaskConical,HeartHandshake,Info,LifeBuoy,MoreHorizontal,Package,Search,X} from 'lucide-react';
+import ThemedSelect from '../../components/forms/ThemedSelect';
+import VizitoPagination from '../../components/navigation/VizitoPagination';
+import {deleteNotificationApi,getPatientNotificationFeedApi,markNotificationUnreadApi,undoDeleteNotificationApi,type NotificationFeed,type NotificationTab,type PatientNotification} from '../../../services/notificationHelper';
+import {useNotifications} from '../../../store/notifications/NotificationsContext';
+import './NotificationsScreen.css';
 
-// Real patient notifications from the backend feed (vizito-booking). Opening this page marks
-// everything read so the header bell drops to 0; per-item delete is available. Honest empty/error/
-// loading states — no fabricated notifications.
-const categoryIcon = (category: string) => {
-  const c = (category || '').toLowerCase();
-  if (c.includes('appoint')) return <Calendar className="w-4.5 h-4.5" />;
-  if (c.includes('lab')) return <FlaskConical className="w-4.5 h-4.5" />;
-  if (c.includes('home')) return <Home className="w-4.5 h-4.5" />;
-  if (c.includes('record') || c.includes('prescription')) return <FileText className="w-4.5 h-4.5" />;
-  if (c.includes('review') || c.includes('rating') || c.includes('announce')) return <Star className="w-4.5 h-4.5" />;
-  if (c.includes('support')) return <LifeBuoy className="w-4.5 h-4.5" />;
-  return <Bell className="w-4.5 h-4.5" />;
-};
+const tabs:{id:NotificationTab;label:string;Icon:typeof Bell}[]=[{id:'all',label:'All',Icon:Bell},{id:'unread',label:'Unread',Icon:Bell},{id:'appointments',label:'Appointments',Icon:CalendarDays},{id:'reports',label:'Lab & reports',Icon:FlaskConical},{id:'orders',label:'Orders',Icon:Package},{id:'payments',label:'Payments',Icon:CreditCard},{id:'support',label:'Support',Icon:LifeBuoy}];
+const err=(e:unknown)=>(e as {response?:{data?:{message?:string}}})?.response?.data?.message||(e as Error)?.message||'Could not load notifications.';
+const icon=(n:PatientNotification)=>{const t=`${n.type} ${n.target_type}`.toLowerCase();if(t.includes('ambulance'))return <Ambulance/>;if(t.includes('blood'))return <Droplet/>;if(t.includes('equipment'))return <Accessibility/>;if(t.includes('lab'))return <FlaskConical/>;if(t.includes('support'))return <LifeBuoy/>;if(t.includes('payment'))return <CreditCard/>;if(t.includes('pharmacy'))return <Package/>;if(t.includes('home'))return <HeartHandshake/>;if(t.includes('record')||t.includes('prescription'))return <FileText/>;return <CalendarDays/>;};
+const bucket=(value:string)=>{const now=new Date(),d=new Date(value),today=new Date(now.getFullYear(),now.getMonth(),now.getDate()),day=new Date(d.getFullYear(),d.getMonth(),d.getDate()),days=Math.floor((today.getTime()-day.getTime())/86400000);return days===0?'Today':days===1?'Yesterday':days<7?'This week':'Earlier';};
+const stamp=(value:string)=>{const d=new Date(value),b=bucket(value);return b==='Today'?d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'}):b==='Yesterday'?`Yesterday, ${d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})}`:d.toLocaleDateString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});};
+const family=(n:PatientNotification)=>n.family_member_name?`For ${n.family_relationship||n.family_member_name}`:null;
+const money=(n:PatientNotification)=>n.amount==null?null:new Intl.NumberFormat('en-IN',{style:'currency',currency:n.currency||'INR',maximumFractionDigits:2}).format(n.amount);
+const tone=(n:PatientNotification)=>{const t=`${n.type} ${n.target_type}`.toLowerCase();if(t.includes('ambulance'))return'ambulance';if(t.includes('lab')||t.includes('record')||t.includes('prescription'))return'lab';if(t.includes('appointment'))return'appointment';if(t.includes('pharmacy'))return'pharmacy';if(t.includes('home'))return'home';if(t.includes('payment'))return'payment';if(t.includes('support'))return'support';if(t.includes('blood'))return'blood';if(t.includes('equipment'))return'equipment';return'appointment';};
+const action=(n:PatientNotification)=>{if(!n.target_path)return null;const t=`${n.type} ${n.target_type}`.toLowerCase();if(t.includes('ambulance'))return'Track status';if(t.includes('lab'))return t.includes('report')||n.group==='reports'?'View report':'Track status';if(n.group==='payments'||t.includes('payment'))return'View receipt';if(n.group==='support'||t.includes('support'))return'View reply';return'View details';};
 
-// Where a notification takes the patient — every one leads to the screen it is about.
-const destination = (category: string, targetId?: string): string | null => {
-  const c = (category || '').toLowerCase();
-  if (c.includes('support')) return targetId ? `/help?ticket=${encodeURIComponent(targetId)}` : '/help';
-  if (c === 'home visits') return '/home-care?tab=mine';
-  if (c === 'home care') return targetId ? `/home-care?tab=mine&open=${encodeURIComponent(targetId)}` : '/home-care?tab=mine';
-  if (c === 'lab tests') return targetId ? `/lab-bookings?open=${encodeURIComponent(targetId)}` : '/lab-bookings';
-  if (c === 'ambulance_trip') return targetId ? `/ambulance-trips?open=${encodeURIComponent(targetId)}` : '/ambulance-trips';
-  if (c === 'ambulance_urgent') return targetId ? `/urgent-ambulance?open=${encodeURIComponent(targetId)}` : '/urgent-ambulance';
-  // Blood Bank
-  if (c === 'bloodbank_donor') return '/donate-blood';
-  if (c === 'bloodbank_request') return targetId ? `/blood-requests?open=${encodeURIComponent(targetId)}` : '/blood-requests';
-  if (c.includes('record') || c.includes('prescription')) return '/my-records';
-  if (c === 'pharmacy order') return targetId ? `/pharmacy-orders/${encodeURIComponent(targetId)}` : '/pharmacy-orders';
-  if (c === 'pharmacy') return '/pharmacy-orders?tab=requests'; // a prescription request
-  if (c.includes('pharmacy') || c.includes('order')) return '/pharmacy-orders';
-  if (c.includes('review') || c.includes('rating')) return '/reviews';
-  if (c.includes('appoint') || c.includes('booking')) return targetId ? `/my-consultations?open=${encodeURIComponent(targetId)}` : '/my-consultations';
-  return null;
-};
-
-export default function NotificationsScreen() {
-  const navigate = useNavigate();
-  const { items, loading, error, markAllRead, remove, refresh } = useNotifications();
-
-  // On open: mark all read so the bell badge clears. markAllRead() itself fetches the real
-  // list as its final step (see NotificationsContext), so a separate leading refresh() here
-  // would just cause the loading skeleton to flash twice for no benefit.
-  useEffect(() => {
-    markAllRead();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Notifications</h1>
-        <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">
-          Updates about your bookings, consultations, prescriptions, and reviews.
-        </p>
-      </div>
-
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200 p-4 animate-pulse flex gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3.5 bg-slate-100 rounded w-1/3" />
-                <div className="h-3 bg-slate-100 rounded w-2/3" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="bg-white rounded-2xl border border-rose-200 py-16 px-4 text-center shadow-xs space-y-3">
-          <div className="w-14 h-14 rounded-full bg-rose-50 flex items-center justify-center mx-auto text-rose-400">
-            <AlertCircle className="w-7 h-7" />
-          </div>
-          <h3 className="font-extrabold text-slate-800 text-lg">Couldn't load notifications</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">{error}</p>
-          <button
-            onClick={() => refresh()}
-            className="mt-1 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-bold rounded-xl transition-all"
-          >
-            Retry
-          </button>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 py-20 px-4 text-center shadow-xs space-y-4">
-          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-            <Bell className="w-8 h-8" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-extrabold text-slate-800 text-lg">No notifications</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
-              You're all caught up. Updates about your bookings and consultations will appear here.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {items.map((n) => {
-            const to = destination(n.category, n.targetId);
-            return (
-            <div
-              key={n.id}
-              className={`bg-white rounded-2xl border p-4 flex gap-3 items-start transition-all ${n.unread ? 'border-teal-200 ring-1 ring-teal-100' : 'border-slate-200'
-                } ${to ? 'hover:border-slate-300' : ''}`}
-            >
-              <button
-                type="button"
-                disabled={!to}
-                onClick={() => to && navigate(to)}
-                className="flex-1 min-w-0 flex gap-3 items-start text-left disabled:cursor-default"
-                aria-label={to ? `${n.title}. Open` : n.title}
-              >
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${n.unread ? 'bg-teal-50 text-teal-600' : 'bg-slate-100 text-slate-400'
-                }`}>
-                {categoryIcon(n.category)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-slate-800 truncate">{n.title}</h4>
-                  {n.unread && <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />}
-                </div>
-                <p className="text-xs text-slate-500 font-medium mt-0.5 leading-relaxed">{n.message}</p>
-                <p className="text-[10px] text-slate-400 font-semibold mt-1.5">
-                  {[n.date, n.time].filter(Boolean).join(' • ') || 'Recently'}
-                </p>
-              </div>
-              {to && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 self-center" />}
-              </button>
-              <button
-                onClick={() => remove(n.id)}
-                className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
-                aria-label="Delete notification"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+export default function NotificationsScreen(){
+ const navigate=useNavigate(),[params,setParams]=useSearchParams(),{markAllRead,markRead:contextMarkRead,setUnreadCount,refresh:refreshBell}=useNotifications();
+ const tab=(tabs.some(t=>t.id===params.get('tab'))?params.get('tab'):'all') as NotificationTab,page=Math.max(1,Number(params.get('page'))||1),pageSize=params.get('pageSize')==='20'?20:10,q=params.get('q')||'',range=params.get('range')||'all';
+ const [search,setSearch]=useState(q),[feed,setFeed]=useState<NotificationFeed|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [pinHidden,setPinHidden]=useState(false);
+ const [deleted,setDeleted]=useState<{id:string;token:string}|null>(null),request=useRef(0),undoTimer=useRef<number|null>(null);
+ const dates=useMemo(()=>{if(range==='all')return{};const end=new Date(),start=new Date();start.setDate(end.getDate()-(range==='7'?6:29));return{date_from:start.toISOString().slice(0,10),date_to:end.toISOString().slice(0,10)};},[range]);
+ const update=(patch:Record<string,string|null>)=>setParams(current=>{const next=new URLSearchParams(current);Object.entries(patch).forEach(([k,v])=>v&&v!=='all'?next.set(k,v):next.delete(k));return next;});
+ useEffect(()=>{const timer=window.setTimeout(()=>{if(search!==q)update({q:search||null,page:null});},300);return()=>window.clearTimeout(timer);},[search,q]); // eslint-disable-line react-hooks/exhaustive-deps
+ const load=useCallback(async()=>{const version=++request.current;setLoading(true);setError('');try{const data=await getPatientNotificationFeedApi({page,page_size:pageSize,tab,q:q||undefined,...dates});if(version!==request.current)return;setFeed(data);setUnreadCount(data.counts.unread);}catch(e){if(version===request.current)setError(err(e));}finally{if(version===request.current)setLoading(false);}},[page,pageSize,tab,q,dates,setUnreadCount]);
+ useEffect(()=>{void load();return()=>{request.current++;};},[load]);
+ useEffect(()=>()=>{if(undoTimer.current)window.clearTimeout(undoTimer.current);},[]);
+ const open=async(n:PatientNotification)=>{if(!n.target_path)return;if(n.unread){try{await markRead(n.id);}catch{return;}}navigate(n.target_path);};
+ const remove=async(n:PatientNotification)=>{try{const result=await deleteNotificationApi(n.id);setUnreadCount(result.unread_count);setDeleted({id:n.id,token:result.undo_token});setNotice('Notification deleted');if(undoTimer.current)window.clearTimeout(undoTimer.current);undoTimer.current=window.setTimeout(()=>setDeleted(null),10000);await load();}catch(e){setNotice(err(e));}};
+ const undo=async()=>{if(!deleted)return;try{await undoDeleteNotificationApi(deleted.id,deleted.token);setDeleted(null);setNotice('Notification restored');await load();await refreshBell();}catch(e){setDeleted(null);setNotice(err(e));}};
+ const allRead=async()=>{await markAllRead();setNotice('All notifications marked as read');await load();};
+ const markRead=async(id:string)=>{const count=await contextMarkRead(id);setNotice('Notification marked as read');await load();return count;};
+ const unread=async(n:PatientNotification)=>{try{await markNotificationUnreadApi(n.id);setNotice('Notification marked as unread');await load();await refreshBell();}catch(e){setNotice(err(e));}};
+ const groups=['Today','Yesterday','This week','Earlier'].map(label=>({label,items:(feed?.items||[]).filter(n=>bucket(n.created_at)===label)})).filter(g=>g.items.length);
+ return <main className="nt-page">
+  <header className="nt-heading"><div><h1>Notifications</h1><p>Stay updated on your appointments, lab tests, orders and more.</p></div><button className="nt-link" onClick={()=>void allRead()} disabled={!feed?.counts.unread}><CheckCircle2/>Mark all as read</button></header>
+  <nav className="nt-tabs" aria-label="Notification categories">{tabs.map(({id,label,Icon})=><button key={id} aria-current={tab===id?'page':undefined} onClick={()=>update({tab:id,page:null})}><Icon/>{label} <span>{feed?.counts[id]??'–'}</span>{id==='unread'&&!!feed?.counts.unread&&<i aria-label="Unread notifications"/>}</button>)}</nav>
+  <section className="nt-tools"><label><Search/><input type="search" aria-label="Search notifications" placeholder="Search notifications" value={search} onChange={e=>setSearch(e.target.value)}/></label><ThemedSelect variant="menu" aria-label="Notification date range" value={range} onChange={e=>update({range:e.target.value,page:null})}><option value="all">All dates</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></ThemedSelect></section>
+  {feed?.pinned&&!pinHidden&&<Pinned
+    item={feed.pinned}
+    onOpen={open}
+    onClose={()=>setPinHidden(true)}
+  />}
+  {loading?<Loading/>:error?<State icon={<AlertCircle/>} title="Couldn't load notifications" text={error}><button onClick={()=>void load()}>Retry</button></State>:!feed?.items.length?q?<State icon={<Search/>} title="No notifications found" text="Try a different search or date range."/>:tab==='unread'?<State image="/images/healthcare/empty/empty-caught-up.webp" title="You're all caught up!" text="No unread notifications at the moment. We'll let you know when there's something new."/>:<State image="/images/healthcare/empty/empty-no-notifications.webp" title="No notifications yet" text="Book an appointment, lab test or order medicines to see updates here."><div><Link to="/doctors">Book a doctor</Link><Link to="/lab-tests">Book a lab test</Link></div></State>:groups.map(g=><section className="nt-group" key={g.label}><h2>{g.label} <span>({g.items.length})</span></h2><div>{g.items.map(n=><Row key={n.id} item={n} onOpen={open} onRead={markRead} onUnread={unread} onDelete={remove}/>)}</div></section>)}
+  {!!feed?.total&&<VizitoPagination
+    page={feed.page}
+    pageSize={feed.page_size}
+    total={feed.total}
+    label="notifications"
+    onPageChange={n=>update({page:String(n)})}
+    onPageSizeChange={n=>update({pageSize:String(n),page:null})}
+  />}
+  <footer className="nt-footer"><Info/>SMS and email alerts are coming soon.</footer>
+  {notice&&<div className="nt-toast" role="status"><span>{notice}</span>{deleted&&<button onClick={()=>void undo()}>Undo</button>}<button aria-label="Dismiss" onClick={()=>{setNotice('');setDeleted(null);}}><X/></button></div>}
+ </main>;
 }
+
+function Row({item,onOpen,onRead,onUnread,onDelete}:{item:PatientNotification;onOpen:(n:PatientNotification)=>void;onRead:(id:string)=>Promise<number>;onUnread:(n:PatientNotification)=>void;onDelete:(n:PatientNotification)=>void}){const fam=family(item),amount=money(item),label=action(item);return <article className={`nt-row is-${tone(item)} ${item.unread?'is-unread':''}`}>{item.unread&&<i className="nt-unread-dot" aria-label="Unread"/>}<button className="nt-row-main" disabled={!item.target_path} onClick={()=>void onOpen(item)}><span className="nt-icon">{icon(item)}</span><span className="nt-copy"><strong>{item.title}</strong><span title={item.message}>{item.message}</span><small>{amount}{fam&&<em>{fam}</em>}</small></span><time dateTime={item.created_at}>{stamp(item.created_at)}</time></button>{label&&<button className="nt-action" onClick={()=>void onOpen(item)}>{label}</button>}<details className="nt-menu"><summary aria-label={`More actions for ${item.title}`}><MoreHorizontal/></summary><div>{item.unread?<button onClick={async()=>{await onRead(item.id);}}>Mark as read</button>:<button onClick={()=>void onUnread(item)}>Mark as unread</button>}<button className="danger" onClick={()=>void onDelete(item)}>Delete</button></div></details></article>;}
+function Pinned({item,onOpen,onClose}:{item:PatientNotification;onOpen:(n:PatientNotification)=>void;onClose:()=>void}){return <aside className="nt-pinned"><span className="nt-icon"><Ambulance/></span><div><strong>{item.title}</strong><p>{item.message}</p><button disabled={!item.target_path} onClick={()=>void onOpen(item)}>Track ambulance</button></div><Ambulance className="nt-pinned-art" aria-hidden="true"/><button className="nt-pin-close" onClick={onClose} aria-label="Hide urgent notification"><X/></button></aside>;}
+function Loading(){return <div className="nt-loading" aria-label="Loading notifications">{[1,2,3,4,5].map(n=><div key={n}><i/><span/><span/></div>)}</div>;}
+function State({image,icon,title,text,children}:{image?:string;icon?:ReactNode;title:string;text:string;children?:ReactNode}){return <section className="nt-state">{image?<img src={image} alt=""/>:<span>{icon||<Bell/>}</span>}<h2>{title}</h2><p>{text}</p>{children}</section>;}

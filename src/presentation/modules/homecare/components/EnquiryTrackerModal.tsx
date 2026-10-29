@@ -1,3 +1,4 @@
+import VizitoDialog from '../../../components/dialogs/VizitoDialog';
 import React from 'react';
 import { X, Clock, Calendar, CheckCircle2, AlertTriangle, FileText, PhoneCall, ShieldAlert, Sparkles, ChevronRight } from 'lucide-react';
 import type { HcEnquiry, HcQuote } from '../../../../services/homecareHelper';
@@ -31,15 +32,10 @@ export default function EnquiryTrackerModal({
   const activeQuote = enquiry.quotes?.find((q) => q.status === 'SENT');
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Enquiry Tracker"
-        className="bg-white rounded-3xl max-w-2xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-      >
-        {/* Header */}
-        <div className="bg-slate-900 text-white p-5 sm:p-6 relative">
+    <VizitoDialog title="Care Onboarding Progress" onClose={onClose} className="portal-migrated">
+{/* Header */}
+
+<div className="bg-slate-900 text-white p-5 sm:p-6 relative">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
@@ -65,8 +61,9 @@ export default function EnquiryTrackerModal({
           </div>
         </div>
 
-        {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+{/* Modal Content */}
+
+<div className="p-6 overflow-y-auto space-y-6 flex-1">
           {/* Status Alert Banner */}
           {enquiry.status === 'NEW' && (
             <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
@@ -257,8 +254,9 @@ export default function EnquiryTrackerModal({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+{/* Footer */}
+
+<div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -267,7 +265,6 @@ export default function EnquiryTrackerModal({
             Close
           </button>
         </div>
-      </div>
-    </div>
+</VizitoDialog>
   );
 }

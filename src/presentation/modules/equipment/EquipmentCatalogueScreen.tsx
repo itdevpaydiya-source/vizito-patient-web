@@ -1,384 +1,49 @@
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import LocationBar from '../../components/location/LocationBar';
+import VizitoPagination from '../../components/navigation/VizitoPagination';
+import {useVizitoPagination} from '../../components/navigation/useVizitoPagination';
 import {useSearchArea,metresBetween,formatDistance} from '../../../services/location';
 import MediaImage from '../../components/MediaImage';
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Box,
-  Search,
-  ChevronRight,
-  Info,
-  X,
-  MapPin,
-  ClipboardList,
-  Star,
-  ShieldCheck,
-} from 'lucide-react';
-import type { PatientEquipmentItem } from './types';
-import { equipmentService } from './equipmentService';
-import { PartnerProfileModal, type InitialPartnerInfo } from './PartnerProfileModal';
+import React,{useCallback,useEffect,useMemo,useState} from 'react';
+import {useNavigate} from 'react-router-dom';
+import {Search,ChevronRight,X,MapPin,Star,ShieldCheck,Truck,Clock,Headphones,SlidersHorizontal,AlertCircle,Box,RefreshCw,Calendar} from 'lucide-react';
+import type {PatientEquipmentItem,PatientRentalOrder} from './types';
+import {equipmentService} from './equipmentService';
+import {PartnerProfileModal,type InitialPartnerInfo} from './PartnerProfileModal';
 
-export const EquipmentCatalogueScreen: React.FC = () => {
-  const navigate = useNavigate();
-  const area=useSearchArea();
-  const distance=(item:PatientEquipmentItem)=>area&&item.providerLatitude!=null&&item.providerLongitude!=null?metresBetween(area,{lat:item.providerLatitude,lng:item.providerLongitude}):null;
+type SortKey='recommended'|'nearest'|'price_asc'|'price_desc';
+const LABELS:Record<string,string>={OXYGEN:'Oxygen equipment',RESPIRATORY:'Respiratory',BED:'Hospital beds',HOSPITAL_BEDS:'Hospital beds',MOBILITY:'Mobility',MONITOR:'Monitors',MONITORING:'Monitors',OTHER:'Other'};
+const keyOf=(x:PatientEquipmentItem)=>String(x.mediaCategory||x.category||'OTHER').toUpperCase();
+const labelOf=(k:string)=>LABELS[k]||k.replace(/_/g,' ').toLowerCase().replace(/^./,c=>c.toUpperCase());
+const money=(n:number)=>`₹${Number(n).toLocaleString('en-IN')}`;
+const shortDate=(x:string)=>new Date(x).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',timeZone:'Asia/Kolkata'});
 
-  const [items, setItems] = useState<PatientEquipmentItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [search, setSearch] = useState<string>('');
-  const [priceSort, setPriceSort] = useState<'none' | 'low_to_high' | 'high_to_low'>('none');
-  useEffect(()=>setPriceSort('none'),[area]);
-  const [onlyAvailable, setOnlyAvailable] = useState<boolean>(false);
-  const [selectedPartner, setSelectedPartner] = useState<InitialPartnerInfo | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
-    equipmentService
-      .getCatalogue({
-        search,
-        priceSort,
-        onlyAvailable,
-      })
-      .then((res) => {
-        if (isMounted) {
-          // Display only Super Admin-approved products
-          const approvedItems = (res.items || []).filter(
-            (it) => it.approvalStatus === undefined || it.approvalStatus === 'approved'
-          );
-          setItems(approvedItems);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load equipment catalogue:', err);
-        if (isMounted) setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [search, priceSort, onlyAvailable]);
-
-  return (
-    <div className="space-y-4 pb-12 font-sans animate-in fade-in duration-200"><LocationBar compact purpose="find equipment providers near you"/>
-      {/* 1. Breadcrumbs */}
-      <nav className="flex items-center space-x-2 text-xs text-slate-500 font-medium" aria-label="Breadcrumb">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          className="hover:text-[#9C4119] transition-colors cursor-pointer"
-        >
-          Dashboard
-        </button>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-        <button
-          type="button"
-          onClick={() => navigate('/healthcare-services')}
-          className="hover:text-[#9C4119] transition-colors cursor-pointer"
-        >
-          Healthcare Services
-        </button>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-        <span className="text-[#9C4119] font-bold">Medical Equipment Rental</span>
-      </nav>
-
-      {/* 2. Page Header & Quick Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-[#E0F7F6] border border-[#B2EBF2] flex items-center justify-center text-[#00897B] shadow-2xs shrink-0">
-            <Box className="w-6 h-6 text-[#00897B]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Medical Equipment Rental
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Clinical-grade home healthcare devices · Sanitized, calibrated & demonstrated by technicians
-            </p>
-          </div>
-        </div>
-
-        {/* Quick Navigation Access */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => navigate('/equipment-rental/orders')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-          >
-            <ClipboardList className="w-3.5 h-3.5 text-slate-500" />
-            <span>My Orders</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/equipment-rental/active')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#E6F4EA] border border-[#CEEAD6] rounded-xl text-xs font-semibold text-[#137333] hover:bg-[#D4EDDA] transition-colors shadow-2xs cursor-pointer"
-          >
-            <span>Active Rentals</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/equipment-rental/returns')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FEF7E0] border border-[#FEEFC3] rounded-xl text-xs font-semibold text-[#B06000] hover:bg-[#FDEBB8] transition-colors shadow-2xs cursor-pointer"
-          >
-            <span>Scheduled Returns</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Search and Filters Bar */}
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
-        {/* Search Input */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search equipment by name, brand, or condition (e.g., Oxygen, Bed, Wheelchair)..."
-            className="w-full pl-9 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#9C4119] focus:border-[#9C4119] shadow-2xs"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Sort Dropdown */}
-        <div className="relative shrink-0">
-          <select
-            value={priceSort}
-            onChange={(e) => setPriceSort(e.target.value as any)}
-            className="h-9.5 px-3 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl focus:outline-none focus:ring-1 focus:ring-[#9C4119] shadow-2xs min-w-[130px] cursor-pointer"
-          >
-            <option value="none">Sort: Featured</option>
-            <option value="low_to_high">Price: Low to High</option>
-            <option value="high_to_low">Price: High to Low</option>
-          </select>
-        </div>
-
-        {/* In Stock Only Checkbox */}
-        <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none shrink-0 px-2 py-1">
-          <input
-            type="checkbox"
-            checked={onlyAvailable}
-            onChange={(e) => setOnlyAvailable(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-[#9C4119] focus:ring-[#9C4119] cursor-pointer"
-          />
-          <span>In Stock Only</span>
-        </label>
-      </div>
-
-      {/* 5. Equipment Cards Grid */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs">
-          <div className="w-8 h-8 border-3 border-[#9C4119] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm font-bold text-slate-700">Loading approved medical equipment...</p>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center shadow-xs space-y-3">
-          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 mx-auto">
-            <Box className="w-7 h-7" />
-          </div>
-          <h3 className="text-base font-bold text-slate-800">No equipment found</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            No matching equipment was found for the current search or filters. Try clearing your search keyword.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setSearch('');
-              setOnlyAvailable(false);
-            }}
-            className="px-4 py-2 bg-[#9C4119] text-white rounded-xl text-xs font-bold hover:bg-[#853512] transition-colors cursor-pointer"
-          >
-            Reset Filters
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-4.5">
-          {[...items].sort((a,b)=>area&&priceSort==='none'?(distance(a)??Infinity)-(distance(b)??Infinity):0).map((item) => {
-            const isOutOfStock = (item.availableStock !== undefined && item.availableStock <= 0) || item.isAvailable === false;
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-md transition-all duration-200 flex flex-col"
-              >
-                {/* Image */}
-                <div className="relative h-36 sm:h-40 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center p-2.5">
-                  <MediaImage kind="equipment" category={item.mediaCategory}
-                    src={item.imageUrl}
-                    name={item.name}
-                    className="w-full h-full object-contain"
-                  />
-                  {/* Stock Availability Badge - only shown if Out of Stock */}
-                  {isOutOfStock && (
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                        Out of Stock
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Card Body */}
-                <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
-                  {/* Title & Short Description */}
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2 min-h-[2.3rem]">
-                      {item.name}
-                    </h3>
-
-                    {/* Real Patient Rating */}
-                    {item.rating && item.rating > 0 ? (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star
-                              key={s}
-                              className={`w-3.5 h-3.5 ${
-                                s <= Math.round(item.rating || 0)
-                                  ? 'fill-amber-400 text-amber-500'
-                                  : 'text-slate-200 fill-slate-100'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        <span className="text-xs font-bold text-slate-800">
-                          {Number(item.rating).toFixed(item.rating % 1 === 0 ? 0 : 1)}
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          ({item.reviewCount || 1} {item.reviewCount === 1 ? 'review' : 'reviews'})
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-slate-400 mt-1">
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star key={s} className="w-3 h-3 text-slate-200 fill-slate-100" />
-                          ))}
-                        </div>
-                        <span className="text-[10.5px] text-slate-400">No reviews yet</span>
-                      </div>
-                    )}
-
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                      {item.shortDescription}
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/equipment-rental/item/${item.id}`)}
-                        className="text-[#1A73E8] hover:underline font-semibold ml-1 cursor-pointer"
-                      >
-                        More
-                      </button>
-                    </p>
-                  </div>
-
-                  {/* Pricing, Distance & Action */}
-                  {distance(item)!=null&&<p className="text-xs text-slate-500">{formatDistance(distance(item)!)} away (approx.)</p>}<div className="mt-2.5 pt-2.5 border-t border-slate-100">
-                    <div className="space-y-1.5">
-                      <div>
-                        <span className="text-[10px] font-semibold text-slate-400 block uppercase tracking-wide">
-                          Rental Price
-                        </span>
-                        <div className="flex items-baseline gap-1 mt-0.5">
-                          <span className="text-base sm:text-lg font-bold text-slate-900">
-                            ₹{item.dailyRate}
-                          </span>
-                          <span className="text-[11px] font-medium text-slate-500">/ day</span>
-                        </div>
-                      </div>
-
-                      {/* Security Deposit Line */}
-                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <span className="text-slate-500">Security Deposit:</span>
-                        <span className="font-bold text-slate-900">₹{(item.securityDeposit ?? 5000).toLocaleString('en-IN')}</span>
-                        <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/70">
-                          Refundable
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Partner Details Button (Opens Pop-up with Banner & Logo) */}
-                    <div className="flex items-center gap-1.5 text-[10.5px] text-slate-600 mt-2">
-                      <MapPin className="w-3.5 h-3.5 text-[#9C4119] shrink-0" />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedPartner({
-                            providerId: item.providerId,
-                            name: item.providerName || 'Equipment provider',
-                            address: item.providerAddress,
-                            location: item.providerLocation,
-                            phone: item.providerPhone,
-                            email: item.providerEmail,
-                            logo: item.providerLogo,
-                            banner: item.providerBanner,
-                            rating: item.rating,
-                            reviewCount: item.reviewCount,
-                            rentalPrice: item.dailyRate,
-                          });
-                        }}
-                        className="flex flex-wrap items-center gap-1 truncate text-left group cursor-pointer hover:underline"
-                        title="Click to view partner business details, banner and logo"
-                      >
-                        <span className="font-bold text-slate-800 group-hover:text-[#9C4119] transition-colors">
-                          {item.providerName || 'Equipment provider'}
-                        </span>
-                        <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-md">
-                          <ShieldCheck className="w-3 h-3 text-sky-600" />
-                          Verified
-                        </span>
-                        {item.providerAddress ? (
-                          <span className="text-slate-500 font-normal"> • {item.providerAddress}</span>
-                        ) : item.providerLocation ? (
-                          <span className="text-slate-500 font-normal"> • {item.providerLocation}</span>
-                        ) : null}
-                      </button>
-                    </div>
-
-                    {isOutOfStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full mt-2.5 py-2 px-3 rounded-xl bg-slate-100 text-slate-400 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
-                      >
-                        <span>Out of Stock — Booking Unavailable</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/equipment-rental/item/${item.id}`)}
-                        className="w-full mt-2.5 py-2 px-3 rounded-xl bg-[#9C4119] hover:bg-[#853512] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                      >
-                        <span>View Details</span>
-                        <span>→</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Partner Business Profile Pop-up Modal with distinct Banner & Logo */}
-      <PartnerProfileModal
-        isOpen={Boolean(selectedPartner)}
-        onClose={() => setSelectedPartner(null)}
-        partner={selectedPartner}
-      />
-    </div>
-  );
+export const EquipmentCatalogueScreen:React.FC=()=>{
+ const navigate=useNavigate(),area=useSearchArea();
+ const [items,setItems]=useState<PatientEquipmentItem[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(false);
+ const [rentals,setRentals]=useState<PatientRentalOrder[]>([]),[rentalsLoading,setRentalsLoading]=useState(true),[rentalsError,setRentalsError]=useState(false);
+ const [search,setSearch]=useState(''),[categories,setCategories]=useState<string[]>([]),[maxPrice,setMaxPrice]=useState<number|null>(null),[minRating,setMinRating]=useState<number|null>(null),[onlyAvailable,setOnlyAvailable]=useState(false),[sort,setSort]=useState<SortKey>(area?'nearest':'recommended'),[filtersOpen,setFiltersOpen]=useState(false);
+ const [selectedPartner,setSelectedPartner]=useState<InitialPartnerInfo|null>(null);
+ const distance=useCallback((x:PatientEquipmentItem)=>area&&x.providerLatitude!=null&&x.providerLongitude!=null?metresBetween(area,{lat:x.providerLatitude,lng:x.providerLongitude}):null,[area]);
+ const loadItems=useCallback(()=>{let live=true;setLoading(true);setError(false);equipmentService.loadCatalogue().then(x=>{if(live){setItems(x.filter(i=>!i.approvalStatus||i.approvalStatus==='approved'));setLoading(false)}}).catch(()=>{if(live){setError(true);setLoading(false)}});return()=>{live=false}},[]);
+ const loadRentals=useCallback(()=>{let live=true;setRentalsLoading(true);setRentalsError(false);equipmentService.loadActiveRentalOrders().then(x=>{if(live){setRentals(x);setRentalsLoading(false)}}).catch(()=>{if(live){setRentalsError(true);setRentalsLoading(false)}});return()=>{live=false}},[]);
+ useEffect(()=>loadItems(),[loadItems]);useEffect(()=>loadRentals(),[loadRentals]);useEffect(()=>setSort(area?'nearest':'recommended'),[area]);
+ const categoryOptions=useMemo(()=>Array.from(new Set(items.map(keyOf))).map(key=>({key,label:labelOf(key),count:items.filter(x=>keyOf(x)===key).length})).sort((a,b)=>a.label.localeCompare(b.label)),[items]);
+ const priceBounds=useMemo(()=>items.length?{min:Math.floor(Math.min(...items.map(x=>x.dailyRate))),max:Math.ceil(Math.max(...items.map(x=>x.dailyRate)))}:null,[items]);
+ const hasRatings=items.some(x=>x.rating>0&&x.reviewCount>0);
+ const filtered=useMemo(()=>{const q=search.trim().toLowerCase();return items.filter(x=>(!q||`${x.name} ${x.manufacturer||''} ${x.shortDescription||''} ${x.providerName||''}`.toLowerCase().includes(q))&&(!categories.length||categories.includes(keyOf(x)))&&(maxPrice==null||x.dailyRate<=maxPrice)&&(!minRating||(x.rating>0&&x.reviewCount>0&&x.rating>=minRating))&&(!onlyAvailable||(x.isAvailable!==false&&(x.availableStock==null||x.availableStock>0)))).sort((a,b)=>sort==='price_asc'?a.dailyRate-b.dailyRate:sort==='price_desc'?b.dailyRate-a.dailyRate:sort==='nearest'?(distance(a)??Infinity)-(distance(b)??Infinity):Number(b.isAvailable)-Number(a.isAvailable));},[items,search,categories,maxPrice,minRating,onlyAvailable,sort,distance]);
+ const pagination=useVizitoPagination(filtered,'equipment');
+ const activeFilterCount=categories.length+(maxPrice!=null?1:0)+(minRating?1:0)+(onlyAvailable?1:0);
+ const clearAll=()=>{setSearch('');setCategories([]);setMaxPrice(null);setMinRating(null);setOnlyAvailable(false);pagination.resetPage()};
+ const toggleCategory=(k:string)=>{setCategories(v=>v.includes(k)?v.filter(x=>x!==k):[...v,k]);pagination.resetPage()};
+ const filters=<div className="space-y-5 text-xs text-slate-700"><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-slate-900">Filters</h2><button onClick={clearAll} disabled={!activeFilterCount&&!search} className="font-semibold text-[#9C4119] disabled:text-slate-300">Clear all</button></div>{categoryOptions.length>0&&<fieldset className="space-y-2"><legend className="mb-2 font-bold text-slate-900">Category</legend>{categoryOptions.map(c=><label key={c.key} className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={categories.includes(c.key)} onChange={()=>toggleCategory(c.key)} className="accent-[#9C4119]"/><span className="flex-1">{c.label}</span><span className="text-slate-400">{c.count}</span></label>)}</fieldset>}{priceBounds&&priceBounds.max>priceBounds.min&&<div><label htmlFor="eq-price" className="mb-2 block font-bold text-slate-900">Rent per day</label><input id="eq-price" type="range" min={priceBounds.min} max={priceBounds.max} value={maxPrice??priceBounds.max} onChange={e=>{setMaxPrice(Number(e.target.value)>=priceBounds.max?null:Number(e.target.value));pagination.resetPage()}} className="w-full accent-[#9C4119]"/><div className="flex justify-between text-slate-500"><span>{money(priceBounds.min)}</span><span>Up to {money(maxPrice??priceBounds.max)}</span></div></div>}<label className="flex cursor-pointer items-center justify-between"><b>In stock only</b><input type="checkbox" checked={onlyAvailable} onChange={e=>{setOnlyAvailable(e.target.checked);pagination.resetPage()}} className="accent-[#9C4119]"/></label>{hasRatings&&<fieldset className="space-y-2"><legend className="mb-2 font-bold text-slate-900">Provider rating</legend>{[4,3.5,3].map(r=><label key={r} className="flex cursor-pointer items-center gap-2"><input type="radio" name="rating" checked={minRating===r} onChange={()=>{setMinRating(minRating===r?null:r);pagination.resetPage()}}/><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500"/>{r.toFixed(1)} &amp; above</label>)}</fieldset>}</div>;
+ return <div className="min-w-0 space-y-4 pb-12"><nav className="flex items-center gap-2 text-xs text-slate-500" aria-label="Breadcrumb"><button onClick={()=>navigate('/dashboard')}>Home</button><ChevronRight className="h-3.5 w-3.5"/><button onClick={()=>navigate('/healthcare-services')}>Medical Equipment</button><ChevronRight className="h-3.5 w-3.5"/><b className="text-[#9C4119]">On Rent</b></nav>
+  <section className="grid overflow-hidden rounded-2xl border border-slate-200 bg-white lg:grid-cols-[1fr_300px]"><div className="relative flex min-h-44 flex-col justify-center overflow-hidden bg-[#EAF2FB] p-6"><img src="/images/healthcare/services/equipment.webp" alt="" className="absolute right-0 top-0 hidden h-full w-1/2 object-cover opacity-30 sm:block"/><div className="absolute inset-0 hidden bg-gradient-to-r from-[#EAF2FB] via-[#EAF2FB]/95 to-transparent sm:block"/><div className="relative max-w-lg"><h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">Medical equipment on rent for home care</h1><p className="mt-2 text-sm text-slate-600">Quality equipment from trusted providers{area?.label?` near ${area.label}`:''}. Delivered to your home.</p></div></div><ul className="space-y-3 p-5">{[[Truck,'Home delivery & setup','Delivered to your address'],[Clock,'Flexible rental periods','From a few days to months'],[Headphones,'Support from providers','Guidance on usage and maintenance']].map(([I,t,s])=>{const Icon=I as typeof Truck;return <li key={String(t)} className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-50 text-teal-700"><Icon className="h-4 w-4"/></span><span><b className="block text-sm">{String(t)}</b><small className="text-slate-500">{String(s)}</small></span></li>})}</ul></section>
+  <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="md:w-80"><LocationBar compact purpose="find equipment providers near you"/></div><label className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><input aria-label="Search equipment" value={search} onChange={e=>{setSearch(e.target.value);pagination.resetPage()}} placeholder="Search equipment (e.g. oxygen concentrator, hospital bed)" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-9 text-sm"/>{search&&<button type="button" aria-label="Clear search" onClick={()=>setSearch('')} className="absolute right-3 top-3"><X className="h-4 w-4"/></button>}</label></div><div className="flex gap-2 overflow-x-auto pb-1">{categoryOptions.map(c=><button key={c.key} aria-pressed={categories.includes(c.key)} onClick={()=>toggleCategory(c.key)} className={`flex shrink-0 items-center gap-2 rounded-xl border px-2 py-1.5 ${categories.includes(c.key)?'border-[#9C4119] bg-orange-50':'border-slate-200'}`}><span className="h-9 w-9 overflow-hidden rounded-lg bg-slate-50"><MediaImage kind="equipment" category={c.key} name={c.label} className="h-full w-full"/></span><span className="text-left"><b className="block whitespace-nowrap text-sm">{c.label}</b><small className="text-slate-500">{c.count} items</small></span></button>)}</div></section>
+  <div className="grid items-start gap-4 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_260px]"><aside className="sticky top-4 hidden rounded-2xl border border-slate-200 bg-white p-4 lg:block">{filters}</aside><main className="min-w-0 space-y-3"><header className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-3"><p className="text-sm text-slate-600">{loading?'Loading equipment…':error?'':`${filtered.length} equipment available`}</p><div className="flex gap-2"><button onClick={()=>setFiltersOpen(v=>!v)} className="rounded-xl border p-2 text-xs lg:hidden"><SlidersHorizontal className="mr-1 inline h-4 w-4"/>Filters{activeFilterCount?` (${activeFilterCount})`:''}</button><ThemedSelect variant="menu" className="min-w-[150px]" aria-label="Sort equipment" value={sort} onChange={e=>{setSort(e.target.value as SortKey);pagination.resetPage()}}><option value="recommended">Recommended</option><option value="nearest" disabled={!area}>Nearest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></ThemedSelect></div>{filtersOpen&&<div className="w-full border-t pt-3 lg:hidden">{filters}</div>}</header>
+   {loading?<div className="grid gap-3 md:grid-cols-2" aria-busy="true">{[1,2,3,4].map(i=><div key={i} className="h-72 animate-pulse rounded-2xl bg-slate-100"/>)}</div>:error?<State icon={<AlertCircle/>} title="Unable to load equipment" text="Something went wrong while loading the catalogue." action="Retry" onAction={()=>loadItems()}/>:items.length===0?<State icon={<Box/>} title="No equipment available yet" text="Rental equipment will appear here when providers list it." action="Refresh" onAction={()=>loadItems()}/>:filtered.length===0?<State icon={<Search/>} title="No equipment matches these filters" text="Try another category, price limit or search." action="Clear all filters" onAction={clearAll}/>:<><div className="grid gap-3 md:grid-cols-2">{pagination.visibleItems.map(item=>{const out=item.isAvailable===false||(item.availableStock!=null&&item.availableStock<=0),dist=distance(item),place=item.providerLocation||item.providerAddress;return <article key={item.id} className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-3"><div className="relative h-40 overflow-hidden rounded-xl bg-slate-50"><MediaImage kind="equipment" category={item.mediaCategory} src={item.imageUrl} name={item.name} className="h-full w-full object-contain"/>{out&&<span className="absolute left-2 top-2 rounded-full bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-700">Out of stock</span>}</div><div className="flex flex-1 flex-col pt-3"><h2 className="font-bold text-slate-900">{item.name}</h2>{item.manufacturer&&<p className="text-xs text-slate-500">{item.manufacturer}{item.modelNumber?` · ${item.modelNumber}`:''}</p>}{item.rating>0&&item.reviewCount>0&&<p className="mt-1 flex items-center gap-1 text-xs"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500"/><b>{item.rating.toFixed(1)}</b> ({item.reviewCount} reviews)</p>}<p className="mt-2"><b className="text-lg">{money(item.dailyRate)}</b><small className="text-slate-500"> / day</small></p><p className="text-xs text-slate-600">Refundable deposit {money(item.securityDeposit)} · collected at delivery</p><p className="mt-1 text-xs text-slate-500">Minimum {item.minDurationDays} day{item.minDurationDays===1?'':'s'}</p>{item.providerName&&<button onClick={()=>setSelectedPartner({providerId:item.providerId,name:item.providerName!,address:item.providerAddress,location:item.providerLocation,phone:item.providerPhone,email:item.providerEmail,logo:item.providerLogo,banner:item.providerBanner,rating:item.rating,reviewCount:item.reviewCount,rentalPrice:item.dailyRate})} className="mt-2 flex items-center gap-1 text-left text-xs"><MapPin className="h-3.5 w-3.5 text-[#9C4119]"/><b>{item.providerName}</b><ShieldCheck className="h-3.5 w-3.5 text-sky-600"/>{place&&<span className="truncate text-slate-500">· {place}</span>}</button>}{dist!=null&&<p className="mt-1 text-xs text-slate-500">{formatDistance(dist)} away (approx.)</p>}<button disabled={out} title={out?'This item is currently out of stock':undefined} onClick={()=>navigate(`/equipment-rental/item/${item.id}`)} className="mt-auto rounded-xl bg-[#9C4119] px-3 py-2 text-xs font-bold text-white disabled:bg-slate-200 disabled:text-slate-500">{out?'Booking unavailable':'View details →'}</button></div></article>})}</div><VizitoPagination page={pagination.page} pageSize={pagination.pageSize} total={filtered.length} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="equipment"/></>}
+  </main><aside className="hidden space-y-3 xl:block"><section className="rounded-2xl border border-slate-200 bg-white p-4"><h2 className="font-bold">Your active rentals</h2>{rentalsLoading?<p className="mt-3 text-xs text-slate-500">Loading rentals…</p>:rentalsError?<><p className="mt-3 text-xs text-rose-700">Could not load rentals.</p><button onClick={()=>loadRentals()} className="mt-2 text-xs font-bold text-[#9C4119]">Retry</button></>:rentals.length===0?<p className="mt-3 text-xs text-slate-500">No active rentals.</p>:rentals.slice(0,2).map(r=><button key={r.id} onClick={()=>navigate(`/equipment-rental/orders/${r.id}`)} className="mt-3 block w-full rounded-xl border p-3 text-left"><b className="block text-sm">{r.equipmentName}</b><small className="text-slate-500"><Calendar className="mr-1 inline h-3 w-3"/>{shortDate(r.endDate)}</small></button>)}</section></aside></div>
+  <PartnerProfileModal isOpen={!!selectedPartner} onClose={()=>setSelectedPartner(null)} partner={selectedPartner}/></div>;
 };
-
+function State({icon,title,text,action,onAction}:{icon:React.ReactNode;title:string;text:string;action:string;onAction:()=>void}){return <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">{icon}</div><h2 className="mt-3 font-bold">{title}</h2><p className="mt-1 text-xs text-slate-500">{text}</p><button onClick={onAction} className="mt-3 rounded-xl bg-[#9C4119] px-4 py-2 text-xs font-bold text-white"><RefreshCw className="mr-1 inline h-3.5 w-3.5"/>{action}</button></section>}
 export default EquipmentCatalogueScreen;

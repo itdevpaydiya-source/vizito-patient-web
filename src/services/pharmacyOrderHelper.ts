@@ -10,8 +10,8 @@ import type { PaymentMethod, ProcessPaymentInput, PaymentResult } from "./bookin
 // Patient prescription -> pharmacy negotiation, proxied via gateway -> vizito-auth ->
 // vizito-booking (same shape as every other PATIENTS.* call — wrapped {success, data}).
 
-export const createPharmacyRequestApi = async (prescriptionId: string, pharmacyPartnerId: string): Promise<PharmacyRequestItem> => {
-  const res = await apiClient.post(ENDPOINTS.PATIENTS.CREATE_PHARMACY_REQUEST(prescriptionId), { pharmacy_partner_id: pharmacyPartnerId });
+export const createPharmacyRequestApi = async (prescriptionId: string, pharmacyPartnerId: string, forUserId?: number): Promise<PharmacyRequestItem> => {
+  const res = await apiClient.post(ENDPOINTS.PATIENTS.CREATE_PHARMACY_REQUEST(prescriptionId), { pharmacy_partner_id: pharmacyPartnerId, ...(forUserId!=null?{for_user_id:forUserId}:{}) });
   return (res?.data?.data ?? res?.data) as PharmacyRequestItem;
 };
 
@@ -20,6 +20,7 @@ export const getPharmacyRequestsApi = async (): Promise<PharmacyRequestItem[]> =
   const list = res?.data?.data;
   return Array.isArray(list) ? list : [];
 };
+export const getPharmacyRequestsPageApi=async(params:{page:number;page_size:10|20;q?:string;status?:string;date_from?:string;date_to?:string;sort?:"newest"|"oldest"}):Promise<{items:PharmacyRequestItem[];page:number;page_size:10|20;total:number;total_pages:number}>=>{const d=(await apiClient.get(ENDPOINTS.PATIENTS.PHARMACY_REQUESTS,{params})).data;return{items:Array.isArray(d?.items)?d.items:Array.isArray(d?.data)?d.data:[],page:Number(d?.page)||params.page,page_size:(Number(d?.page_size)||params.page_size) as 10|20,total:Number(d?.total)||0,total_pages:Number(d?.total_pages)||1};};
 
 export const cancelPharmacyRequestApi = async (id: string): Promise<void> => {
   await apiClient.patch(ENDPOINTS.PATIENTS.CANCEL_PHARMACY_REQUEST(id));
@@ -37,10 +38,18 @@ export interface OrderCartLine {
   quantity: number;
 }
 
-export interface CreateRxOrderInput {
+// Home delivery snapshot. The backend re-checks the address and PIN against the pharmacy's
+// delivery PINs and calculates the fee itself — these are the patient's chosen address lines,
+// never a client-side fee.
+interface DeliveryOrderInput {
+  delivery_address_id?: string;
+  delivery_address_text?: string;
+  delivery_pincode?: string;
+}
+
+export interface CreateRxOrderInput extends DeliveryOrderInput {
   pharmacy_request_id: string;
   fulfillment_type: OrderFulfillmentType;
-  delivery_address_id?: string;
   payment_method: PaymentMethod; // required — an order with no payment_method is unclaimable by either path
   items: OrderCartLine[];
 }
@@ -50,10 +59,9 @@ export const createRxOrderApi = async (input: CreateRxOrderInput): Promise<Patie
   return (res?.data?.data ?? res?.data) as PatientOrder;
 };
 
-export interface CreateDirectOrderInput {
+export interface CreateDirectOrderInput extends DeliveryOrderInput {
   pharmacy_partner_id: string;
   fulfillment_type: OrderFulfillmentType;
-  delivery_address_id?: string;
   payment_method: PaymentMethod;
   items: OrderCartLine[];
 }
@@ -71,6 +79,7 @@ export const getMyOrdersApi = async (): Promise<PatientOrder[]> => {
   const list = res?.data?.data ?? res?.data;
   return Array.isArray(list) ? list : [];
 };
+export const getMyOrdersPageApi=async(params:{page:number;page_size:10|20;q?:string;status?:string;group?:"all"|"active"|"completed"|"cancelled";date_from?:string;date_to?:string;sort?:"newest"|"oldest"}):Promise<{items:PatientOrder[];page:number;page_size:10|20;total:number;total_pages:number}>=>(await apiClient.get(ENDPOINTS.ORDERS.MINE,{params})).data;
 
 export const getMyOrderApi = async (id: string): Promise<PatientOrder> => {
   const res = await apiClient.get(ENDPOINTS.ORDERS.ONE_MINE(id));
@@ -147,3 +156,181 @@ export async function getPharmacyCatalogueApi(pharmacyId: string, keyword = '', 
   const data = res.data;
   return { items: Array.isArray(data?.items) ? data.items.map((m: any) => ({ ...m, mrp: m.mrp == null || String(m.mrp).trim() === '' ? NaN : Number(m.mrp), available_quantity: m.available_quantity == null ? null : Number(m.available_quantity), units_per_pack: m.units_per_pack == null ? null : Number(m.units_per_pack) })) : [], total: Number(data?.total) || 0 };
 }
+
+export interface MedicineDetail extends PharmacyMedicine {composition:string|null;description:string|null;storage_condition:string|null;category?:{id:number;name:string}|null}
+export const getMedicineDetailApi=async(id:string):Promise<MedicineDetail> => (await apiClient.get(`/medicines/${encodeURIComponent(id)}`)).data;
+
+export interface UploadedPharmacyRequestInput {pharmacy_partner_id:string;document_id:string;items:{medicine_id:string;name:string;quantity:number}[];for_user_id?:number}
+export const createUploadedPharmacyRequestApi=async(input:UploadedPharmacyRequestInput):Promise<PharmacyRequestItem>=>{const response=await apiClient.post('/patients/pharmacy-requests/upload',input);return response.data?.data??response.data;};
+
+// ---------------------------------------------------------------------------
+// Search across nearby pharmacies + per-medicine availability (v2 journey).
+// Both are catalogue reads reached through the gateway, unwrapped.
+// ---------------------------------------------------------------------------
+
+export interface MedicineNearPharmacy {
+  pharmacy_id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  pincode: string | null;
+  pin: { lat: number; lng: number } | null;
+  distance_km: number | null;
+  logo_url: string | null;
+  store_pickup: boolean;
+  home_delivery: boolean;
+  delivery_fee: number | null;
+  in_stock: boolean;
+}
+
+export interface MedicineNearResult {
+  id: string;
+  medicine_name: string;
+  brand_name: string | null;
+  generic_name: string | null;
+  strength: string | null;
+  strength_unit: string | null;
+  dosage_form: string | null;
+  mrp: number;
+  requires_prescription: boolean;
+  manufacturer: string | null;
+  packaging_type: string | null;
+  units_per_pack: number | null;
+  category_name: string | null;
+  pharmacies_near: number;
+  nearest: MedicineNearPharmacy | null;
+  home_delivery_available: boolean;
+}
+
+export interface Paged<T> {
+  items: T[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+const moneyNumber = (value: unknown): number => value == null || String(value).trim() === '' ? NaN : Number(value);
+
+export const searchMedicinesNearApi = async (params: {
+  keyword: string;
+  lat: number;
+  lng: number;
+  pincode?: string;
+  radius_km?: number;
+  page?: number;
+  page_size?: 10 | 20;
+}): Promise<Paged<MedicineNearResult>> => {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/near`, { params });
+  const data = res.data ?? {};
+  return {
+    items: Array.isArray(data.items)
+      ? data.items.map((m: any): MedicineNearResult => ({
+          ...m,
+          mrp: moneyNumber(m.mrp),
+          units_per_pack: m.units_per_pack == null ? null : Number(m.units_per_pack),
+          pharmacies_near: Number(m.pharmacies_near) || 0,
+          nearest: m.nearest ?? null,
+          home_delivery_available: Boolean(m.home_delivery_available),
+        }))
+      : [],
+    page: Number(data.page) || Number(params.page) || 1,
+    page_size: Number(data.page_size) || params.page_size || 10,
+    total: Number(data.total) || 0,
+    total_pages: Number(data.total_pages) || 1,
+  };
+};
+
+export const getMedicinePharmaciesNearApi = async (
+  medicineId: string,
+  params: { lat: number; lng: number; pincode?: string; radius_km?: number },
+): Promise<{ items: MedicineNearPharmacy[]; total: number }> => {
+  const res = await apiClient.get(`/medicines/${encodeURIComponent(medicineId)}/pharmacies-near`, { params });
+  const data = res.data ?? {};
+  return {
+    items: Array.isArray(data.items)
+      ? data.items.map((p: any): MedicineNearPharmacy => ({
+          ...p,
+          delivery_fee: p.delivery_fee == null ? null : Number(p.delivery_fee),
+          distance_km: p.distance_km == null ? null : Number(p.distance_km),
+          store_pickup: Boolean(p.store_pickup),
+          home_delivery: Boolean(p.home_delivery),
+          in_stock: Boolean(p.in_stock),
+        }))
+      : [],
+    total: Number(data.total) || 0,
+  };
+};
+
+export interface DeliveryOptions {
+  pickup: boolean;
+  fee: number;
+  free_above: number | null;
+  hours: { open: string; close: string } | null;
+  available: boolean;
+  reason?: string | null;
+}
+
+export const getDeliveryOptionsApi = async (pharmacyId: string, pincode: string): Promise<DeliveryOptions> => {
+  const res = await apiClient.get(`/orders/delivery-options/${encodeURIComponent(pharmacyId)}`, { params: { pincode } });
+  const data = res.data ?? {};
+  return {
+    pickup: Boolean(data.pickup),
+    fee: Number(data.fee) || 0,
+    free_above: data.free_above == null ? null : Number(data.free_above),
+    hours: data.hours ?? null,
+    available: Boolean(data.available),
+    reason: data.reason ?? null,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Order history: tab counts + one server-paged group at a time (newest first).
+// ---------------------------------------------------------------------------
+
+export interface MyOrderCounts {
+  all: number;
+  active: number;
+  completed: number;
+  cancelled: number;
+}
+
+export const getMyOrderCountsApi = async (): Promise<MyOrderCounts> => {
+  const data = (await apiClient.get(`${ENDPOINTS.ORDERS.MINE}/counts`)).data ?? {};
+  return {
+    all: Number(data.all) || 0,
+    active: Number(data.active) || 0,
+    completed: Number(data.completed) || 0,
+    cancelled: Number(data.cancelled) || 0,
+  };
+};
+
+// The order read paths return the delivery snapshot columns too; types.ts is shared with
+// other modules, so the extra fields are declared here rather than widening PatientOrder.
+export interface PatientOrderV2 extends PatientOrder {
+  delivery_address_text?: string | null;
+  delivery_pincode?: string | null;
+  delivery_person_name?: string | null;
+  delivery_person_phone?: string | null;
+  delivery_eta?: string | null;
+  dispatched_at?: string | null;
+}
+
+export const getMyOrdersGroupedPageApi = async (params: {
+  group: 'all' | 'active' | 'completed' | 'cancelled';
+  sort?: 'newest' | 'oldest';
+  page: number;
+  page_size: 10 | 20;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+}): Promise<Paged<PatientOrderV2>> => {
+  const data = (await apiClient.get(ENDPOINTS.ORDERS.MINE, { params })).data ?? {};
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    page: Number(data.page) || params.page,
+    page_size: (Number(data.page_size) || params.page_size) as 10 | 20,
+    total: Number(data.total) || 0,
+    total_pages: Number(data.total_pages) || 1,
+  };
+};

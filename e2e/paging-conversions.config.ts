@@ -1,0 +1,1 @@
+import{defineConfig}from'@playwright/test';export default defineConfig({testDir:'.',testMatch:'paging-conversions.spec.ts',timeout:120000,workers:1,reporter:'list',use:{baseURL:'http://localhost:5174',headless:true}});

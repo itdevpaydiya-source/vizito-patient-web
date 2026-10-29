@@ -53,18 +53,18 @@ export default function MapPinPicker({ value, address, placeName, onChange, onDr
       marker.current = L.marker([p.lat, p.lng], { draggable: true, icon: ICON }).addTo(map.current);
       marker.current.on('dragend', () => { const ll = marker.current!.getLatLng(); setDraft({ lat: +ll.lat.toFixed(7), lng: +ll.lng.toFixed(7) }); setSource('moved'); });
     } else marker.current.setLatLng([p.lat, p.lng]);
-    map.current.setView([p.lat, p.lng], zoom);
+    map.current.setView([p.lat, p.lng], zoom, {animate:false});
   };
 
   useEffect(() => {
     if (!box.current) return;
-    const m = L.map(box.current, { scrollWheelZoom: true }).setView(value ? [value.lat, value.lng] : [20.59, 78.96], value ? 17 : 5);
+    const m = L.map(box.current, { scrollWheelZoom: true, zoomAnimation:false, markerZoomAnimation:false }).setView(value ? [value.lat, value.lng] : [20.59, 78.96], value ? 17 : 5);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(m);
     m.on('click', (e: L.LeafletMouseEvent) => place({ lat: +e.latlng.lat.toFixed(7), lng: +e.latlng.lng.toFixed(7) }, 'moved', m.getZoom()));
     map.current = m;
     if (value) place(value, 'saved');
-    setTimeout(() => m.invalidateSize(), 50);
-    return () => { m.remove(); map.current = null; marker.current = null; };
+    const resizeTimer=setTimeout(() => {if(map.current===m)m.invalidateSize();}, 50);
+    return () => { clearTimeout(resizeTimer);m.stop();m.remove(); map.current = null; marker.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const label = source === 'saved' ? 'Saved pin' : source === 'address' ? 'Suggested from the address — check it' : source === 'gps' ? 'From your current location' : source === 'search' ? 'From search — drag onto the entrance' : source === 'moved' ? 'Placed by you' : '';

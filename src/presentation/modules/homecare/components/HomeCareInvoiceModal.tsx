@@ -1,3 +1,4 @@
+import VizitoDialog from '../../../components/dialogs/VizitoDialog';
 import React from 'react';
 import { X, Printer, FileText, Loader2 } from 'lucide-react';
 import { hcInvoiceApi, type HcInvoice } from '../../../../services/homecareHelper';
@@ -72,15 +73,10 @@ export default function HomeCareInvoiceModal({
   const taxReason: string = invoice?.gst?.note || '';
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Tax Invoice"
-        className="bg-white rounded-3xl max-w-2xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-      >
-        {/* Modal Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-2 no-print">
+    <VizitoDialog title="Home Care Invoice Modal" onClose={onClose} className="portal-migrated">
+{/* Modal Controls */}
+
+<div className="flex flex-wrap items-center justify-between gap-2 no-print">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-400 min-w-0">
             <FileText className="w-4 h-4" />
             <span>Tax Invoice / Statement</span>
@@ -104,8 +100,9 @@ export default function HomeCareInvoiceModal({
           </div>
         </div>
 
-        {/* Invoice Printable Sheet */}
-        {loading ? (
+{/* Invoice Printable Sheet */}
+
+{loading ? (
           <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
             <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
             <p className="text-xs font-semibold">Generating invoice statement...</p>
@@ -219,7 +216,6 @@ export default function HomeCareInvoiceModal({
             )}
           </div>
         )}
-      </div>
-    </div>
+</VizitoDialog>
   );
 }

@@ -1,4 +1,5 @@
 import MediaImage from '../../components/MediaImage';
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
@@ -14,6 +15,7 @@ import {
   Clock,
   Info,
   CreditCard,
+  X,
 } from 'lucide-react';
 import type { PatientRentalOrder, RentalOrderStatus, RentalPaymentStatus } from './types';
 import {
@@ -29,11 +31,12 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
   const returned = location.state?.order as PatientRentalOrder | undefined;
   const [order, setOrder] = useState<PatientRentalOrder | null>(returned && returned.id === id ? returned : null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadError,setLoadError]=useState(false),[version,setVersion]=useState(0),[cancelOpen,setCancelOpen]=useState(false),[cancelReason,setCancelReason]=useState(''),[cancelBusy,setCancelBusy]=useState(false),[notice,setNotice]=useState('');
 
   useEffect(() => {
     if (returned && returned.id === id) { setOrder(returned); setLoading(false); return; }
     if (!id) { setLoading(false); return; }
-    setLoading(true);
+    setLoading(true);setLoadError(false);
     equipmentService
       .getOrderById(id)
       .then((res) => {
@@ -42,9 +45,9 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
       })
       .catch((err) => {
         console.error('Failed to load confirmed order:', err);
-        setLoading(false);
+        setLoadError(true);setLoading(false);
       });
-  }, [id, returned]);
+  }, [id, returned,version]);
 
   if (loading) {
     return (
@@ -57,21 +60,21 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
     );
   }
 
-  if (!order) {
+  if (loadError || !order) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans">
         <div className="bg-white rounded-2xl border border-slate-200 p-8 max-w-md w-full text-center space-y-4 shadow-sm">
           <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-          <h2 className="text-lg font-bold text-slate-900">Order Confirmation Unavailable</h2>
+          <h2 className="text-lg font-bold text-slate-900">Unable to load rental confirmation</h2>
           <p className="text-xs text-slate-500">
             We could not load this rental order. Try opening it from My orders.
           </p>
           <button
             type="button"
-            onClick={() => navigate('/equipment-rental/orders')}
+            onClick={() => setVersion(v=>v+1)}
             className="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold transition-colors"
           >
-            My orders
+            Retry
           </button>
         </div>
       </div>
@@ -91,6 +94,8 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
     }
   };
 
+  const fmtDay = (d: string) => (/^\d{4}-\d{2}-\d{2}/.test(String(d)) ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : d);
+
   const getPaymentStatusBadge = (status: RentalPaymentStatus) => {
     switch (status) {
       case 'successful':
@@ -103,6 +108,8 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
         return <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold">Not Paid</span>;
     }
   };
+  const canCancel=['awaiting_confirmation','payment_pending','confirmed'].includes(order.status);
+  const cancel=async()=>{if(cancelBusy)return;setCancelBusy(true);setNotice('');const result=await equipmentService.cancelOrder(order.id,cancelReason.trim()||'Patient cancelled before dispatch');if(result.success){setNotice(result.message);setCancelOpen(false);const latest=await equipmentService.getOrderById(order.id);setOrder(latest.order);}else setNotice(result.message);setCancelBusy(false);};
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
@@ -143,7 +150,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
               Equipment rental
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1">
-              Rental order placed
+              Rental confirmed
             </h1>
             <p className="text-sm font-bold text-slate-900">Order {order.orderNumber}</p>
             <p className="text-xs text-slate-500 font-medium mt-1">
@@ -157,6 +164,15 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
             {getPaymentStatusBadge(order.paymentStatus)}
           </div>
         </div>
+
+        {notice&&<p role="status" className={`rounded-xl border p-3 text-sm font-bold ${/refund|cancelled/i.test(notice)?'border-emerald-200 bg-emerald-50 text-emerald-900':'border-rose-200 bg-rose-50 text-rose-800'}`}>{notice}</p>}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-black text-slate-900">Delivery timeline</h2>
+          <ol className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">{order.deliveryTimeline.map((step,index)=><li key={`${step.title}-${index}`} className={`rounded-xl border p-3 ${step.completed?'border-teal-200 bg-teal-50':step.current?'border-orange-200 bg-orange-50':'border-slate-200 bg-slate-50'}`}><CheckCircle2 className={`h-5 w-5 ${step.completed?'text-teal-700':'text-slate-400'}`}/><b className="mt-2 block text-xs">{step.title}</b>{step.timestamp&&<small className="text-slate-500">{new Date(step.timestamp).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'numeric',minute:'2-digit'})}</small>}</li>)}</ol>
+          {order.deliveryCode&&<div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4"><b>Delivery handover code</b><strong className="ml-4 text-2xl tracking-[.2em]">{order.deliveryCode}</strong><small className="ml-3 text-slate-600">Share only when the equipment is handed over.</small></div>}
+          <div className="mt-4 flex flex-wrap gap-2"><button onClick={()=>navigate(`/equipment-rental/orders/${order.id}/track`)} className="rounded-xl border border-orange-600 px-4 py-2 text-sm font-bold text-orange-700">Track delivery</button><Link to={`/equipment-rental/orders/${order.id}`} className="rounded-xl border border-orange-600 px-4 py-2 text-sm font-bold text-orange-700">View rental details</Link>{canCancel&&<button onClick={()=>setCancelOpen(true)} className="rounded-xl border border-rose-600 px-4 py-2 text-sm font-bold text-rose-700"><X className="mr-1 inline h-4 w-4"/>Cancel order</button>}</div>
+        </section>
 
         {/* 2-Column Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
@@ -184,13 +200,13 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                 <span className="text-slate-500 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-teal-600" /> Start Date
                 </span>
-                <span className="font-bold text-slate-900">{order.startDate}</span>
+                <span className="font-bold text-slate-900">{fmtDay(order.startDate)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-amber-600" /> Return Date
                 </span>
-                <span className="font-bold text-slate-900">{order.endDate}</span>
+                <span className="font-bold text-slate-900">{fmtDay(order.endDate)}</span>
               </div>
               <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
                 <span className="text-slate-500">Rental Duration:</span>
@@ -230,7 +246,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                 </div>
                 <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
                   <div>
-                    <span className="font-extrabold text-slate-900 block">Amount payable on delivery:</span>
+                    <span className="font-extrabold text-slate-900 block">{order.onlinePayment ? 'Paid online:' : 'Amount payable on delivery:'}</span>
                     <span className="text-[10px] text-slate-400">Excludes security deposit</span>
                   </div>
                   <span className="text-xl font-black text-teal-800">
@@ -239,7 +255,22 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
                 </div>
               </div>
 
-              <p className="text-sm font-bold text-slate-700">Nothing charged online.</p>
+              {order.onlinePayment ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-0.5">
+                  <p className="font-bold">
+                    {order.onlinePayment.refund?.status === 'REFUND_STARTED'
+                      ? `Refund of ₹${order.onlinePayment.refund.amount.toLocaleString('en-IN')} started — it reaches your account in 5–7 working days.`
+                      : order.onlinePayment.refund?.status === 'REFUND_FAILED'
+                        ? `Your refund of ₹${order.onlinePayment.refund.amount.toLocaleString('en-IN')} is being processed. We retry automatically; then it takes 5–7 working days.`
+                        : `Paid by ${String(order.onlinePayment.method).replace('_', ' ').toLowerCase()} on ${new Date(order.onlinePayment.paidAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}.`}
+                  </p>
+                  <p className="text-emerald-800/80">Payment ID: {order.onlinePayment.reference}. Full refund if you cancel before dispatch.</p>
+                </div>
+              ) : order.paymentStatus === 'successful' ? (
+                <p className="text-sm font-bold text-slate-700">Paid on delivery.</p>
+              ) : (
+                <p className="text-sm font-bold text-slate-700">Nothing charged online.</p>
+              )}
               {/* Informational Security Deposit Notice */}
               <div className="p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-amber-900">
@@ -273,6 +304,7 @@ export const EquipmentOrderConfirmationScreen: React.FC = () => {
           </div>
         </div>
       </div>
+      {cancelOpen&&<VizitoDialog title="Cancel rental order" onClose={()=>setCancelOpen(false)}><p className="text-sm text-slate-600">Online payments are refunded automatically when cancellation succeeds before dispatch.</p><label className="mt-3 block text-sm font-bold">Reason<textarea value={cancelReason} onChange={e=>setCancelReason(e.target.value.slice(0,300))} className="mt-1 w-full rounded-xl border p-3" rows={3}/></label><div className="mt-4 flex justify-end gap-2"><button onClick={()=>setCancelOpen(false)} className="rounded-xl border px-4 py-2">Keep rental</button><button disabled={cancelBusy} onClick={cancel} className="rounded-xl bg-rose-700 px-4 py-2 font-bold text-white">{cancelBusy?'Cancelling…':'Cancel rental'}</button></div></VizitoDialog>}
     </div>
   );
 };

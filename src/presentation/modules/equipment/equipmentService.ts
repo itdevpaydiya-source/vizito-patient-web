@@ -283,7 +283,14 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
     deliveryFee: Number(o.delivery_fee || 0),
     totalOrderValue: Number(o.total_amount),
     status,
-    paymentStatus: o.delivery_address?.settlement?.payment_status === 'PAID' ? 'successful' : o.delivery_address?.settlement?.payment_status === 'FAILED' ? 'failed' : o.delivery_address?.settlement?.payment_status === 'PENDING' ? 'pending' : 'not_initiated',
+    // The patient view leaves out the settlement; the payment record itself says what was received.
+    paymentStatus: o.delivery_address?.payment?.paid_at || o.delivery_address?.settlement?.payment_status === 'PAID' ? 'successful'
+      : o.delivery_address?.settlement?.payment_status === 'FAILED' ? 'failed'
+      : ['CANCELLED', 'REJECTED'].includes(String(o.status).toUpperCase()) ? 'cancelled' : 'pending',
+    paymentMethod: o.delivery_address?.payment?.method,
+    onlinePayment: o.delivery_address?.payment?.mode === 'ONLINE'
+      ? { method: o.delivery_address.payment.method, reference: o.delivery_address.payment.reference, paidAt: o.delivery_address.payment.paid_at, refund: o.delivery_address.payment.refund || null }
+      : null,
     createdAt: o.created_at,
     deliveryAddress: o.delivery_address || {
       recipientName: '',
@@ -293,6 +300,7 @@ function mapBackendOrderToPatientOrder(o: any): PatientRentalOrder {
       pincode: '',
     },
     deliveryTimeline: timeline,
+    deliveryCode: o.delivery_code ? String(o.delivery_code) : undefined,
     returnDetails,
     provider: o.provider || undefined,
     rejectionReason: o.rejection_reason,
@@ -330,6 +338,35 @@ export const equipmentService = {
       return { items: [], isDemonstration: false };
     }
   },
+  /**
+   * Whole approved catalogue for the browse screen. Unlike getCatalogue it THROWS on failure so the
+   * screen can show an error with Retry. The API caps a page at 50 items, so pages are followed.
+   */
+  async loadCatalogue(filters?: Partial<EquipmentFilterState>): Promise<PatientEquipmentItem[]> {
+    const limit = 50;
+    const all: PatientEquipmentItem[] = [];
+    for (let page = 1; page <= 10; page += 1) {
+      const params: Record<string, any> = { page, limit };
+      if (filters?.search?.trim()) params.search = filters.search.trim();
+      const res = await apiClient.get('/rental/patient/products', { params });
+      const raw = Array.isArray(res.data) ? res.data : res.data?.items;
+      if (!Array.isArray(raw)) throw new Error('Invalid equipment catalogue response.');
+      all.push(...raw.map(mapBackendProductToEquipmentItem));
+      if (raw.length < limit) break;
+    }
+    return all;
+  },
+
+  /** Active rentals for the browse side panel; throws on failure so the panel can offer Retry. */
+  async loadActiveRentalOrders(): Promise<PatientRentalOrder[]> {
+    const res = await apiClient.get('/rental/patient/orders/mine');
+    if (!Array.isArray(res.data)) throw new Error('Invalid rental orders response.');
+    return res.data
+      .map(mapBackendOrderToPatientOrder)
+      .filter((o: PatientRentalOrder) => ['confirmed', 'active', 'out_for_delivery', 'return_scheduled', 'return_requested', 'return_inspection_pending'].includes(o.status));
+  },
+
+
 
   /**
    * Get equipment details by ID via real API
@@ -487,9 +524,12 @@ export const equipmentService = {
     deliveryAddress: PatientRentalOrder['deliveryAddress'];
     paymentMethod: string;
     quantity?: number;
+    /** Razorpay checkout result when paying online now; omitted = pay on delivery. */
+    payment?: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string };
   }): Promise<ServiceOperationResult<PatientRentalOrder>> {
     try {
       const body = {
+        ...(payload.payment ? { payment: payload.payment } : {}),
         product_id: Number(payload.item.id),
         quantity: payload.quantity || 1,
         start_date: payload.quote.startDate,

@@ -1,137 +1,50 @@
-import LocationBar from '../../components/location/LocationBar';
-import {providerDistance} from '../../components/ProviderCard';
-import type {ProviderItem} from '../../../services/types';
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AlertTriangle, Droplets, LocateFixed, MapPin, Phone, RotateCcw } from 'lucide-react';
-import { bloodAvailabilityApi, bloodCentresApi, bloodError, bloodReferenceApi, type AvailabilityResult, type BloodReference, type VerifiedBloodCentre } from '../../../services/bloodbankHelper';
-import { getHealthProfileApi } from '../../../services/healthProfileHelper';
-import { getProvidersApi } from '../../../services/patientHelper';
-import { useSearchArea } from '../../../services/location';
+import ThemedSelect from "../../components/forms/ThemedSelect";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Building2, Droplet, Heart, MapPin, Phone, Search, ShieldCheck } from "lucide-react";
+import LocationBar from "../../components/location/LocationBar";
+import VizitoPagination from "../../components/navigation/VizitoPagination";
+import { BankMark, bloodGroupOrder, useBloodBankLogos } from "./BloodVisuals";
+import { useSearchArea } from "../../../services/location";
+import { bloodCentreDetailApi, bloodGridApi, bloodReferenceApi, myBloodRequestsPageApi, bloodError, type BloodCentreDetail, type BloodGrid, type BloodGridCentre, type BloodReference, type MyBloodRequest } from "../../../services/bloodbankHelper";
+import "./bloodbank.css";
 
-// Find blood: which verified blood banks have the group/component right now. Shows availability
-// only (never counts) — the blood bank confirms and needs a doctor's requisition before issuing.
-const sel = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800';
+export const componentLabel=(code:string,fallback?:string)=>({WHOLE_BLOOD:"Whole blood",PRBC:"PRBC (Red cells)",PLATELETS:"Platelets",FFP:"FFP (Plasma)",CRYO:"Cryoprecipitate (Cryo)"} as Record<string,string>)[code]||fallback||code;
+export const freshness=(value:string|null)=>value?`Updated ${new Date(value).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"Update time unavailable";
+const distance=(c:Pick<BloodGridCentre,"distance_km">)=>c.distance_km==null?"Distance unavailable":`${c.distance_km<1?"<1":c.distance_km} km`;
+const hours=(c:Pick<BloodGridCentre,"is_24x7"|"hours">)=>c.is_24x7?"Open 24 × 7":c.hours?.length?"View opening hours":"Hours unavailable";
+const requestUrl=(c:Pick<BloodGridCentre,"partner_id"|"name">,group:string,component:string)=>`/request-blood?${new URLSearchParams({bank:c.partner_id,name:c.name,group,component})}`;
 
-const FindBloodScreen = () => {
-  const [ref, setRef] = useState<BloodReference | null>(null);
-  const [group, setGroup] = useState('');
-  const [component, setComponent] = useState('');
-  const [providers,setProviders]=useState<ProviderItem[]>([]);
-  const area = useSearchArea();
-  const groupEdited = useRef(false);
-  const [directory, setDirectory] = useState<VerifiedBloodCentre[] | null>(null);
-  const [retry, setRetry] = useState(0);
-  const [referenceError, setReferenceError] = useState<string | null>(null);
+export default function FindBloodScreen(){
+ const [params]=useSearchParams(),area=useSearchArea(),logos=useBloodBankLogos();
+ const [ref,setRef]=useState<BloodReference|null>(null),[grid,setGrid]=useState<BloodGrid|null>(null),[detail,setDetail]=useState<BloodCentreDetail|null>(null),[group,setGroup]=useState(params.get("group")||"O+"),[component,setComponent]=useState(params.get("component")||""),[sort,setSort]=useState("nearest"),[q,setQ]=useState(""),[loading,setLoading]=useState(true),[error,setError]=useState(""),[retry,setRetry]=useState(0),[requests,setRequests]=useState<MyBloodRequest[]>([]);
+ const centreId=params.get("centre"),list=params.get("view")==="centres"||!!centreId;
+ useEffect(()=>{let live=true;bloodReferenceApi().then(r=>{if(live){setRef(r);setComponent(c=>c||r.components[0]?.code||"")}}).catch(e=>setError(bloodError(e,"Could not load blood components.")));return()=>{live=false}},[retry]);
+ useEffect(()=>{if(!component)return;let live=true;setLoading(true);bloodGridApi({component,sort,lat:area?.lat,lng:area?.lng}).then(r=>{if(live){setGrid(r);setError("")}}).catch(e=>live&&setError(bloodError(e,"Could not load blood centres."))).finally(()=>live&&setLoading(false));return()=>{live=false}},[component,sort,area?.lat,area?.lng,retry]);
+ useEffect(()=>{myBloodRequestsPageApi({page:1,page_size:10,status:"SUBMITTED,ACCEPTED,SAMPLE_RECEIVED,CROSSMATCHED,READY"}).then(r=>setRequests(r.items.slice(0,3))).catch(()=>setRequests([]))},[retry]);
+ useEffect(()=>{if(!centreId)return;let live=true;setLoading(true);bloodCentreDetailApi(centreId,{lat:area?.lat,lng:area?.lng}).then(r=>{if(live){setDetail(r);setError("")}}).catch(e=>live&&setError(bloodError(e,"Could not load blood centre."))).finally(()=>live&&setLoading(false));return()=>{live=false}},[centreId,area?.lat,area?.lng,retry]);
+ const centres=useMemo(()=>grid?.centres.filter(c=>`${c.name} ${c.address||""}`.toLowerCase().includes(q.trim().toLowerCase()))||[],[grid,q]);
+ if(centreId)return <CentreDetail centre={detail} group={group} component={component} loading={loading} error={error} retry={()=>setRetry(n=>n+1)}/>;
+ if(list)return <CentresList centres={centres} grid={grid} ref={ref} logos={logos} group={group} component={component} setGroup={setGroup} setComponent={setComponent} sort={sort} setSort={setSort} q={q} setQ={setQ} loading={loading} error={error} retry={()=>setRetry(n=>n+1)}/>;
+ return <div className="bb-page bb-v2 bb-home-v2 bb-stack"><nav className="bb-crumb"><Link to="/dashboard">Home</Link> › Blood (Find &amp; Donate)</nav>
+  <section className="bb-home-hero"><div><h1><span>Find blood.</span> Give blood.</h1><p>Support patients in need and help save lives.</p></div></section>
+  <nav className="bb-home-actions" aria-label="Blood services"><Link to="/request-blood"><Droplet/><span><b>Request blood</b><small>Need blood for a patient</small></span>›</Link><Link to="/find-blood?view=centres"><Building2/><span><b>Find blood centres</b><small>View nearby centres</small></span>›</Link><Link to="/donate-blood"><Heart/><span><b>Donate blood</b><small>Find donation camps</small></span>›</Link><Link to="/blood-requests"><ShieldCheck/><span><b>My requests</b><small>Track your requests</small></span>›</Link></nav>
+  <section className="bb-never-sold"><Droplet/><div><h2>Blood is never sold — you pay only a processing charge.</h2><p>Charges cover testing, screening, storage and handling as set by the blood centre.</p></div></section>
+  <div className="bb-home-grid"><section className="bb-card bb-stack"><div className="bb-row"><h2>Nearby blood centres{area?.label?` in ${area.label.split(",")[0]}`:""}</h2><Link to="/find-blood?view=centres">View all</Link></div>{loading?<p role="status">Checking nearby centres…</p>:error?<ErrorState message={error} retry={()=>setRetry(n=>n+1)}/>:<div className="bb-home-centres">{centres.slice(0,4).map(c=><CentreMini key={c.partner_id} centre={c} logo={logos[c.partner_id]} grid={grid!} group={group} component={component}/>)}</div>}</section><aside className="bb-card bb-why"><h2>Why donate blood?</h2><Why icon={<Heart/>} title="Helps save lives">Your donation can help patients during emergencies, surgeries and treatments.</Why><Why icon={<ShieldCheck/>} title="Safe and simple">Done by trained staff using safe and sterile equipment.</Why><Why icon={<Droplet/>} title="Regular camps">Find donation camps and centres near you.</Why></aside></div>
+  <section className="bb-card bb-stack"><div className="bb-row"><h2>My active blood requests</h2><Link to="/blood-requests">View all</Link></div>{requests.length?requests.map(r=><Link className="bb-request-row" key={r.id} to={`/blood-requests?open=${r.id}`}><time>{new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</time><span><b>Request #{r.request_number}</b><small>{r.requested_group} · {r.quantity} unit{r.quantity===1?"":"s"} · {componentLabel(r.component_code)}<br/>{r.bloodbank_name}</small></span><em>{r.status_label}</em><b>View details ›</b></Link>):<p className="bb-muted">No active blood requests.</p>}</section>
+ </div>;
+}
 
-  const [result, setResult] = useState<AvailabilityResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setReferenceError(null);
-    bloodReferenceApi().then(async r => {
-      if (!active) return;
-      setRef(r);
-      const hp = await getHealthProfileApi().catch(() => null);
-      if (active && !groupEdited.current && hp?.blood_group && r.groups.some(x => x.code === hp.blood_group)) setGroup(hp.blood_group);
-    }).catch(e => { if (active) setReferenceError(bloodError(e, 'Could not load blood groups.')); });
-    return () => { active = false; };
-  }, [retry]);
-
-  useEffect(()=>{getProvidersApi('bloodbank').then(setProviders).catch(()=>setProviders([]));},[]);
-
-  useEffect(() => {
-    let active = true, sequence = 0;
-    setDirectory(null); setResult(null);
-    const load = async () => {
-      const current = ++sequence;
-      setLoading(true); setError(null);
-      try {
-        if (group) {
-          const next = await bloodAvailabilityApi({ group, component });
-          if (active && current === sequence) setResult(next);
-        } else {
-          const next = await bloodCentresApi();
-          if (active && current === sequence) setDirectory(next.centres);
-        }
-      } catch (e) {
-        if (active && current === sequence) setError(bloodError(e, group ? 'Could not check availability.' : 'Could not load verified blood banks.'));
-      } finally { if (active && current === sequence) setLoading(false); }
-    };
-    void load();
-    const timer = group ? window.setInterval(load, 20000) : undefined;
-    return () => { active = false; if (timer) window.clearInterval(timer); };
-  }, [group, component, retry]);
-
-  const rawCentres = group ? result?.group === group ? result.centres : null : directory;
-  const centres=rawCentres?.map(c=>{const p=providers.find(p=>p.id===c.partner_id);const d=p?providerDistance(p,area):null;return {...c,distance_km:d?Math.round(d.metres/100)/10:null};}).sort((a,b)=>(a.distance_km??Infinity)-(b.distance_km??Infinity));
-  const compName = (c: string) => ref?.components.find((x) => x.code === c)?.name || c;
-
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2"><Droplets className="w-6 h-6 text-rose-600" /> Find blood</h1>
-        <nav aria-label="Blood services" className="flex flex-wrap gap-3 mt-3"><Link className="text-sm font-semibold underline" to="/blood-requests">My blood requests</Link><Link className="text-sm font-semibold underline" to="/donate-blood">Donate blood</Link></nav>
-        <p className="text-sm text-slate-500 mt-1">Find verified blood banks. Choose a blood group to check availability, and call to confirm before you go.</p>
-      </div>
-
-      <div role="note" className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-        <AlertTriangle className="w-5 h-5 shrink-0" />
-        <p><b>In an emergency, call 108 or go to the nearest hospital.</b> Blood is issued only against a doctor's or hospital's request and after cross-matching at the blood bank. Patients pay only government-set processing charges — blood is never sold.</p>
-      </div>
-
-      <section aria-label="Search blood" className="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-        <label className="text-xs font-bold text-slate-700">Blood group
-          <select aria-label="Blood group" value={group} onChange={(e) => { groupEdited.current = true; setGroup(e.target.value); }} className={`${sel} mt-1`} disabled={!ref}>
-            <option value="">Choose group</option>
-            {ref?.groups.map((g) => <option key={g.code} value={g.code}>{g.code} — {g.label}</option>)}
-          </select>
-        </label>
-        <label className="text-xs font-bold text-slate-700">Component
-          <select aria-label="Component" value={component} onChange={(e) => setComponent(e.target.value)} className={`${sel} mt-1`} disabled={!ref || !group}>
-            <option value="">All components</option>
-            {ref?.components.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-          </select>
-        </label>
-        <LocationBar compact purpose="find blood banks near you"/>
-      </section>
-
-      {referenceError && <p role="alert" className="text-sm text-rose-700">{referenceError} <button onClick={() => setRetry(n => n + 1)} className="font-bold underline">Retry blood groups</button></p>}
-      {loading && <p role="status" className="text-sm text-slate-500">{group ? 'Checking availability…' : 'Loading verified blood banks…'}</p>}
-      {error ? (
-        <div className="p-6 text-center space-y-2 bg-white rounded-2xl border border-slate-200"><p role="alert" className="text-sm font-bold text-rose-700">{error}</p><button onClick={() => setRetry(n => n + 1)} className="inline-flex items-center gap-1 text-sm font-bold"><RotateCcw className="w-4 h-4" /> Retry</button></div>
-      ) : !centres ? null : !centres.length ? (
-        <p role="status" className="text-sm text-slate-600 bg-white rounded-2xl border border-slate-200 p-6 text-center">{group ? 'No blood banks currently show availability for this group and component. Call a blood bank to confirm. In an emergency call 108.' : 'No verified blood banks on Vizito listed yet. In an emergency call 108.'}</p>
-      ) : (
-        <section aria-label="Blood banks" className="space-y-3">
-          {centres.map((c) => (
-            <article key={c.partner_id} aria-label={c.name} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h2 className="font-black text-slate-900">{c.name}</h2>
-                  {(c.address || c.pincode || c.distance_km != null) && <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {[c.address, c.pincode, c.distance_km != null ? `${c.distance_km} km` : null].filter(Boolean).join(' · ')}</p>}
-                </div>
-                <div className="flex gap-2">
-                  {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-sm font-bold text-white"><Phone className="w-4 h-4" /> Call</a>}
-                  <Link to={`/request-blood?bank=${encodeURIComponent(c.partner_id)}&name=${encodeURIComponent(c.name)}&group=${encodeURIComponent(group)}${component ? `&component=${component}` : ''}`} className="inline-flex items-center rounded-xl border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700">Request blood</Link>
-                </div>
-              </div>
-              {group && result?.group === group && <ul className="flex flex-wrap gap-2">
-                {result.components.map((k) => (
-                  <li key={k} className={`rounded-full border px-3 py-1 text-xs font-bold ${result.centres.find(bank => bank.partner_id === c.partner_id)?.bands[k] === 'AVAILABLE' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                    {result.group} {compName(k)}: {result.centres.find(bank => bank.partner_id === c.partner_id)?.bands[k] === 'AVAILABLE' ? 'Available' : 'Not available'}
-                  </li>
-                ))}
-              </ul>}
-            </article>
-          ))}
-          <p className="text-xs text-slate-400">{group ? 'Availability is confirmed by the blood bank and may change. Sending a request does not reserve blood.' : 'Choose a blood group to check availability.'}</p>
-        </section>
-      )}
-    </div>
-  );
-};
-
-export default FindBloodScreen;
+function CentresList(p:{centres:BloodGridCentre[];grid:BloodGrid|null;ref:BloodReference|null;logos:Record<string,string|null>;group:string;component:string;setGroup:(s:string)=>void;setComponent:(s:string)=>void;sort:string;setSort:(s:string)=>void;q:string;setQ:(s:string)=>void;loading:boolean;error:string;retry:()=>void}){
+ const [page,setPage]=useState(1),pageSize=10,visible=p.centres.slice((page-1)*pageSize,page*pageSize);useEffect(()=>setPage(1),[p.q,p.group,p.component,p.sort]);
+ return <div className="bb-page bb-v2 bb-centres-v2 bb-stack"><nav className="bb-crumb"><Link to="/dashboard">Home</Link> › <Link to="/find-blood">Blood (Find &amp; Donate)</Link> › Blood centres near you</nav><header><h1>Blood centres near you</h1><p>Find blood banks and check live stock availability</p></header><section className="bb-card bb-centre-toolbar"><LocationBar compact purpose="find blood centres near you"/><label className="bb-search"><Search/><input value={p.q} onChange={e=>p.setQ(e.target.value)} placeholder="Search by blood bank name or area"/></label></section><section className="bb-card bb-filter-row"><b>Component needed</b>{p.ref?.components.map(c=><button className="bb-chip" aria-pressed={p.component===c.code} onClick={()=>p.setComponent(c.code)} key={c.code}>{componentLabel(c.code,c.name)}</button>)}</section><section className="bb-card bb-filter-row"><b>Blood group needed</b>{["",...bloodGroupOrder].map(g=><button className="bb-chip" aria-pressed={p.group===g} onClick={()=>p.setGroup(g)} key={g||"all"}>{g||"All"}</button>)}<label>Sort by <ThemedSelect value={p.sort} onChange={e=>p.setSort(e.target.value)}>{(p.grid?.sorts||["nearest"]).map(s=><option value={s} key={s}>{s.replaceAll("_"," ")}</option>)}</ThemedSelect></label></section>{p.loading?<p role="status">Checking live availability…</p>:p.error?<ErrorState message={p.error} retry={p.retry}/>:!visible.length?<div className="bb-card bb-empty"><Building2/><h2>No blood centres found</h2><p>Try changing your location or filters.</p></div>:visible.map(c=><CentreRow key={c.partner_id} centre={c} logo={p.logos[c.partner_id]} grid={p.grid!} group={p.group} component={p.component}/>)}{!p.loading&&!p.error&&<VizitoPagination page={page} pageSize={pageSize} total={p.centres.length} onPageChange={setPage} onPageSizeChange={()=>{}} label="blood centres"/>}<p className="bb-info">Blood is collected from voluntary donors and provided by licensed blood banks. Availability can change quickly; call to confirm.</p></div>;
+}
+function CentreDetail(p:{centre:BloodCentreDetail|null;group:string;component:string;loading:boolean;error:string;retry:()=>void}){
+ if(p.loading)return <div className="bb-page"><p role="status">Loading blood centre…</p></div>;if(p.error)return <div className="bb-page"><ErrorState message={p.error} retry={p.retry}/></div>;if(!p.centre)return <div className="bb-page"><ErrorState message="Blood centre not found." retry={p.retry}/></div>;const c=p.centre;
+ const directions=c.latitude!=null&&c.longitude!=null?`${c.latitude},${c.longitude}`:c.address||c.name;
+ return <div className="bb-page bb-v2 bb-detail-v2 bb-stack"><nav className="bb-crumb"><Link to="/dashboard">Home</Link> › <Link to="/find-blood">Blood</Link> › <Link to="/find-blood?view=centres">Blood centres near you</Link> › {c.name}</nav><section className="bb-card bb-centre-hero"><img className="bb-centre-photo" src={c.photo_url||"/images/healthcare/placeholders/clinic-front.webp"} alt=""/><div><h1>{c.name}</h1><p>Blood bank{c.licence_number?` · Licence: ${c.licence_number}`:""}</p><p><MapPin/> {c.address||"Address unavailable"} · {distance(c)}</p><a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(directions)}`} target="_blank" rel="noreferrer">Get directions</a><p>{c.rating!=null?`★ ${c.rating.toFixed(1)} (${c.rating_count||0} reviews)`:"No reviews yet"}</p></div><aside><b>{hours(c)}</b>{c.phone&&<a className="bb-btn" href={`tel:${c.phone}`}><Phone/> Call</a>}<Link className="bb-btn bb-primary" to={requestUrl(c,p.group||"O+",p.component)}>Request blood here</Link></aside></section><div className="bb-detail-grid"><section className="bb-card bb-stack"><div className="bb-row"><div><h2>Blood availability</h2><p>Live stock information by component and blood group</p></div><small>{freshness(c.stock_updated_at)}</small></div><div className="bb-availability-table"><div className="bb-table-head"><b>Component</b>{c.groups.map(g=><b key={g}>{g}</b>)}</div>{c.components.map(comp=><div className={`bb-table-line ${comp.code===p.component?"selected":""}`} key={comp.code}><b>{componentLabel(comp.code,comp.name)}</b>{c.groups.map(g=><span key={g} className={!comp.stock[g]?.in_stock?"out":""}>{comp.stock[g]?.units||0}{comp.stock[g]?.more?"+":""}</span>)}</div>)}</div><p className="bb-info">Stock information is updated regularly. Availability can change quickly. Please call the blood centre to confirm before visiting.</p></section><aside className="bb-card bb-stack"><h2>Processing charges</h2><p>You pay only a processing charge. Blood is never sold.</p>{c.components.map(comp=>{const charge=c.charges.find(x=>x.component_code===comp.code);return <div className="bb-charge" key={comp.code}><span>{componentLabel(comp.code,comp.name)}</span><b>{charge?`₹${charge.amount.toLocaleString("en-IN")}`:"Contact centre"}</b></div>})}<p className="bb-info"><b>Blood is held for {c.reservation_hours||24} hours after it is ready.</b></p></aside></div>{c.phone&&<section className="bb-card bb-row"><div><h2>Need help?</h2><p>Call the blood centre for availability, eligibility and collection details.</p></div><a className="bb-btn" href={`tel:${c.phone}`}><Phone/> Call</a></section>}</div>;
+}
+function CentreMini({centre,logo,grid,group,component}:{centre:BloodGridCentre;logo:string|null|undefined;grid:BloodGrid;group:string;component:string}){return <article><div className="bb-bank"><BankMark name={centre.name} src={logo}/><div><h3>{centre.name}</h3><p>{centre.address||"Address unavailable"} · {distance(centre)}</p></div></div><div className="bb-mini-stock">{grid.groups.filter(g=>centre.stock[g]?.in_stock).slice(0,4).map(g=><span key={g}>{g}</span>)}</div><small>{freshness(centre.stock_updated_at)}</small><div className="bb-actions">{centre.phone&&<a className="bb-btn" href={`tel:${centre.phone}`}><Phone/> Call</a>}<Link className="bb-btn" to={`/find-blood?centre=${centre.partner_id}&group=${group}&component=${component}`}>View details</Link></div></article>}
+function CentreRow({centre,logo,grid,group,component}:{centre:BloodGridCentre;logo:string|null|undefined;grid:BloodGrid;group:string;component:string}){return <article className="bb-card bb-centre-row"><BankMark name={centre.name} src={logo}/><div><h2>{centre.name}</h2><p>Blood bank{centre.licence_number?` · Licence: ${centre.licence_number}`:""}</p><p><MapPin/> {centre.address||"Address unavailable"} · {distance(centre)}</p><b className="bb-open">{hours(centre)}</b></div><div className="bb-row-stock"><b>Available stock (units)</b><div>{grid.groups.map(g=><span className={!centre.stock[g]?.in_stock?"out":""} key={g}><b>{g}</b>{centre.stock[g]?.units||0}{centre.stock[g]?.more?"+":""}</span>)}</div><small>{freshness(centre.stock_updated_at)}</small></div><aside>{centre.phone&&<a className="bb-btn" href={`tel:${centre.phone}`}><Phone/> Call</a>}<Link className="bb-btn bb-primary" to={`/find-blood?centre=${centre.partner_id}&group=${group||"O+"}&component=${component}`}>View details</Link></aside></article>}
+function Why({icon,title,children}:{icon:React.ReactNode;title:string;children:React.ReactNode}){return <p>{icon}<span><b>{title}</b><small>{children}</small></span></p>}
+function ErrorState({message,retry}:{message:string;retry:()=>void}){return <div className="bb-error" role="alert"><p>{message}</p><button className="bb-btn" onClick={retry}>Retry</button></div>}

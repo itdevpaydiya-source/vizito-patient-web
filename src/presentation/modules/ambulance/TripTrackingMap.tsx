@@ -5,19 +5,20 @@ import { driverLocationApi, type DriverLocation } from '../../../services/ambula
 
 // Patient live tracking for driver-dispatched trips (SCHEDULED_DISPATCH_SPEC.md §16). Shows the confirmed pickup pin
 // and the driver's position ONLY while it is fresh (server decides: LIVE). Stale / unavailable / searching are shown as
-// text with no driver marker, so an old position is never shown as live. No route, ETA or distance (no routing
-// provider). Stops polling when the trip ends. If the map cannot load, the text status still works; the trip status
+// text with no driver marker, so an old position is never shown as live. Route geometry and ETA
+// come from the backend only while fresh. Stops polling when the trip ends. If the map cannot load, the text status still works; the trip status
 // and 108 live outside this component.
 const TILES = import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const STOP = ['ENDED', 'NOT_TRACKED'];
 
 const ago = (s: number) => (s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`);
 
-const TripTrackingMap = ({ tripId }: { tripId: string }) => {
+const TripTrackingMap = ({ tripId, onLocation, showEta = true }: { tripId: string; onLocation?: (location: DriverLocation | null) => void; showEta?: boolean }) => {
   const box = useRef<HTMLDivElement | null>(null);
   const map = useRef<L.Map | null>(null);
   const pickupMarker = useRef<L.CircleMarker | null>(null);
   const driverMarker = useRef<L.CircleMarker | null>(null);
+  const routeLine = useRef<L.Polyline | null>(null);
   const accuracy = useRef<L.Circle | null>(null);
   const [loc, setLoc] = useState<DriverLocation | null>(null);
   const [offline, setOffline] = useState(false);
@@ -30,18 +31,18 @@ const TripTrackingMap = ({ tripId }: { tripId: string }) => {
       try {
         const r = await driverLocationApi(tripId);
         if (stop) return;
-        fails = 0; setOffline(false); setLoc(r);
+        fails = 0; setOffline(false); setLoc(r); onLocation?.(r);
         if (STOP.includes(r.state)) return;
         timer = window.setTimeout(tick, (r.poll_seconds || 5) * 1000);
       } catch {
         if (stop) return;
-        fails += 1; setOffline(true);
+        fails += 1; setOffline(true); onLocation?.(null);
         timer = window.setTimeout(tick, Math.min(30, 5 * 2 ** (fails - 1)) * 1000);
       }
     };
     tick();
     return () => { stop = true; window.clearTimeout(timer); };
-  }, [tripId]);
+  }, [tripId, onLocation]);
 
   useEffect(() => {
     if (!box.current || map.current || mapFailed) return;
@@ -58,6 +59,8 @@ const TripTrackingMap = ({ tripId }: { tripId: string }) => {
   useEffect(() => {
     const m = map.current;
     if (!m || !loc) return;
+    routeLine.current?.remove(); routeLine.current = null;
+    if (live && loc.route?.available && loc.route.coordinates?.length) routeLine.current = L.polyline(loc.route.coordinates, {color:'#008b79',weight:5,opacity:.9}).addTo(m);
     if (loc.pickup) {
       const at: [number, number] = [loc.pickup.latitude, loc.pickup.longitude];
       if (!pickupMarker.current) pickupMarker.current = L.circleMarker(at, { radius: 9, color: '#be123c', weight: 3, fillColor: '#f43f5e', fillOpacity: 0.8 }).addTo(m).bindTooltip('Pickup');
@@ -77,7 +80,8 @@ const TripTrackingMap = ({ tripId }: { tripId: string }) => {
       accuracy.current?.remove(); accuracy.current = null;
     }
     const pts = [pickupMarker.current?.getLatLng(), driverMarker.current?.getLatLng()].filter(Boolean) as L.LatLng[];
-    if (pts.length === 2) m.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 16 });
+    if (routeLine.current) m.fitBounds(routeLine.current.getBounds().pad(.15), {maxZoom:16});
+    else if (pts.length === 2) m.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 16 });
     else if (pts.length === 1) m.setView(pts[0], Math.max(m.getZoom(), 15));
   }, [loc, live]);
 
@@ -92,10 +96,11 @@ const TripTrackingMap = ({ tripId }: { tripId: string }) => {
   if (loc?.state === 'NOT_TRACKED') return <p aria-label="Live tracking" data-state="NOT_TRACKED" className={`rounded-xl border px-3 py-2 text-xs ${tone}`}>{loc.reason}</p>;
   return (
     <section aria-label="Live tracking" data-state={offline ? 'OFFLINE' : loc?.state || 'LOADING'} className="space-y-2">
+      <div className="row wrap">{showEta&&live&&loc?.route?.available&&loc.route.eta_minutes!=null&&<b aria-label="Arrival ETA">ETA {loc.route.eta_minutes} mins</b>}{live&&loc?.route&&!loc.route.available&&<p className="muted">{loc.route.reason}</p>}</div>
       <p role="status" aria-label="Tracking status" className={`rounded-xl border px-3 py-2 text-xs font-semibold ${tone}`}>{text}</p>
       {!mapFailed && <div ref={box} aria-label="Tracking map" className="h-64 w-full rounded-xl border border-slate-200 z-0" />}
       {mapFailed && <p className="text-xs text-slate-600">The map could not load. The status above still updates.</p>}
-      <p className="text-[11px] text-slate-500">Red: pickup. Blue: ambulance (only when its location is current). No route or arrival time is shown.</p>
+      <p className="text-[11px] text-slate-500">Red: pickup. Blue: ambulance (only when its location is current). Road route and ETA appear only while a fresh routed driver position is available.</p>
     </section>
   );
 };

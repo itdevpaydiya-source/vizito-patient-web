@@ -1,0 +1,10 @@
+import type {ProviderItem} from '../../../services/types';
+import type {PharmacyMedicine,MedicineSearchResult} from '../../../services/pharmacyOrderHelper';
+import type {SearchArea} from '../../../services/location';
+import type {BasketLine} from './medicineBasket';
+export type StockPharmacy={provider:ProviderItem;medicines:PharmacyMedicine[]};
+export const pharmacyCity=(area:SearchArea|null)=>area?.city?.trim()||(area?.label.includes(',')?area.label.split(',').map(s=>s.trim()).filter(Boolean).at(-1):'')||'';
+export function inPharmacyCity(provider:ProviderItem,city:string){if(provider.partnerType!=='pharmacy'||!city.trim())return false;return [provider.city,provider.address,...(provider.org?.locations||[]).map(l=>l.city)].filter(Boolean).some(value=>value!.toLowerCase().includes(city.toLowerCase()));}
+export function matchPharmacyBasket(stock:StockPharmacy,lines:BasketLine[]){const priced=lines.flatMap(line=>{const medicine=stock.medicines.find(m=>m.id===line.medicine.id);return medicine?[{medicine,quantity:line.quantity}]:[];});const missing=lines.filter(line=>{const medicine=stock.medicines.find(m=>m.id===line.medicine.id);return !medicine||!medicine.in_stock||!Number.isFinite(medicine.mrp)||medicine.mrp<=0||(medicine.available_quantity??0)<line.quantity;});return {...stock,lines:priced,missing,total:priced.reduce((sum,l)=>sum+Math.round(l.medicine.mrp*100)*l.quantity,0)/100,full:lines.length>0&&!stock.provider.pause&&!missing.length};}
+export function draftQuantityProblem(m:MedicineSearchResult,quantity:number){if(!Number.isSafeInteger(quantity)||quantity<1)return 'Choose a whole quantity of at least 1.';if(m.in_stock===false||m.available_quantity!=null&&quantity>m.available_quantity)return 'This quantity is not stocked by a pharmacy in your city.';if(!Number.isFinite(m.mrp)||m.mrp<=0)return 'Price not provided.';if(!Number.isSafeInteger(Math.round(m.mrp*100)*quantity))return 'Please reduce the quantity.';return null;}
+export const pharmacyPack=(m:MedicineSearchResult)=>[m.packaging_type,m.units_per_pack?`${m.units_per_pack} units`:null].filter(Boolean).join(' \u00d7 ');

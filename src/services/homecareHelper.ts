@@ -8,7 +8,12 @@ export interface HcService {
   earliest_start?: {date:string;time:string}|null;
   id: string; category: HcCategory; category_label: string; kind: 'VISIT' | 'SHIFT'; name: string; description: string | null; includes: string | null;
   duration_minutes: number | null; shift_hours: number | null; price: number; required_role: string;
-  agency: { id: string; name: string; registration_number: string | null; vizito_verified?: boolean; about: string | null; hours: string; day_open: string; day_close: string; rating: number | null; ratings: number };
+  agency: {
+    id: string; name: string; registration_number: string | null; vizito_verified?: boolean; about: string | null; hours: string; day_open: string; day_close: string;
+    rating: number | null; ratings: number;
+    /** Present on the v2 catalogue response; null when the agency has no logo / office pin / launch date. */
+    logo_url?: string | null; on_vizito_since?: string | null; distance_km?: number | null;
+  };
   professionals: number; avg_experience: number | null;
 }
 export interface HcProfessional { id: string; name: string; role: string; role_label: string; qualification: string | null; experience_years: number | null; gender: string | null; registration: string | null; phone: string | null }
@@ -35,13 +40,14 @@ export interface HcOrder extends BookingActions {
   late_cancel_fee?: number;
   pause?: { from: string; resume_on: string; reason: string; count: number; max: number } | null;
 }
-export const hcCatalogueApi = async (pincode: string, category?: HcCategory): Promise<{ pincode: string; services: HcService[] }> =>
-  (await apiClient.get('/home-care/catalogue', { params: { pincode, category } })).data;
+export const hcCatalogueApi = async (pincode: string, category?: HcCategory, lat?: number | null, lng?: number | null): Promise<{ pincode: string; services: HcService[] }> =>
+  (await apiClient.get('/home-care/catalogue', { params: { pincode, category, lat: lat ?? undefined, lng: lng ?? undefined } })).data;
 /** Where a LIVE agency works (pincodes) and which care types it offers; 404 for draft / not live. */
 export interface HcCoverage { id: string; name: string; pincodes: string[]; categories: HcCategory[] }
 export const hcCoverageApi = async (agencyId: string): Promise<HcCoverage> => (await apiClient.get(`/home-care/agencies/${encodeURIComponent(agencyId)}/coverage`)).data;
 export const hcBookApi = async (body: any): Promise<HcOrder> => (await apiClient.post('/home-care/orders', body)).data;
 export const hcMineApi = async (): Promise<HcOrder[]> => (await apiClient.get('/home-care/orders/mine')).data;
+export const hcMinePageApi = async (params:{page:number;page_size:10|20;q?:string;status?:string;date_from?:string;date_to?:string}):Promise<{items:HcOrder[];page:number;page_size:10|20;total:number;total_pages:number}> => (await apiClient.get('/home-care/orders/mine',{params})).data;
 export const hcOrderApi = async (id: string): Promise<HcOrder> => (await apiClient.get(`/home-care/orders/${encodeURIComponent(id)}`)).data;
 export const hcCancelApi = async (id: string, reason: string): Promise<{ status: string; refund: { status: 'REFUNDED' | 'NEEDS_SUPPORT' | 'NOT_APPLICABLE'; amount: number }; cancellation_fee?: number }> =>
   (await apiClient.post(`/home-care/orders/${encodeURIComponent(id)}/cancel`, { reason })).data;

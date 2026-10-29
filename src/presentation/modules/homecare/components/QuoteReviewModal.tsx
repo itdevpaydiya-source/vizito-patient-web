@@ -1,3 +1,5 @@
+import VizitoDialog from '../../../components/dialogs/VizitoDialog';
+import { payOnline, PaymentCancelled, type PaidOnline } from '../../../../services/razorpayCheckout';
 import React, { useState } from 'react';
 import { X, CheckCircle2, AlertTriangle, FileText, ShieldCheck, Clock, ArrowRight, XCircle, CreditCard, Sparkles } from 'lucide-react';
 import { hcQuoteAcceptApi, hcQuoteDeclineApi, type HcQuote, type HcOrder } from '../../../../services/homecareHelper';
@@ -36,31 +38,21 @@ export default function QuoteReviewModal({
 
   const handleAcceptAndPay = async () => {
     setError(null);
-    if (paymentMode === 'UPI') {
-      const upiRes = validateUpiId(upiId);
-      if (!upiRes.ok) {
-        setError(upiRes.message);
-        return;
-      }
-    }
-
     setLoading(true);
+    let payment: PaidOnline | undefined;
+    if (paymentMode === 'UPI') {
+      try { payment = await payOnline({ amount: Number(quote.total), purpose: 'home_care', description: 'Home care quote' }); }
+      catch (e) { setError(e instanceof PaymentCancelled ? e.message : `${(e as Error)?.message || 'The payment failed.'} You can try again or choose to pay later.`); setLoading(false); return; }
+    }
     try {
-      const payload: any = {
-        payment_mode: paymentMode,
-      };
-      if (paymentMode === 'UPI') {
-        payload.payment = {
-          payment_method: 'UPI',
-          upi_id: upiId.trim(),
-        };
-      }
+      const payload: any = { payment_mode: paymentMode, ...(payment ? { payment } : {}) };
       const order = await hcQuoteAcceptApi(quote.id, payload);
       onAccepted(order);
       onClose();
     } catch (err: any) {
       const msg = err?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(' ') : msg || 'Unable to accept quote. Please try again.');
+      const text = Array.isArray(msg) ? msg.join(' ') : msg || 'Unable to accept quote. Please try again.';
+      setError(payment ? `${text} Your payment is being refunded (5–7 working days).` : text);
     } finally {
       setLoading(false);
     }
@@ -87,15 +79,10 @@ export default function QuoteReviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Care Quotation Review"
-        className="bg-white rounded-3xl max-w-2xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-      >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-teal-800 to-slate-900 text-white p-5 sm:p-6 relative">
+    <VizitoDialog title="Quote Review Modal" onClose={onClose} className="portal-migrated">
+{/* Header */}
+
+<div className="bg-gradient-to-r from-teal-800 to-slate-900 text-white p-5 sm:p-6 relative">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
@@ -115,8 +102,9 @@ export default function QuoteReviewModal({
           </p>
         </div>
 
-        {/* Status Alert if not actionable */}
-        {!isActionable && (
+{/* Status Alert if not actionable */}
+
+{!isActionable && (
           <div className={`mx-6 mt-4 p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 ${
             isAccepted
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -137,16 +125,18 @@ export default function QuoteReviewModal({
           </div>
         )}
 
-        {/* Error message */}
-        {error && (
+{/* Error message */}
+
+{error && (
           <div role="alert" className="mx-6 mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800 font-medium">
             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <span className="min-w-0 break-words">{error}</span>
           </div>
         )}
 
-        {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+{/* Content Body */}
+
+<div className="p-6 overflow-y-auto space-y-5 flex-1">
           {/* Breakdown Card */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 pb-3">
@@ -246,7 +236,7 @@ export default function QuoteReviewModal({
                 >
                   <CreditCard className="w-4 h-4 text-teal-700" />
                   <div>
-                    <div className="text-xs font-bold">UPI / QR Payment</div>
+                    <div className="text-xs font-bold">Pay online now</div>
                     <div className="text-[10px] text-slate-500 font-normal">GPay, PhonePe, Paytm</div>
                   </div>
                 </button>
@@ -268,22 +258,7 @@ export default function QuoteReviewModal({
                 </button>
               </div>
 
-              {paymentMode === 'UPI' && (
-                <div>
-                  <label htmlFor="lt-quote-upi-id" className="block text-xs font-bold text-slate-700 mb-1">
-                    UPI ID (Virtual Payment Address)
-                  </label>
-                  <input
-                    id="lt-quote-upi-id"
-                    type="text"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="e.g. mobile@upi or username@okaxis"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-800 focus:border-teal-600 focus:ring-4 focus:ring-teal-600/10"
-                    required
-                  />
-                </div>
-              )}
+              {paymentMode === 'UPI' && <p className="text-[11px] text-slate-500">Pay securely with UPI, card or net banking in the next step.</p>}
             </div>
           )}
 
@@ -325,8 +300,9 @@ export default function QuoteReviewModal({
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+{/* Footer Actions */}
+
+<div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
           {isActionable && !showDeclinePrompt ? (
             <>
               <button
@@ -368,7 +344,6 @@ export default function QuoteReviewModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+</VizitoDialog>
   );
 }

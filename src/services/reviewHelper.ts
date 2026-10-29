@@ -69,6 +69,7 @@ export const getMyReviewListApi = async (): Promise<PatientReview[]> => {
   const list = res?.data?.data;
   return Array.isArray(list) ? list.map(mapReview) : [];
 };
+export const getMyReviewPageApi=async(params:{page:number;page_size:10|20;q?:string;status?:string;date_from?:string;date_to?:string}):Promise<{items:PatientReview[];page:number;page_size:10|20;total:number;total_pages:number}>=>{const d=(await apiClient.get(ENDPOINTS.PATIENTS.REVIEWS,{params})).data;const list=Array.isArray(d?.items)?d.items:Array.isArray(d?.data)?d.data:[];return{items:list.map(mapReview),page:Number(d?.page)||params.page,page_size:Number(d?.page_size) as 10|20||params.page_size,total:Number(d?.total)||0,total_pages:Number(d?.total_pages)||1};};
 
 export const getProviderReviewsApi = async (partnerId: string): Promise<ProviderReviewSummary> => {
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PROVIDER_REVIEWS(partnerId));

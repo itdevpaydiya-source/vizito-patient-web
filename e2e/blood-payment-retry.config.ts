@@ -1,0 +1,1 @@
+import{defineConfig}from'@playwright/test';export default defineConfig({testDir:'.',testMatch:'blood-payment-retry.spec.ts',timeout:240000,workers:1,reporter:'list',use:{baseURL:'http://localhost:5174',headless:true,trace:'retain-on-failure'}});

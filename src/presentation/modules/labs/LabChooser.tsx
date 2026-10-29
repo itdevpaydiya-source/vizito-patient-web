@@ -6,6 +6,7 @@ import { rupees, type LabHit } from '../../../services/labHelper';
 import { useSearchArea, nearest, type LatLng } from '../../../services/location';
 import {comparisonDistance, centreLocality, validPin, homeCollection, nextAvailable} from './labComparisonDetails';
 import './LabComparison.css';
+import {LabTrust,verifiedNabl} from './LabCatalogueDetail';
 
 // Compare labs for the chosen tests. Built for many labs: search by name, sort (price / report
 // time), a home-collection filter, five at a time. Each card answers what a patient decides on:
@@ -22,6 +23,7 @@ export default function LabChooser({ labs, error, onRetry, city, onCity, selecte
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<Sort>('PRICE');
   const [filtersOpen,setFiltersOpen]=useState(false);
+  const [nablOnly,setNablOnly]=useState(false);
   const [homeOnly, setHomeOnly] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<string | null>(null);
@@ -31,14 +33,14 @@ export default function LabChooser({ labs, error, onRetry, city, onCity, selecte
   const area = chosenArea;
   const distOf = useMemo(() => new Map((labs || []).map((l) => [l.id, nearest(validPin(area)?area:null, l.locations.filter(c=>validPin(c.pin)))] as const)), [labs, area]);
   useEffect(()=>{setQ('');setHomeOnly(false);setShown(PAGE);},[resetKey]);
-  const clearFilters=()=>{setQ('');setHomeOnly(false);onCity('');setShown(PAGE);};
+  const clearFilters=()=>{setQ('');setHomeOnly(false);onCity('');setShown(PAGE);setNablOnly(false);};
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (labs || [])
-      .filter((l) => (!s || l.name.toLowerCase().includes(s)) && (!city.trim() || l.locations.some(c=>`${c.city||''} ${c.address||''}`.toLowerCase().includes(city.trim().toLowerCase()))) && (!homeOnly || l.settings?.home?.enabled))
+      .filter((l) => (!s || l.name.toLowerCase().includes(s)) && (!city.trim() || l.locations.some(c=>`${c.city||''} ${c.address||''}`.toLowerCase().includes(city.trim().toLowerCase()))) && (!homeOnly || l.settings?.home?.enabled)&&(!nablOnly||verifiedNabl(l)))
       .sort((a, b) => (sort === 'NEAR' ? ((distOf.get(a.id)?.metres??Infinity)-(distOf.get(b.id)?.metres??Infinity)) : sort === 'PRICE' ? ((typeof a.total==='number'&&Number.isFinite(a.total)&&a.total>=0?a.total:Infinity) - (typeof b.total==='number'&&Number.isFinite(b.total)&&b.total>=0?b.total:Infinity)) : (a.report_hours && a.report_hours > 0 ? a.report_hours : Infinity) - (b.report_hours && b.report_hours > 0 ? b.report_hours : Infinity))
         || (a.id === pinnedId ? -1 : b.id === pinnedId ? 1 : 0) || ((typeof a.total==='number'&&Number.isFinite(a.total)&&a.total>=0?a.total:Infinity) - (typeof b.total==='number'&&Number.isFinite(b.total)&&b.total>=0?b.total:Infinity)));
-  }, [labs, q, sort, homeOnly, pinnedId, city, distOf]);
+  }, [labs, q, sort, homeOnly, pinnedId, city, distOf,nablOnly]);
   useEffect(()=>{onVisibilityChange?.(!!selectedId && !!labs && !list.some(l=>l.id===selectedId));},[selectedId,labs,list,onVisibilityChange]);
   const priced=list.filter(l=>typeof l.total==='number'&&Number.isFinite(l.total)&&l.total>=0);
   const timed=list.filter(l=>typeof l.report_hours==='number'&&Number.isFinite(l.report_hours)&&l.report_hours>0);
@@ -62,11 +64,11 @@ export default function LabChooser({ labs, error, onRetry, city, onCity, selecte
           <span className="ml-auto text-slate-500 font-semibold">{list.length} lab{list.length === 1 ? '' : 's'}</span>
         </div>
       )}
-      <div className="lab-comparison-filters"><button type="button" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(!filtersOpen)}>Filters{homeOnly?' (1)':''}</button>{filtersOpen && <div role="group" aria-label="Lab filters">          <button type="button" aria-pressed={homeOnly} onClick={() => { setHomeOnly(!homeOnly); setShown(PAGE); }} className={`px-3 py-1 rounded-full border font-bold inline-flex items-center gap-1 ${homeOnly ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-600 border-slate-200'}`}><Home className="w-3.5 h-3.5" /> Home collection available</button></div>}{(q||city||homeOnly)&&<button type="button" onClick={clearFilters}>Clear filters</button>}</div>
+      <div className="lab-comparison-filters"><button type="button" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(!filtersOpen)}>Filters{homeOnly?' (1)':''}</button>{filtersOpen && <div role="group" aria-label="Lab filters">{labs?.some(verifiedNabl)&&<button type="button" aria-pressed={nablOnly} onClick={()=>setNablOnly(!nablOnly)}>NABL accredited only</button>}          <button type="button" aria-pressed={homeOnly} onClick={() => { setHomeOnly(!homeOnly); setShown(PAGE); }} className={`px-3 py-1 rounded-full border font-bold inline-flex items-center gap-1 ${homeOnly ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-600 border-slate-200'}`}><Home className="w-3.5 h-3.5" /> Home collection available</button></div>}{(q||city||homeOnly)&&<button type="button" onClick={clearFilters}>Clear filters</button>}</div>
       {error ? (
         <div role="alert" className="text-sm bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3"><span className="font-semibold text-rose-800">{error}</span>{onRetry && <button type="button" onClick={onRetry} className="text-xs font-bold text-rose-800 underline">Try again</button>}</div>
       ) : !labs ? <p className="text-sm text-slate-400">Finding labs…</p> : !list.length ? (
-        <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">{labs.length ? 'No lab matches these filters.' : `No lab offers all of these tests${city ? ` in ${city}` : ''} yet. Try fewer tests or another area.`}<button type="button" onClick={clearFilters} className="ml-2 underline font-semibold">Clear filters</button></p>
+        <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3">{labs.length ? 'No lab matches these filters.' : `No labs in this area offer all of these tests${city ? ` in ${city}` : ''} yet. Try fewer tests or another area.`}<button type="button" onClick={clearFilters} className="ml-2 underline font-semibold">Clear filters</button></p>
       ) : (
         <ul className="space-y-2" aria-label="Labs">
           {list.slice(0, shown).map((l) => {
@@ -84,7 +86,7 @@ export default function LabChooser({ labs, error, onRetry, city, onCity, selecte
                     {l.rating&&l.rating.count>0&&Number.isFinite(l.rating.average)&&<p className="lab-rating">{"\u2605"} {l.rating.average} ({l.rating.count} reviews)</p>}
                     {near&&<p>{centreLocality(l.name,near)}{nd&&` \u00b7 ${comparisonDistance(nd.metres)} away (approx.)`}</p>}
                     {l.registration_number&&<p className="lab-registration">Reg. no. {l.registration_number}</p>}
-                    {l.nabl&&Number.isFinite(new Date(l.nabl.valid_until).getTime())&&<p className="lab-registration">NABL cert. {l.nabl.cert_no} {"\u00b7"} valid till {new Date(l.nabl.valid_until).toLocaleDateString('en-GB',{month:'short',year:'numeric',timeZone:'Asia/Kolkata'})}</p>}
+                    <LabTrust lab={l}/>
                     {validPin(near?.pin)&&<a href={`https://www.google.com/maps/search/?api=1&query=${near.pin.lat},${near.pin.lng}`} target="_blank" rel="noreferrer">View on map</a>}
                   </div>
                   <div className="lab-choice-info">

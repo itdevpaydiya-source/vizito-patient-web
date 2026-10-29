@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchArea, metresBetween, formatDistance } from '../../../services/location';
 import BusinessImage from '../../components/BusinessImage';
 import LocationBar from '../../components/location/LocationBar';
@@ -26,32 +27,23 @@ const SelectPharmacyModal: React.FC<{
   const load = useCallback(async (term?: string) => {
     setLoading(true); setError(null);
     try {
-      setPharmacies(await getProvidersApi('pharmacy', term || undefined));
+      setPharmacies((await getProvidersApi('pharmacy', term || undefined)).filter(p=>p.partnerType==='pharmacy'));
     } catch {
       setError('Unable to load pharmacies. Please try again.');
       setPharmacies([]);
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const t = setTimeout(() => load(search), 350);
+    const t = setTimeout(() => load(search), search.trim()?350:0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search,load]);
 
 
-  const dialog=useRef<HTMLDialogElement>(null);
-  useEffect(()=>{const node=dialog.current;const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;node?.showModal();return()=>{node?.close();previous?.focus({preventScroll:true});};},[]);
   const visiblePharmacies=pharmacies.filter(p=>!excludedPharmacyIds.includes(p.id));
   return (
-    <dialog ref={dialog} aria-label={title} onCancel={e=>{e.preventDefault();onClose();}} className="m-0 h-dvh max-h-none w-full max-w-none border-0 bg-transparent p-0 text-slate-900 backdrop:bg-slate-900/40"><div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50 shrink-0">
-          <h3 className="font-black text-slate-800 text-sm">{title}</h3>
-          <button aria-label="Close pharmacy selection" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-        </div>
-
+    <VizitoDialog title={title} onClose={onClose} className="portal-pharmacy-picker">
         <div className="p-4 shrink-0">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -109,8 +101,7 @@ const SelectPharmacyModal: React.FC<{
             </div>
           )}
         </div>
-      </div>
-    </div></dialog>
+    </VizitoDialog>
   );
 };
 

@@ -1,3 +1,4 @@
+import VizitoDialog from '../../../components/dialogs/VizitoDialog';
 import React, { useState } from 'react';
 import { X, UserX, Clock, AlertTriangle, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { hcRequestReplacementApi } from '../../../../services/homecareHelper';
@@ -61,15 +62,10 @@ export default function CaregiverReplacementModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Request Caregiver Replacement"
-        className="bg-white rounded-3xl max-w-lg w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col"
-      >
-        {/* Header */}
-        <div className="bg-slate-900 text-white p-5 sm:p-6 relative">
+    <VizitoDialog title="Request a Different Caregiver" onClose={onClose} className="portal-migrated">
+{/* Header */}
+
+<div className="bg-slate-900 text-white p-5 sm:p-6 relative">
           <button
             onClick={onClose}
             className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
@@ -87,15 +83,17 @@ export default function CaregiverReplacementModal({
           </p>
         </div>
 
-        {/* Error */}
-        {error && (
+{/* Error */}
+
+{error && (
           <div role="alert" className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium">
             {error}
           </div>
         )}
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+{/* Form Body */}
+
+<form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Reason Selection */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -205,7 +203,6 @@ export default function CaregiverReplacementModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+</VizitoDialog>
   );
 }

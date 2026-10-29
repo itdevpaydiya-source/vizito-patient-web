@@ -48,10 +48,12 @@ export interface Branch {
   emergency_contact?: string | null;
   pincode: string | null;
   fee: number | null;
+  photo_url?: string | null;
   pin?: { lat: number; lng: number } | null; // confirmed by the business on the map
 }
 
 export interface BranchDepartment {
+  doctor_count: number;
   facility_department_id: number;
   department_id: number | null;
   name: string;
@@ -61,6 +63,9 @@ export interface BranchDepartment {
 }
 
 export interface BranchDoctor {
+  facility_department_id: number;
+  in_person_fee: number | null;
+  registration_verified: boolean;
   qualification?: string | null;
   department?: string | null;
   doctor_partner_id: string;
@@ -68,6 +73,12 @@ export interface BranchDoctor {
   name: string;
   specialization: string | null;
   experience_years: number | null;
+  gender?: string | null;
+  photo_url?: string | null;
+  sub_specialty?: string | null;
+  expertise?: string[];
+  designation?: string | null;
+  next_available?: {date:string;time:string}|null;
   room_number: string | null;
   facility_id: number;
 }
@@ -91,6 +102,39 @@ export interface AvailableSlot {
   is_booked?: boolean;
 }
 
+export interface AvailabilityDay {
+  date: string;
+  status: 'AVAILABLE' | 'FULLY_BOOKED' | 'OFF' | 'UNAVAILABLE' | 'PAUSED';
+  total_slots: number;
+  available_slots: number;
+  booked_slots: number;
+}
+export interface NextAvailableSlot {
+  date: string;
+  time_slot_id: number;
+  start_time: string;
+  end_time: string;
+  facility_id: number;
+  facility_name: string | null;
+  fee: number | null;
+  video_fee: number | null;
+}
+export interface ProviderAvailability {
+  timezone: string;
+  slot_minutes: number | null;
+  next_available: NextAvailableSlot | null;
+  days: AvailabilityDay[];
+  paused?: import('./types').ProviderPause | null;
+}
+export const getProviderAvailabilityApi = async (
+  doctorId: string, from: string, facilityId: number, hospitalId?: string, days=60,
+): Promise<ProviderAvailability> => {
+  const res = await apiClient.get(`/patients/providers/${doctorId}/availability`, {
+    params: { from, days, facility_id: facilityId, ...(hospitalId ? { hospital_partner_id: hospitalId } : {}) },
+  });
+  return unwrap<ProviderAvailability>(res);
+};
+
 export interface CreatedBooking {
   id: string;
   booking_number: string;
@@ -102,6 +146,7 @@ export interface CreatedBooking {
   // Only present when the booking was created via an online payment (see CreateBookingInput.payment) â€”
   // the simulated gateway's reference id for the charge that was made before this booking existed.
   payment_reference_id?: string;
+  payment_method?: string;
 }
 
 const unwrap = <T>(res: any): T => (res?.data?.data ?? res?.data) as T;
@@ -247,6 +292,9 @@ export type PaymentMethod = 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET' | 'CASH';
 
 export interface ProcessPaymentInput {
   payment_method: PaymentMethod;
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  razorpay_signature?: string;
   upi_id?: string;
   // Only the last 4 digits are ever sent â€” see ProcessPaymentDto on the backend for why.
   card_last4?: string;

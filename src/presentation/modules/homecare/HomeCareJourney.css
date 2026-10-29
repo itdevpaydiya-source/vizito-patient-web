@@ -6,3 +6,13 @@
 dialog.bk-dialog.hcj-quote-dialog{width:670px;max-width:calc(100vw - 32px);padding:0;border:1px solid #dce8f3;border-radius:16px;max-height:94dvh;overflow:auto}dialog.hcj-quote-dialog>div{max-height:none!important;max-width:none!important;border:0;border-radius:0;box-shadow:none}dialog.hcj-quote-dialog form{overflow:visible!important} @media(max-width:600px){dialog.bk-dialog.hcj-quote-dialog{width:100%;max-width:100%;inset:auto 0 0;margin:0;border-radius:17px 17px 0 0}dialog.hcj-quote-dialog form{padding:18px}}
 
 .hcj-hero aside{padding:17px}.hcj-hero aside h2{font-size:16px}.hcj-hero aside p{font-size:11px;line-height:1.4;margin:8px 0}.hcj-hero aside>svg{width:32px;height:32px;margin-bottom:9px}.hcj-hero{padding-top:23px;padding-bottom:23px}.hcj-hero>img{object-position:65% 35%}
+
+/* Payment choice: two option cards (pay after visit / pay online with Razorpay) */
+.hc-pay-options{border:0;padding:0;margin:12px 0;display:grid;gap:8px}
+.hc-pay-options legend{font-weight:700;font-size:13px;margin-bottom:6px;color:#0f172a}
+.hc-pay-options label{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer}
+.hc-pay-options label:has(input:checked){border-color:#0b4f4f;background:#f0fdfa}
+.hc-pay-options input{margin-top:3px;accent-color:#0b4f4f}
+.hc-pay-options span{display:grid;gap:2px}
+.hc-pay-options b{font-size:13px;color:#0f172a}
+.hc-pay-options small{font-size:12px;color:#64748b}

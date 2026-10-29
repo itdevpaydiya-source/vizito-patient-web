@@ -1,3 +1,5 @@
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
+import ThemedSelect from '../../components/forms/ThemedSelect';
 import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -358,7 +360,7 @@ export const ReturnSchedulingScreen: React.FC = () => {
               Active Rental
             </label>
             <div className="relative">
-              <select
+              <ThemedSelect
                 value={selectedOrderId}
                 onChange={(e) => setSelectedOrderId(e.target.value)}
                 disabled={activeRentals.length === 0}
@@ -373,7 +375,7 @@ export const ReturnSchedulingScreen: React.FC = () => {
                     </option>
                   ))
                 )}
-              </select>
+              </ThemedSelect>
               <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
@@ -742,18 +744,20 @@ export const ReturnSchedulingScreen: React.FC = () => {
 
       {/* Success Modal */}
       {isSuccessModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md p-6 shadow-2xl text-center space-y-4">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+        <VizitoDialog title="Return Request Submitted" onClose={() => setIsSuccessModalOpen(false)} className="portal-migrated">
+<div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
               <Check className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Return Request Submitted</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
+
+<h3 className="text-base font-bold text-slate-900">Return Request Submitted</h3>
+
+<p className="text-xs text-slate-500 leading-relaxed">
               Your pickup request has been scheduled for{' '}
               <strong>{formatDateDisplay(preferredDate)}</strong> during{' '}
               <strong>{selectedPickupSlot}</strong>. The provider logistics team will coordinate pickup at your address.
             </p>
-            <div className="pt-2">
+
+<div className="pt-2">
               <button
                 type="button"
                 onClick={() => setIsSuccessModalOpen(false)}
@@ -762,8 +766,7 @@ export const ReturnSchedulingScreen: React.FC = () => {
                 Done
               </button>
             </div>
-          </div>
-        </div>
+</VizitoDialog>
       )}
     </div>
   );

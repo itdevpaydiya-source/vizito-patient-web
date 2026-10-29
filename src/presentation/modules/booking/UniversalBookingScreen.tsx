@@ -1,3 +1,4 @@
+import BookingForChip,{useFamilyBookingSelection} from '../family/BookingForChip';
 import {providerDistance} from '../../components/ProviderCard';
 import {SuccessCheck} from '../../components/motion/Motion';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -114,7 +115,8 @@ export default function UniversalBookingScreen() {
   const [consultType, setConsultType] = useState<'In Person' | 'Video'>('In Person');
 
   const [family, setFamily] = useState<PatientFamilyMember[]>([]);
-  const [selectedFamily, setSelectedFamily] = useState<PatientFamilyMember | null>(null); // null = self
+  const [selectedFamily, setSelectedFamily] = useState<PatientFamilyMember | null>(null);
+  useFamilyBookingSelection(family,value=>setSelectedFamily(family.find(f=>String(f.memberUserId)===value)||null)); // null = self
 
   // ---- Payment Screen State ----
   const [paymentMode, setPaymentMode] = useState<PaymentMethod>('UPI');
@@ -751,7 +753,7 @@ export default function UniversalBookingScreen() {
     <div
       className="min-h-screen bg-[#FAF7F4] py-5 sm:py-7"
     >
-      <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-28">
+      <div className="mx-auto w-full max-w-[1600px] space-y-5 pb-28"><BookingForChip family={family} value={selectedFamily?String(selectedFamily.memberUserId):''} onChange={value=>setSelectedFamily(family.find(f=>String(f.memberUserId)===value)||null)}/>
         <div className="flex items-center justify-between gap-3">
           <button onClick={goBack} className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-2.5 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
             <ArrowLeft className="w-4 h-4" /> Back

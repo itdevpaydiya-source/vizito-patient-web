@@ -1,3 +1,4 @@
+import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import MediaImage from '../../components/MediaImage';
 import React, { useState, useEffect } from 'react';
 import {
@@ -193,10 +194,10 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
   const links = ((profileData?.socialLinks || profileData?.social_links || {}) as Record<string, string | undefined>);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl border border-slate-200/90 w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl my-auto flex flex-col relative">
-        {/* 1. SEPARATE HERO BANNER (Top) */}
-        <div className="relative h-36 sm:h-44 w-full overflow-hidden bg-gradient-to-r from-amber-700 via-orange-600 to-amber-900 shrink-0">
+    <VizitoDialog title="About business" onClose={onClose} className="portal-migrated">
+{/* 1. SEPARATE HERO BANNER (Top) */}
+
+<div className="relative h-36 sm:h-44 w-full overflow-hidden bg-gradient-to-r from-amber-700 via-orange-600 to-amber-900 shrink-0">
           {bannerUrl ? (
             <MediaImage kind="business" businessType="equipment"
               src={bannerUrl}
@@ -227,8 +228,9 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
           </button>
         </div>
 
-        {/* 2. SEPARATE LOGO & IDENTITY BAR */}
-        <div className="px-5 sm:px-6 pt-0 pb-4 border-b border-slate-100">
+{/* 2. SEPARATE LOGO & IDENTITY BAR */}
+
+<div className="px-5 sm:px-6 pt-0 pb-4 border-b border-slate-100">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 -mt-12 sm:-mt-14 relative z-10">
             {/* Logo Avatar Box (Separated cleanly from banner) */}
             <div className="flex items-end gap-3.5">
@@ -275,8 +277,9 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
           </div>
         </div>
 
-        {/* 3. SCROLLABLE DETAILS BODY */}
-        <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
+{/* 3. SCROLLABLE DETAILS BODY */}
+
+<div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
           {loading && (
             <div className="py-1.5 px-3 bg-amber-50 border border-amber-200/70 rounded-xl text-amber-900 text-xs flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
@@ -596,8 +599,9 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
           ) : null}
         </div>
 
-        {/* 4. FOOTER ACTION */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
+{/* 4. FOOTER ACTION */}
+
+<div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -618,8 +622,7 @@ export const PartnerProfileModal: React.FC<PartnerProfileModalProps> = ({
             </button>
           )}
         </div>
-      </div>
-    </div>
+</VizitoDialog>
   );
 };
 
