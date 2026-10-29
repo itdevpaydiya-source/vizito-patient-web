@@ -80,6 +80,15 @@ export default function AuthModule({
   const [otpCountdown, setOtpCountdown] = useState(30);
   const [canResendOtp, setCanResendOtp] = useState(false);
   const [devOtpHint, setDevOtpHint] = useState('');
+  // Dev server only (no SMS provider): the test OTP fills the boxes by itself.
+  useEffect(() => {
+    if (!devOtpHint) return;
+    const arr = devOtpHint.split('').slice(0, 6);
+    if (loginMode === 'otp-verify') setLoginOtpCode(arr);
+    else if (regOtpStep) setRegOtpCode(arr);
+    else if (forgotStep === 2) setForgotOtpCode(arr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devOtpHint]);
 
   // Register form state
   const [regFullName, setRegFullName] = useState('');
