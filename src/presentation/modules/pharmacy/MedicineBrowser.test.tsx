@@ -11,6 +11,6 @@ describe('add medicines', () => {
   it('does not turn missing prices into zero', () => {
     expect(medicinePrice(NaN)).toBe('Price not provided');
     expect(medicinePrice(0)).toBe('Price not provided');
-    expect(medicinePrice(25)).toBe('INR 25.00');
+    expect(medicinePrice(25)).toBe('₹25.00');
   });
 });

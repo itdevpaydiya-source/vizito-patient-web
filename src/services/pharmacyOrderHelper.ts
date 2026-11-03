@@ -181,6 +181,11 @@ export interface MedicineNearPharmacy {
   home_delivery: boolean;
   delivery_fee: number | null;
   in_stock: boolean;
+  /** This pharmacy's own price per unit (MRP on the batch it dispenses first); null = no price yet. */
+  price: number | null;
+  available_qty: number | null;
+  /** 'nearest' | 'lowest_price' — set only when there is more than one pharmacy to compare. */
+  tags: string[];
 }
 
 export interface MedicineNearResult {
@@ -200,6 +205,17 @@ export interface MedicineNearResult {
   pharmacies_near: number;
   nearest: MedicineNearPharmacy | null;
   home_delivery_available: boolean;
+  /** Lowest and highest price among nearby pharmacies (prices can differ by pharmacy). */
+  price_from: number | null;
+  price_to: number | null;
+}
+
+/** A catalogue medicine, without stock or price claims (search before a location is set, or none nearby). */
+export type CatalogueMedicine = Omit<MedicineNearResult, 'pharmacies_near' | 'nearest' | 'home_delivery_available' | 'price_from' | 'price_to'>;
+
+export interface NearSearchPage extends Paged<MedicineNearResult> {
+  unavailable_nearby: CatalogueMedicine[];
+  did_you_mean: string | null;
 }
 
 export interface Paged<T> {
@@ -220,7 +236,7 @@ export const searchMedicinesNearApi = async (params: {
   radius_km?: number;
   page?: number;
   page_size?: 10 | 20;
-}): Promise<Paged<MedicineNearResult>> => {
+} & MedicineListFilters): Promise<NearSearchPage> => {
   const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/near`, { params });
   const data = res.data ?? {};
   return {
@@ -232,13 +248,83 @@ export const searchMedicinesNearApi = async (params: {
           pharmacies_near: Number(m.pharmacies_near) || 0,
           nearest: m.nearest ?? null,
           home_delivery_available: Boolean(m.home_delivery_available),
+          price_from: m.price_from == null ? null : Number(m.price_from),
+          price_to: m.price_to == null ? null : Number(m.price_to),
         }))
       : [],
     page: Number(data.page) || Number(params.page) || 1,
     page_size: Number(data.page_size) || params.page_size || 10,
     total: Number(data.total) || 0,
     total_pages: Number(data.total_pages) || 1,
+    unavailable_nearby: Array.isArray(data.unavailable_nearby) ? data.unavailable_nearby.map(catalogueMedicine) : [],
+    did_you_mean: data.did_you_mean || null,
   };
+};
+
+const catalogueMedicine = (m: any): CatalogueMedicine => ({
+  ...m,
+  mrp: moneyNumber(m.mrp),
+  units_per_pack: m.units_per_pack == null ? null : Number(m.units_per_pack),
+});
+
+/** Patient search before a location is set: catalogue matches only. */
+/** Patient list filters, applied by the server across all pages. */
+export interface MedicineListFilters {
+  rx?: 'otc' | 'rx';
+  delivery?: '1';
+  price?: '50' | '200' | 'above';
+  sort?: 'relevance' | 'price' | 'name';
+}
+
+export const discoverMedicinesApi = async (params: { keyword: string; page?: number; page_size?: 10 | 20 } & MedicineListFilters): Promise<Paged<CatalogueMedicine> & { did_you_mean: string | null }> => {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/discover`, { params });
+  const data = res.data ?? {};
+  return {
+    items: Array.isArray(data.items) ? data.items.map(catalogueMedicine) : [],
+    page: Number(data.page) || 1,
+    page_size: Number(data.page_size) || params.page_size || 10,
+    total: Number(data.total) || 0,
+    total_pages: Number(data.total_pages) || 1,
+    did_you_mean: data.did_you_mean || null,
+  };
+};
+
+export interface MedicineSuggestion {
+  id: string;
+  medicine_name: string;
+  generic_name: string | null;
+  strength: string | null;
+  strength_unit: string | null;
+  dosage_form: string | null;
+  requires_prescription: boolean;
+}
+
+/** Autocomplete after 2 letters. */
+export const suggestMedicinesApi = async (keyword: string): Promise<{ items: MedicineSuggestion[]; did_you_mean: string | null }> => {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/suggest`, { params: { keyword } });
+  return { items: Array.isArray(res.data?.items) ? res.data.items : [], did_you_mean: res.data?.did_you_mean || null };
+};
+
+export interface PharmacyWithAll {
+  pharmacy_id: string;
+  name: string;
+  address: string | null;
+  distance_km: number | null;
+  home_delivery: boolean;
+  delivery_fee: number | null;
+  items_total: number;
+  prices: { medicine_id: string; price: number }[];
+}
+
+/** Nearby pharmacies that stock every medicine in the cart, with the items total at each. */
+export const getPharmaciesWithAllApi = async (
+  medicineIds: string[],
+  params: { lat: number; lng: number; pincode?: string; radius_km?: number },
+): Promise<PharmacyWithAll[]> => {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/pharmacies-near-all`, { params: { ...params, ids: medicineIds.join(',') } });
+  return Array.isArray(res.data?.items)
+    ? res.data.items.map((p: any) => ({ ...p, items_total: Number(p.items_total), distance_km: p.distance_km == null ? null : Number(p.distance_km), delivery_fee: p.delivery_fee == null ? null : Number(p.delivery_fee) }))
+    : [];
 };
 
 export const getMedicinePharmaciesNearApi = async (
@@ -256,6 +342,9 @@ export const getMedicinePharmaciesNearApi = async (
           store_pickup: Boolean(p.store_pickup),
           home_delivery: Boolean(p.home_delivery),
           in_stock: Boolean(p.in_stock),
+          price: p.price == null ? null : Number(p.price),
+          available_qty: p.available_qty == null ? null : Number(p.available_qty),
+          tags: Array.isArray(p.tags) ? p.tags : [],
         }))
       : [],
     total: Number(data.total) || 0,

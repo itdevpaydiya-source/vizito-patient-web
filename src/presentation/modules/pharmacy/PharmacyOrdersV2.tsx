@@ -100,7 +100,15 @@ export default function PharmacyOrdersV2() {
   }, [range]);
 
   useEffect(() => {
-    if (requestsMode) { setLoading(false); return; }
+    if (requestsMode) {
+      // Requests show the status of the order each one became: load the recent orders for that.
+      setLoading(false);
+      let active = true;
+      getMyOrdersGroupedPageApi({ group: 'all', page: 1, page_size: 20, sort: 'newest' })
+        .then((value) => { if (active) setOrders(value); })
+        .catch(() => undefined);
+      return () => { active = false; };
+    }
     let active = true;
     setLoading(true); setError('');
     getMyOrdersGroupedPageApi({
@@ -150,11 +158,13 @@ export default function PharmacyOrdersV2() {
 
   const heading = requestsMode ? 'Prescription requests' : 'My pharmacy orders';
   const subtitle = requestsMode
-    ? 'Prescription requests you have sent to pharmacies, including pharmacist quotes.'
+    ? 'Prescriptions sent to a pharmacy by you or your doctor, with the pharmacist’s quotes. Review a quote to place your order.'
     : 'View and track your medicine orders';
 
+  const justSent = requestsMode && params.get('sent') === '1';
   return (
     <div className="ph2">
+      {justSent && <p role="status" className="ph2-inline-info" style={{ marginBottom: 12, background: '#ecfdf5', color: '#047857' }}><CheckCircle2 />Sent. The pharmacist will check stock and send you a price — usually within 30 minutes. You'll get a notification.</p>}
       <nav className="ph2-crumbs" aria-label="Breadcrumb">
         <Link to="/pharmacy-orders/new">Pharmacy</Link><ChevronRight />
         <b>{requestsMode ? 'Prescription requests' : 'My pharmacy orders'}</b>
@@ -258,7 +268,7 @@ export default function PharmacyOrdersV2() {
                               <MediaImage kind="business" businessType="pharmacy" name={pharmacy?.name || 'Pharmacy'} src={pharmacy?.logo} />
                               <div>
                                 <b>{pharmacy?.name || 'Pharmacy'}</b>
-                                <small>{[pharmacy?.city, distance != null ? formatDistance(distance) : null].filter(Boolean).join(' · ') || 'Details not provided'}</small>
+                                <small>{[pharmacy?.city || pharmacy?.address?.split(',').slice(-2, -1)[0]?.trim(), distance != null ? formatDistance(distance) : null].filter(Boolean).join(' · ') || ''}</small>
                               </div>
                             </div>
                           </td>

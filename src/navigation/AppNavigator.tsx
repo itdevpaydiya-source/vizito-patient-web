@@ -1,6 +1,6 @@
 import SharedRecordPage from '../presentation/modules/records/SharedRecordPage';
 import AppointmentsRoute from '../presentation/modules/bookings/AppointmentsRoute';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 // Layouts
 import AuthLayout from '../layouts/AuthLayout';
@@ -74,6 +74,21 @@ const RootSessionGuard = () => {
   return <Navigate to="/auth/login" replace />;
 };
 
+// Signed-out visitors never see the app shell (it would only show "Unable to load" errors);
+// they go to log in and come back to the page they asked for.
+const RequireSession = () => {
+  const location = useLocation();
+  if (hasActiveSession()) return <Outlet />;
+  const next = `${location.pathname}${location.search}`;
+  return <Navigate to={next && next !== '/dashboard' ? `/auth/login?next=${encodeURIComponent(next)}` : '/auth/login'} replace />;
+};
+
+// Only same-app paths are followed after login, never another site.
+const safeNext = () => {
+  const next = new URLSearchParams(window.location.search).get('next') || '';
+  return /^\/(?!\/)[^\\]*$/.test(next) && !next.startsWith('/auth') ? next : '/dashboard';
+};
+
 const LoginWrapper = () => {
   const navigate = useNavigate();
   const { setRole } = useRole();
@@ -101,7 +116,7 @@ const LoginWrapper = () => {
         // so the bell populates immediately instead of waiting for the next poll.
         window.dispatchEvent(new Event('vizito-auth-changed'));
         setRole('patient');
-        navigate('/dashboard');
+        navigate(safeNext());
       }}
       onRegisterClick={() => navigate('/auth/register')}
     />
@@ -156,7 +171,14 @@ const AppNavigator = () => {
         <Route path="*" element={<Navigate to="/auth/login" replace />} />
       </Route>
 
+      {/* Common sign-in URLs people type or bookmark */}
+      <Route path="/login" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/signin" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/register" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/signup" element={<Navigate to="/auth/register" replace />} />
+
       {/* Main Patient Application */}
+      <Route element={<RequireSession />}>
       <Route element={<MainLayout />}>
         {/* Dashboard */}
         <Route path="/dashboard" element={<DashboardLayout />}>
@@ -216,9 +238,10 @@ const AppNavigator = () => {
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/help" element={<HelpSupportScreen />} />
       </Route>
+      </Route>
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Fallback: signed in -> dashboard, signed out -> login */}
+      <Route path="*" element={<RootSessionGuard />} />
     </Routes>
   );
 };

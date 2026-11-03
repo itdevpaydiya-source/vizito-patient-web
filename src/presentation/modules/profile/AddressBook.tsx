@@ -1,6 +1,7 @@
 import ThemedSelect from '../../components/forms/ThemedSelect';
 import React, { useState } from "react";
 import { PhDialog } from "./ProfileUi";
+import { landmarkText } from "../../../utils/address";
 import {
   MapPin,
   Plus,
@@ -545,7 +546,7 @@ export default function AddressBook({
                       <>
                         <br />
                         <span className="text-slate-500">
-                          Near {a.landmark}
+                          {landmarkText(a.landmark)}
                         </span>
                       </>
                     ) : null}

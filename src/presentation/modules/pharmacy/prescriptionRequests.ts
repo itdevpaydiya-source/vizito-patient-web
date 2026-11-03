@@ -4,5 +4,6 @@ export const requestGroup=(r:PharmacyRequestItem)=>r.order_id?'closed':r.status=
 export const quoteExpired=(r:PharmacyRequestItem,now=Date.now())=>!!r.quote_valid_until&&Number.isFinite(Date.parse(r.quote_valid_until))&&Date.parse(r.quote_valid_until)<now;
 export const requestLabel=(r:PharmacyRequestItem)=>r.order_id?'Ordered':r.status==='Accepted'&&(r.quote_items||'').trim()&&quoteLines(r)?.length?'Quote ready':({Requested:'Waiting for pharmacy',Accepted:'Accepted',Rejected:'Declined by pharmacy',Cancelled:'Cancelled',Expired:'Expired'}[r.status]||r.status);
 export const requestDate=(value:string|null|undefined)=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):null;
-export const differentProduct=(line:PharmacyQuoteLine)=>!!line.item_name&&line.item_name.trim().toLowerCase()!==line.prescribed_name.trim().toLowerCase();
+const baseName=(name:string)=>name.toLowerCase().replace(/\s+\d+(\.\d+)?\s*(mg|mcg|g|gm|ml|iu|%)\b.*$/,'').replace(/\s+/g,' ').trim();
+export const differentProduct=(line:PharmacyQuoteLine)=>!!line.item_name&&baseName(line.item_name)!==baseName(line.prescribed_name);
 export const canResendRequest=(r:PharmacyRequestItem,all:PharmacyRequestItem[])=>!r.order_id&&['Rejected','Cancelled','Expired'].includes(r.status)&&!all.some(other=>other.id!==r.id&&other.prescription_id===r.prescription_id&&!other.order_id&&['Requested','Accepted'].includes(other.status));

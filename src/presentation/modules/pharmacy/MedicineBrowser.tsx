@@ -11,7 +11,7 @@ import {pharmacyPack,draftQuantityProblem,type StockPharmacy} from './pharmacyJo
 import type {BasketLine} from './medicineBasket';
 import BasketDrawer from './BasketDrawer';
 import './PharmacyJourney.css';
-export const medicinePrice=(value:number|null)=>value!=null&&Number.isFinite(value)&&value>0?`INR ${value.toFixed(2)}`:'Price not provided';
+export const medicinePrice=(value:number|null)=>value!=null&&Number.isFinite(value)&&value>0?`₹${value.toFixed(2)}`:'Price not provided';
 export const pharmacyMoney=(value:number)=>'\u20b9'+value.toLocaleString('en-IN',{maximumFractionDigits:2});
 type Props={city:string;stocks:StockPharmacy[]|null;cart:BasketLine[];error:string|null;onRetry:()=>void;onAdd:(medicine:MedicineSearchResult,quantity:number)=>number;onQuantity:(id:string,quantity:number)=>boolean;onContinue:()=>void;estimate:number|null;basketError?:string|null};
 export default function MedicineBrowser(p:Props){
