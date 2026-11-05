@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { DomTranslator, loadDictionary } from '../../i18n/domTranslator';
 
 export type Language = 'en' | 'hi' | 'te' | 'ta' | 'kn' | 'mr' | 'bn' | 'gu';
 
@@ -185,15 +186,27 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    // English only until the full, reviewed translations ship (see Settings > Language).
-    try { localStorage.removeItem('vizito_language'); } catch { /* ignore */ }
-    return 'en';
+    try { return (localStorage.getItem('vizito_language') as Language) || 'en'; } catch { return 'en'; }
   });
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('vizito_language', lang);
+    try { localStorage.setItem('vizito_language', lang); } catch { /* the choice just won't survive a reload */ }
   };
+
+  // Whole-app translation: swap visible English for the IndicTrans2 dictionary of this language.
+  useEffect(() => {
+    document.documentElement.lang = language;
+    if (language === 'en') return;
+    let translator: DomTranslator | null = null;
+    let cancelled = false;
+    loadDictionary(language).then((dict) => {
+      if (cancelled || !Object.keys(dict).length) return;
+      translator = new DomTranslator(dict);
+      translator.start();
+    });
+    return () => { cancelled = true; translator?.stop(); };
+  }, [language]);
 
   const t = (key: string): string => {
     const langTrans = translations[language];
