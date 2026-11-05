@@ -176,6 +176,8 @@ export default function PharmacyV2() {
   const [manualText, setManualText] = useState('');
   const [manualPin, setManualPin] = useState('');
   const [fulfilment, setFulfilment] = useState<Fulfilment>('DELIVERY');
+  // Pickup chosen by the page (address not covered), not the patient: a covered address switches back.
+  const autoPickup = useRef(false);
   const [delivery, setDelivery] = useState<DeliveryOptions | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [payMode, setPayMode] = useState<PayMode>('CASH');
@@ -398,7 +400,12 @@ export default function PharmacyV2() {
       .then((options) => {
         if (!active) return;
         setDelivery(options);
-        if (!options.available) setFulfilment((current) => current === 'DELIVERY' ? 'PICKUP' : current);
+        if (!options.available) {
+          setFulfilment((current) => { if (current === 'DELIVERY') { autoPickup.current = true; return 'PICKUP'; } return current; });
+        } else if (autoPickup.current) {
+          autoPickup.current = false;
+          setFulfilment('DELIVERY');
+        }
       })
       .catch(() => { if (active) setDelivery(null); })
       .finally(() => { if (active) setDeliveryLoading(false); });
@@ -1261,15 +1268,16 @@ export default function PharmacyV2() {
                   <span><Truck /></span>
                   <span><b>Home delivery</b><small>{deliveryLoading ? 'Checking availability...' : delivery?.available ? (deliveryFee === 0 ? 'Free delivery' : `${money(delivery.fee)} by the pharmacy`) : delivery?.reason || 'Delivery not available'}</small></span>
                 </button>
-                <button type="button" aria-pressed={fulfilment === 'PICKUP'} onClick={() => setFulfilment('PICKUP')}>
+                <button type="button" aria-pressed={fulfilment === 'PICKUP'} onClick={() => { if (delivery?.available) autoPickup.current = false; setFulfilment('PICKUP'); }}>
                   <span><Store /></span>
                   <span><b>Store pickup</b><small>Free · Pick up from the pharmacy</small></span>
                 </button>
               </div>
               {delivery?.hours && <p className="ph2-muted" style={{ marginTop: 8 }}>Pharmacy hours: {delivery.hours.open}–{delivery.hours.close}</p>}
-              {fulfilment === 'DELIVERY' && (
+              {/* The address stays changeable when it isn't covered: another one may be. */}
+              {(fulfilment === 'DELIVERY' || (delivery?.available === false && !/pickup only/i.test(delivery.reason || ''))) && (
                 <div style={{ marginTop: 12 }}>
-                  <div className="ph2-address-head"><b>Delivery address</b>{addresses.length > 0 && <button type="button" className="ph2-link" onClick={() => setManualAddress((value) => !value)}>{manualMode ? 'Use a saved address' : 'Use a different address'}</button>}</div>
+                  <div className="ph2-address-head"><b>{fulfilment === 'DELIVERY' ? 'Delivery address' : 'Deliver to a different address?'}</b>{addresses.length > 0 && <button type="button" className="ph2-link" onClick={() => setManualAddress((value) => !value)}>{manualMode ? 'Use a saved address' : 'Use a different address'}</button>}</div>
                   {!manualMode ? (
                     <div className="ph2-address-list">
                       {addresses.map((address) => (
