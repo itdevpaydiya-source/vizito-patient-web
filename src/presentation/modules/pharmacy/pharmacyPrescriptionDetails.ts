@@ -1,7 +1,7 @@
 import {recordsApi} from '../records/recordsApi';
 import {getPrescriptionsApi} from '../../../services/patientHelper';
 import type {PharmacyRequestItem} from '../../../services/types';
-export interface PharmacyPrescriptionChoice {id:string;prescription_number:string|null;date:string|null;doctor?:{name:string|null}|null;medicines?:{name:string|null;dosage?:string|null}[]}
+export interface PharmacyPrescriptionChoice {id:string;prescription_number:string|null;date:string|null;doctor?:{name:string|null}|null;medicines?:{name:string|null;dosage?:string|null}[];pharmacy_status?:string|null}
 export async function personPharmacyPrescriptions(subject:string):Promise<PharmacyPrescriptionChoice[]>{if(subject==='self')return (await getPrescriptionsApi()).filter(p=>p.medicines.length>0);const records=await recordsApi.list(subject);return records.prescriptions.filter(p=>p.medicine_count>0).map(p=>({id:p.id,prescription_number:p.number,date:p.date,doctor:{name:p.doctor_name}}));}
 export function beneficiaryLabel(request:Pick<PharmacyRequestItem,'beneficiary_name'|'beneficiary_relationship'>|null|undefined,fallback?:string|null){const name=request?.beneficiary_name||fallback;return name?`For ${name}${request?.beneficiary_name&&request.beneficiary_relationship?` (${request.beneficiary_relationship})`:''}`:'';}
 export function requestedMedicines(request:Pick<PharmacyRequestItem,'requested_items'>|null|undefined):{medicine_id?:string;name:string;quantity:number}[]{try{const rows=JSON.parse(request?.requested_items||'[]');return Array.isArray(rows)?rows.filter(r=>r&&typeof r.name==='string'&&Number.isSafeInteger(r.quantity)&&r.quantity>0):[];}catch{return [];}}

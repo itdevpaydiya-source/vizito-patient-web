@@ -3,7 +3,7 @@ export type OrderGroup = 'active' | 'completed' | 'cancelled';
 export const orderGroup = (o: PatientOrder): OrderGroup => o.status === 'COMPLETED' ? 'completed' : ['CANCELLED','FULFILLMENT_FAILED'].includes(o.status) ? 'cancelled' : 'active';
 export const canPayOrder = (o: PatientOrder) => o.payment_method !== 'CASH' && ['CREATED','AWAITING_PAYMENT'].includes(o.status) && ['PENDING','FAILED'].includes(o.payment_status);
 export const orderAction = (o: PatientOrder) => canPayOrder(o) ? 'Pay now' : ['PROCESSING','READY_FOR_PICKUP','OUT_FOR_DELIVERY'].includes(o.status) ? 'Track order' : 'View details';
-export const orderAmount = (value: unknown) => value != null && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? `INR ${Number(value).toFixed(2)}` : 'Price not provided';
+export const orderAmount = (value: unknown) => value != null && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? `₹${Number(value).toFixed(2)}` : 'Price not provided';
 export const methodLabel = (value: string | null) => value ? ({UPI:'UPI',CARD:'Card',NET_BANKING:'Net banking',WALLET:'Wallet',CASH:'Cash'}[value] || value) : null;
 export function paymentSummary(o:PatientOrder) {
  const method=methodLabel(o.payment_method);

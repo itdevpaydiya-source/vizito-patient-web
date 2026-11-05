@@ -23,13 +23,13 @@ describe('basket drawer record details', () => {
  });
  it('shows real dosage, pack, unit price, line total and prescription status', () => {
   const html=render();
-  for(const text of ['500 mg','Tablet','Strip','10 units per pack','INR 12.50','INR 25.00','Prescription not required','Estimated subtotal']) expect(html).toContain(text);
+  for(const text of ['500 mg','Tablet','Strip','10 units per pack','₹12.50','₹25.00','Prescription not required','Estimated subtotal']) expect(html).toContain(text);
   expect(html).not.toContain('disabled="" aria-describedby="basket-validation"');
  });
  it('does not show free or partial totals for unknown and zero prices', () => {
   for(const mrp of [NaN,0]) {
    const html=render({...medicine,mrp});
-   expect(html).toContain('Price not provided'); expect(html).not.toContain('INR 0.00'); expect(html).not.toContain('INR NaN'); expect(html).toContain('basket-validation');
+   expect(html).toContain('Price not provided'); expect(html).not.toContain('₹0.00'); expect(html).not.toContain('INR NaN'); expect(html).toContain('basket-validation');
   }
  });
  it('requires prescription review without inventing verified status', () => {

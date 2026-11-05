@@ -60,7 +60,7 @@ export function OrderTimeline({ order }: { order: PatientOrder }) {
         ) : null;
 }
 
-export const orderMoney = (value: unknown) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? `INR ${Number(value).toFixed(2)}` : 'Price not provided';
+export const orderMoney = (value: unknown) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 ? `₹${Number(value).toFixed(2)}` : 'Price not provided';
 export function OrderSummaryTable({order, prescription}: {order: PatientOrder; prescription: PatientPrescription | null}) {
   return (
         <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-5" aria-label="Order items">

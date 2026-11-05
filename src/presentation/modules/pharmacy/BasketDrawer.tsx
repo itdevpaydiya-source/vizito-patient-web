@@ -8,7 +8,7 @@ import type { ProviderItem } from '../../../services/types';
 import { useSearchArea, formatDistance } from '../../../services/location';
 import { pharmacyDistance } from './pharmacyDiscovery';
 import { basketSubtotal, hasMedicinePrice, quantityProblem, type BasketLine } from './medicineBasket';
-const price = (value: number) => `INR ${value.toFixed(2)}`;
+const price = (value: number) => `₹${value.toFixed(2)}`;
 
 export default function BasketDrawer({ open, lines, error, pharmacy, onChangePharmacy, onClose, onQuantity, onReview, draft=false }: {
   draft?:boolean;
