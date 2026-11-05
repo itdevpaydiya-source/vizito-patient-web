@@ -9,7 +9,7 @@ import ThemedSelect from '../../components/forms/ThemedSelect';
 import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import VizitoPagination from '../../components/navigation/VizitoPagination';
 import LocationBar from '../../components/location/LocationBar';
-import { useSearchArea, formatDistance } from '../../../services/location';
+import { findPlaces, setSearchArea, useSearchArea, formatDistance } from '../../../services/location';
 import { usePharmacyBaskets } from '../../../services/PharmacyBasketContext';
 import {
   createDirectOrderApi, createPharmacyRequestApi, createRxOrderApi, createUploadedPharmacyRequestApi,
@@ -175,6 +175,7 @@ export default function PharmacyV2() {
   const [manualAddress, setManualAddress] = useState(false);
   const [manualText, setManualText] = useState('');
   const [manualPin, setManualPin] = useState('');
+  const [pickupAddressOpen, setPickupAddressOpen] = useState(false);
   const [fulfilment, setFulfilment] = useState<Fulfilment>('DELIVERY');
   // Pickup chosen by the page (address not covered), not the patient: a covered address switches back.
   const autoPickup = useRef(false);
@@ -183,6 +184,7 @@ export default function PharmacyV2() {
   const [payMode, setPayMode] = useState<PayMode>('CASH');
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState('');
+  const [findingPharmacies, setFindingPharmacies] = useState(false);
 
   const requestId = requestParam || draft.requestId || '';
   const pharmacyId = draft.pharmacyId || activeRequest?.pharmacy_partner_id || '';
@@ -191,9 +193,13 @@ export default function PharmacyV2() {
   const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
   const selectedRow = nearRows.find((p) => p.pharmacy_id === selectedPharmacy) || null;
   const detailPrice = selectedRow?.price ?? (detail ? moneyNumber(detail.mrp) : 0);
-  const sortedNear = useMemo(() => nearSort === 'price'
-    ? [...nearRows].sort((a, b) => (a.price ?? 1e9) - (b.price ?? 1e9) || (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9))
-    : nearRows, [nearRows, nearSort]);
+  const deliverySearch = params.get('deliver') === '1';
+  const sortedNear = useMemo(() => [...nearRows].sort((a, b) => {
+    if (deliverySearch && a.home_delivery !== b.home_delivery) return a.home_delivery ? -1 : 1;
+    return nearSort === 'price'
+      ? (a.price ?? 1e9) - (b.price ?? 1e9) || (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9)
+      : 0;
+  }), [nearRows, nearSort, deliverySearch]);
   const provider = pharmacyId ? providerById.get(pharmacyId) : undefined;
   const nearPharmacy = pharmacyId ? nearMeta[pharmacyId] : undefined;
   const pharmacyName = provider?.name || nearPharmacy?.name || 'your selected pharmacy';
@@ -205,6 +211,14 @@ export default function PharmacyV2() {
   const deliveryText = manualMode ? manualText.trim() : selectedAddress ? addressText(selectedAddress) : '';
   const deliveryPin = manualMode ? manualPin.trim() : selectedAddress?.pincode || '';
   const effectivePin = deliveryPin || area?.pincode || '';
+  const pickupOnly = /pickup only/i.test(delivery?.reason || '');
+  const pinUnavailable = delivery?.available === false && !pickupOnly;
+  const formatHours = (value: string) => {
+    const match = value.match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return value;
+    const hour = Number(match[1]);
+    return `${String(hour % 12 || 12).padStart(2, '0')}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+  };
 
   const quote = activeRequest ? quoteLines(activeRequest) : null;
   const accepted = !!activeRequest && activeRequest.status === 'Accepted' && !activeRequest.order_id;
@@ -269,18 +283,53 @@ export default function PharmacyV2() {
   const goSearch = (keyword: string) => {
     setSuggestOpen(false);
     const next = new URLSearchParams(params);
-    next.delete('medicine'); next.delete('view'); next.delete('request'); next.delete('pharmacyRequestId'); next.delete('page'); next.delete('all');
+    next.delete('medicine'); next.delete('view'); next.delete('request'); next.delete('pharmacyRequestId'); next.delete('page'); next.delete('all'); next.delete('deliver');
     if (keyword.trim()) next.set('q', keyword.trim()); else next.delete('q');
     changeParams(next);
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const openMedicine = (id: string) => {
+  const openMedicine = (id: string, deliver = false) => {
     const next = new URLSearchParams(params);
     next.delete('view'); next.delete('request'); next.delete('pharmacyRequestId');
     next.set('medicine', id);
+    if (deliver) next.set('deliver', '1'); else next.delete('deliver');
     changeParams(next);
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const findNearbyDeliveryPharmacies = async () => {
+    if (findingPharmacies) return;
+    const medicine = draft.lines[0]?.medicine.id;
+    if (!medicine) return;
+    setFindingPharmacies(true);
+    setActionError('');
+    const pin = deliveryPin;
+    try {
+      if (validPin(pin)) {
+        if (!manualMode && selectedAddress?.pin) {
+          const places = [selectedAddress.addressLine2, selectedAddress.city]
+            .filter((value, index, rows): value is string => !!value && rows.indexOf(value) === index);
+          setSearchArea({
+            ...selectedAddress.pin,
+            pincode: pin,
+            city: selectedAddress.city || undefined,
+            label: [...places, pin].join(', '),
+            source: 'manual',
+            at: Date.now(),
+          });
+        } else {
+          const place = (await findPlaces(pin))[0];
+          if (place) setSearchArea({ ...place, pincode: pin, source: 'manual', at: Date.now() });
+          else setActionError(`We couldn't find PIN ${pin} on the map. Showing pharmacies near your current location.`);
+        }
+      }
+    } catch {
+      if (validPin(pin)) setActionError(`We couldn't find PIN ${pin} on the map. Showing pharmacies near your current location.`);
+    } finally {
+      setFindingPharmacies(false);
+      openMedicine(medicine, true);
+    }
   };
 
   // Provider directory: names, addresses and distance for the pharmacy cards.
@@ -943,6 +992,7 @@ export default function PharmacyV2() {
 
   // ---------- Medicine details: what it is, then one clear step — pick a pharmacy and add ----------
   const detailState: 'nolocation' | 'loading' | 'none' | 'available' = !area ? 'nolocation' : nearLoading ? 'loading' : nearRows.some((p) => p.in_stock) ? 'available' : 'none';
+  const deliveringPharmacies = nearRows.filter((p) => p.in_stock && p.home_delivery).length;
   const addFrom = (pharmacyId: string) => { setSelectedPharmacy(pharmacyId); addMedicine(pharmacyId); };
 
   const medicineView = (
@@ -984,7 +1034,11 @@ export default function PharmacyV2() {
             <div className="dj-result-heading">
               <div>
                 <h2>Choose a pharmacy</h2>
-                <p>{detailState === 'available' ? `${nearRows.filter((p) => p.in_stock).length} ${nearRows.filter((p) => p.in_stock).length === 1 ? 'pharmacy has' : 'pharmacies have'} this in stock within 10 km. Prices are each pharmacy's own MRP.`
+                <p>{deliverySearch && area?.pincode && detailState === 'available'
+                  ? deliveringPharmacies > 0
+                    ? `${deliveringPharmacies} of these deliver to PIN ${area.pincode}.`
+                    : `None of these deliver to PIN ${area.pincode}. You can still collect from a store.`
+                  : detailState === 'available' ? `${nearRows.filter((p) => p.in_stock).length} ${nearRows.filter((p) => p.in_stock).length === 1 ? 'pharmacy has' : 'pharmacies have'} this in stock within 10 km. Prices are each pharmacy's own MRP.`
                   : detailState === 'nolocation' ? 'Set your location to see which pharmacies have this medicine.'
                     : detailState === 'loading' ? 'Checking nearby pharmacies…' : 'No pharmacy within 10 km has this medicine in stock.'}</p>
               </div>
@@ -1261,23 +1315,41 @@ export default function PharmacyV2() {
 
             {rxPanel}
 
-            <section className="ph2-card">
-              <div className="ph2-card-head"><div><h2>Delivery option</h2><p>The pharmacy confirms the delivery fee and time after you place the order.</p></div></div>
+            <section className="ph2-card ph2-receive-card">
+              <div className="ph2-receive-title"><Truck /><h2>How would you like to receive your order?</h2></div>
               <div className="ph2-fulfil">
-                <button type="button" aria-pressed={fulfilment === 'DELIVERY'} disabled={deliveryLoading || (delivery != null && !delivery.available)} onClick={() => setFulfilment('DELIVERY')}>
-                  <span><Truck /></span>
-                  <span><b>Home delivery</b><small>{deliveryLoading ? 'Checking availability...' : delivery?.available ? (deliveryFee === 0 ? 'Free delivery' : `${money(delivery.fee)} by the pharmacy`) : delivery?.reason || 'Delivery not available'}</small></span>
-                </button>
-                <button type="button" aria-pressed={fulfilment === 'PICKUP'} onClick={() => { if (delivery?.available) autoPickup.current = false; setFulfilment('PICKUP'); }}>
-                  <span><Store /></span>
-                  <span><b>Store pickup</b><small>Free · Pick up from the pharmacy</small></span>
-                </button>
+                <div className="ph2-option-wrap">
+                  <button type="button" aria-pressed={fulfilment === 'DELIVERY'} disabled={deliveryLoading || (delivery != null && !delivery.available)} onClick={() => { setPickupAddressOpen(false); setFulfilment('DELIVERY'); }}>
+                    <span className="ph2-radio" />
+                    <span className="ph2-option-icon"><Truck /></span>
+                    <span className="ph2-option-copy"><b>Home delivery</b><small>{deliveryLoading ? 'Checking availability...' : delivery?.available ? (deliveryFee === 0 ? 'Free delivery' : money(deliveryFee)) : pickupOnly ? 'This pharmacy offers store pickup only.' : `This pharmacy doesn't deliver to PIN ${effectivePin}.`}</small></span>
+                    {delivery?.available === false && <span className="ph2-badge ph2-badge--red">Unavailable</span>}
+                  </button>
+                  {pinUnavailable && <button type="button" className="ph2-link ph2-change-address" onClick={() => setPickupAddressOpen((value) => !value)}>Change address</button>}
+                </div>
+                {pinUnavailable && (
+                  <div className="ph2-delivery-unavailable"><Info /><span>Home delivery is unavailable for PIN {effectivePin}. You can collect your order from this pharmacy or choose another pharmacy that delivers to your location.</span><button type="button" className="ph2-btn ph2-btn--ghost ph2-btn--sm" disabled={findingPharmacies} onClick={() => void findNearbyDeliveryPharmacies()}>{findingPharmacies ? 'Finding pharmacies...' : 'Find nearby pharmacies'}</button></div>
+                )}
+                <div className="ph2-option-wrap">
+                  <button type="button" aria-pressed={fulfilment === 'PICKUP'} onClick={() => { if (delivery?.available) autoPickup.current = false; setPickupAddressOpen(false); setFulfilment('PICKUP'); }}>
+                    <span className="ph2-radio" />
+                    <span className="ph2-option-icon"><Store /></span>
+                    <span className="ph2-option-copy"><b>Store pickup</b><small>Collect your order directly from the pharmacy.</small></span>
+                    {fulfilment === 'PICKUP' && <span className="ph2-badge ph2-badge--green"><Check />Selected</span>}
+                  </button>
+                </div>
+                {fulfilment === 'PICKUP' && (
+                  <div className="ph2-pickup-panel">
+                    <MediaImage kind="business" businessType="pharmacy" name={pharmacyName} src={provider?.logo || nearPharmacy?.logo_url} />
+                    <div className="ph2-pickup-details"><small>Pickup from</small><b>{pharmacyName}</b>{pharmacyAddress && <p><MapPin />{pharmacyAddress}</p>}{delivery?.hours && <p><Clock />Pharmacy hours: {formatHours(delivery.hours.open)} – {formatHours(delivery.hours.close)}</p>}</div>
+                    <div className="ph2-pickup-fee"><small>Pickup fee</small><b>Free</b></div>
+                  </div>
+                )}
               </div>
-              {delivery?.hours && <p className="ph2-muted" style={{ marginTop: 8 }}>Pharmacy hours: {delivery.hours.open}–{delivery.hours.close}</p>}
               {/* The address stays changeable when it isn't covered: another one may be. */}
-              {(fulfilment === 'DELIVERY' || (delivery?.available === false && !/pickup only/i.test(delivery.reason || ''))) && (
+              {(fulfilment === 'DELIVERY' || (pinUnavailable && pickupAddressOpen)) && (
                 <div style={{ marginTop: 12 }}>
-                  <div className="ph2-address-head"><b>{fulfilment === 'DELIVERY' ? 'Delivery address' : 'Deliver to a different address?'}</b>{addresses.length > 0 && <button type="button" className="ph2-link" onClick={() => setManualAddress((value) => !value)}>{manualMode ? 'Use a saved address' : 'Use a different address'}</button>}</div>
+                  <div className="ph2-address-head"><b>Delivery address</b>{addresses.length > 0 && <button type="button" className="ph2-link" onClick={() => setManualAddress((value) => !value)}>{manualMode ? 'Use a saved address' : 'Use a different address'}</button>}</div>
                   {!manualMode ? (
                     <div className="ph2-address-list">
                       {addresses.map((address) => (
@@ -1293,11 +1365,10 @@ export default function PharmacyV2() {
                       <label className="ph2-field"><span>PIN code</span><input inputMode="numeric" maxLength={6} value={manualPin} onChange={(event) => setManualPin(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN" /></label>
                     </div>
                   )}
-                  {delivery?.available === false && <p className="ph2-warn" style={{ marginTop: 8 }}>{delivery.reason || 'This pharmacy does not deliver to this PIN code.'}</p>}
                   {delivery?.free_above != null && <p className="ph2-fee-note">Free delivery on orders above {money(delivery.free_above)}. The pharmacy calculates the final fee when the order is placed.</p>}
                 </div>
               )}
-              <p className="ph2-inline-info" style={{ marginTop: 12 }}><Info />{fulfilment === 'DELIVERY' ? 'The pharmacy will confirm the delivery time after you place the order.' : 'Show your order ID at the pharmacy counter when you collect.'}</p>
+              {fulfilment === 'DELIVERY' && <p className="ph2-inline-info" style={{ marginTop: 12 }}><Info />The pharmacy will confirm the delivery time after you place the order.</p>}
             </section>
 
             <section className="ph2-card ph2-important">
@@ -1315,18 +1386,18 @@ export default function PharmacyV2() {
               <h2>Price details</h2>
               <dl style={{ marginTop: 12 }}>
                 <div><dt>Items total ({cartLines.length} {cartLines.length === 1 ? 'item' : 'items'})</dt><dd>{money(itemsTotal)}</dd></div>
-                <div><dt>Delivery fee ({fulfilment === 'DELIVERY' ? 'Home delivery' : 'Store pickup'})</dt><dd>{fulfilment === 'PICKUP' ? 'Free' : deliveryLoading ? 'Checking...' : delivery?.available === false ? '—' : deliveryFee === 0 ? 'Free' : money(deliveryFee)}</dd></div>
+                <div><dt>{fulfilment === 'PICKUP' ? 'Pickup fee' : 'Delivery fee (Home delivery)'}</dt><dd>{fulfilment === 'PICKUP' ? 'Free' : deliveryLoading ? 'Checking...' : delivery?.available === false ? '—' : deliveryFee === 0 ? 'Free' : money(deliveryFee)}</dd></div>
                 <div className="ph2-summary-total"><dt>Total</dt><dd>{money(estimatedTotal)}</dd></div>
               </dl>
               <p className="ph2-summary-tax">Inclusive of all taxes</p>
-              <p className="ph2-fee-note">The final delivery fee is calculated by the pharmacy from the confirmed order total.</p>
+              {fulfilment === 'DELIVERY' && <p className="ph2-fee-note">The final delivery fee is calculated by the pharmacy from the confirmed order total.</p>}
             </section>
             <section className="ph2-card">
               <h2>Choose payment option</h2>
               <div className="ph2-pay-options" style={{ marginTop: 12 }}>
                 <button type="button" aria-pressed={payMode === 'CASH'} onClick={() => setPayMode('CASH')}>
                   <span /><span><ShieldCheck /></span>
-                  <span><b>Pay on {fulfilment === 'DELIVERY' ? 'delivery' : 'pickup'}</b><small>Pay the pharmacy in cash or by UPI when you receive your order.</small></span>
+                  <span><b>{fulfilment === 'PICKUP' ? 'Pay at pharmacy (on pickup)' : 'Pay on delivery'}</b><small>{fulfilment === 'PICKUP' ? 'Pay in cash or UPI when you collect your order.' : 'Pay the pharmacy in cash or by UPI when you receive your order.'}</small></span>
                 </button>
                 <button type="button" aria-pressed={payMode === 'ONLINE'} onClick={() => setPayMode('ONLINE')}>
                   <span /><span><ShoppingCart /></span>
