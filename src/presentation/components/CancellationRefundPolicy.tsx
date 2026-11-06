@@ -22,13 +22,13 @@ const POLICY_DETAILS: Record<
     points: [
       {
         icon: CheckCircle,
-        title: '100% Refund Before Visit',
-        desc: 'Cancel anytime before your scheduled appointment start time for a full 100% refund.',
+        title: '100% Refund Up To 2 Hours Before',
+        desc: 'Cancel up to 2 hours before your scheduled appointment time for a full 100% refund.',
       },
       {
         icon: Clock,
-        title: 'Non-Cancellable Once Time Passes',
-        desc: 'Once your appointment start time arrives or consultation begins, the booking cannot be cancelled.',
+        title: 'No Cancellation In The Last 2 Hours',
+        desc: 'Within 2 hours of your appointment, the booking cannot be cancelled online. Contact the hospital or support.',
       },
       {
         icon: RotateCcw,
@@ -65,7 +65,7 @@ const POLICY_DETAILS: Record<
       {
         icon: CheckCircle,
         title: '100% Refund for Unused Visits',
-        desc: 'Cancel anytime before service begins. All unused visits or shifts are refunded in full.',
+        desc: 'Cancel up to 2 hours before your next visit. All unused visits or shifts are refunded in full.',
       },
       {
         icon: Clock,

@@ -10,6 +10,7 @@ import { addBasketMedicine } from '../pharmacy/medicineBasket';
 import { labDocumentLabel, receiptFilename, saveLabDocumentFile as saveConfirmationFile } from '../labs/labConfirmationDetails';
 import { getPharmacyRequestsApi } from '../../../services/pharmacyOrderHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
+import ShareBooking from '../../components/ShareBooking';
 import { addressOf, canCancel, canReschedule, dateLabel, dateOf, permissionsOf, placeOf, refOf, statusText, timeRange, typeOf, type Booking } from './bookingsPresentation';
 
 function WheelchairIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13" cy="3" r="1.5" fill="currentColor"/><path d="M13 6v7h6l2 6M13 9h5M9 8a7 7 0 1 0 7 11"/></svg>; }
@@ -143,6 +144,7 @@ export default function BookingDetailsContent({ booking: b, hideActions, onResch
       <Fact icon={<CreditCard/>} label="Payment status"><span className={`bk-payment ${payment.paid ? 'is-paid' : ''}`}>{payment.text}</span></Fact>
     </div>
     {!hideActions && <>
+      <ShareBooking title="My booking on Vizito" lines={[`Booking ID: ${refOf(b)}`,placeOf(b),[dateLabel(dateOf(b)),timeRange(b)].filter(Boolean).join(', ')].filter(Boolean) as string[]}/>
       <div className="bk-detail-actions">
         {canReschedule(b) && <button className="bk-button" onClick={onReschedule}>Reschedule</button>}
         {canCancel(b) && <button className="bk-button bk-danger" onClick={onCancel}>Cancel</button>}
