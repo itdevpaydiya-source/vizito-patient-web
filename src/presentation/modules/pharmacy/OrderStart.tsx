@@ -1,7 +1,7 @@
 import ThemedSelect from '../../components/forms/ThemedSelect';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Store, MapPin, Star, RotateCcw, FileText, Truck, Pill, ChevronRight, Stethoscope, CheckCircle2, ArrowDownWideNarrow, ShieldCheck, Bike, Settings, Clock, X } from 'lucide-react';
+import { Search, Store, MapPin, Star, RotateCcw, FileText, Truck, Pill, ChevronRight, Stethoscope, CheckCircle2, ArrowDownWideNarrow, ShieldCheck, Settings, Clock, X } from 'lucide-react';
 import { getProvidersApi, getPrescriptionsApi, type PatientPrescription } from '../../../services/patientHelper';
 import BusinessImage from '../../components/BusinessImage';
 import ServiceLocationDialog from '../../components/location/ServiceLocationDialog';
@@ -48,8 +48,7 @@ export function PharmacyCard({ p, onChoose, compact }: { p: ProviderItem; onChoo
         <p className={`mt-1 flex items-center gap-1 text-[11px] ${p.pause ? 'text-amber-700' : 'text-[#6880a6]'}`}><Clock className="h-3 w-3 shrink-0" />{p.pause ? pauseText(p.pause, 'orders') : hours.length ? hours[0] : 'Hours not provided'}</p>
         {details && <div className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 text-xs text-slate-600"><p>{p.pause ? 'Temporarily unavailable' : 'Taking medicine orders and prescription requests'}</p>{hours.map(h => <p key={h}>{h}</p>)}<p>Current opening status not provided.</p><p>Minimum order details not provided.</p></div>}
       </div>
-      {!compact && <div className="w-full shrink-0 divide-y divide-slate-100 rounded-xl border border-[#edf1f7] bg-slate-50/60 text-xs sm:w-[158px]">
-        <div className="flex items-center gap-3 px-3 py-2"><Bike className="h-5 w-5 shrink-0" /><div><p className="font-semibold">Home delivery</p><p className="mt-0.5 text-[11px] text-[#6880a6]">Details not provided</p></div></div>
+      {!compact && <div className="w-full shrink-0 rounded-xl border border-[#edf1f7] bg-slate-50/60 text-xs sm:w-[158px]">
         <div className="flex items-center gap-3 px-3 py-2"><Store className="h-5 w-5 shrink-0" /><div><p className="font-semibold">Pickup availability</p><p className="mt-0.5 text-[11px] text-[#6880a6]">Details not provided</p></div></div>
       </div>}
       {!compact && <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto sm:flex-col">

@@ -22,7 +22,7 @@ export function KindIcon({ booking }: { booking: Booking }) {
 export function Status({ booking }: { booking: Booking }) {
   return <span className={`bk-status bk-${booking.section}`}>{statusText(booking)}</span>;
 }
-const money = (value: number | string | null | undefined) => value != null && Number.isFinite(Number(value)) ? `Rs. ${Number(value).toFixed(2)}` : null;
+const money = (value: number | string | null | undefined) => value != null && Number.isFinite(Number(value)) ? `₹${Number(value).toFixed(2)}` : null;
 export function paymentOf(b: Booking) {
   if (!b.pharmacy && !b.rental && !b.labOrder && !b.homeCare) {
     return b.provider?.payment ? { paid: true, text: `Paid (${money(b.provider.payment.amount)})` } : { paid: false, text: 'To be paid at clinic' };
@@ -31,6 +31,8 @@ export function paymentOf(b: Booking) {
   const amount = b.pharmacy?.total_amount ?? b.rental?.total_amount ?? b.provider?.total_amount ?? b.lab?.total_amount ?? b.care?.total_amount ?? b.totalAmount;
   if (status === 'PAID') return { paid: true, text: money(amount) ? `Paid (${money(amount)})` : 'Paid' };
   if (status && !['PENDING','UNPAID'].includes(status)) return { paid: false, text: status.replaceAll('_', ' ').toLowerCase() };
+  // A cancelled booking that was never paid owes nothing; don't ask the patient to pay for it.
+  if (b.section === 'cancelled') return { paid: false, text: 'Nothing to pay (cancelled)' };
   return { paid: false, text: b.rental || b.pharmacy?.fulfillment_type === 'DELIVERY' ? 'To be paid on delivery' : b.pharmacy ? 'To be paid at pharmacy' : b.homeCare ? 'To be paid after visit' : 'To be paid at centre' };
 }
 function Fact({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {

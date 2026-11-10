@@ -45,6 +45,8 @@ export async function payOnline(input: {
   amount: number;
   purpose: string;
   description: string;
+  /** Vizito record this payment is for (e.g. pharmacy order ID), so the server can always match the payment to it. */
+  reference?: string;
   prefill?: { name?: string; email?: string; contact?: string };
 }): Promise<PaidOnline> {
   await loadCheckout();
@@ -67,7 +69,7 @@ export async function payOnline(input: {
     contact: rawContact,
     email: rawEmail,
   };
-  const order = (await apiClient.post("/bookings/payments/razorpay/order", { amount: input.amount, purpose: input.purpose })).data;
+  const order = (await apiClient.post("/bookings/payments/razorpay/order", { amount: input.amount, purpose: input.purpose, ...(input.reference ? { reference: input.reference } : {}) })).data;
   // An open modal <dialog> sits in the browser's top layer and makes the rest of the page inert, so
   // Razorpay's window would open behind it, unclickable. Step those dialogs out while paying.
   const modals = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]")).filter((d) => d.matches(":modal"));

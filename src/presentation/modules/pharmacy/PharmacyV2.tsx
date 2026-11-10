@@ -5,6 +5,7 @@ import {
   Minus, Package, Phone, Plus, Search, ShieldCheck, ShoppingCart, Store, Trash2, Truck, Upload, X,
 } from 'lucide-react';
 import MediaImage from '../../components/MediaImage';
+import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
 import ThemedSelect from '../../components/forms/ThemedSelect';
 import VizitoDialog from '../../components/dialogs/VizitoDialog';
 import VizitoPagination from '../../components/navigation/VizitoPagination';
@@ -15,16 +16,18 @@ import {
   createDirectOrderApi, createPharmacyRequestApi, createRxOrderApi, createUploadedPharmacyRequestApi,
   cancelPharmacyRequestApi, getDeliveryOptionsApi, getMedicineDetailApi,
   getMedicinePharmaciesNearApi, getMyOrdersGroupedPageApi, getPharmacyRequestsApi,
-  searchMedicinesNearApi, discoverMedicinesApi, suggestMedicinesApi, getPharmaciesWithAllApi,
+  searchMedicinesNearApi, discoverMedicinesApi, suggestMedicinesApi, getPharmaciesWithAllApi, getPharmacyCatalogueApi,
   type DeliveryOptions, type MedicineDetail, type MedicineNearPharmacy, type CatalogueMedicine, type NearSearchPage,
-  type MedicineNearResult, type MedicineSearchResult, type MedicineSuggestion, type Paged, type PatientOrderV2, type PharmacyWithAll,
+  type MedicineNearResult, type MedicineSearchResult, type MedicineSuggestion, type Paged, type PatientOrderV2, type PharmacyMedicine, type PharmacyWithAll,
 } from '../../../services/pharmacyOrderHelper';
 import { getAddressesApi as loadAddresses, getProvidersApi, type PatientAddress } from '../../../services/patientHelper';
 import type { PharmacyRequestItem, ProviderItem } from '../../../services/types';
-import { personPharmacyPrescriptions, prescriptionFileProblem, type PharmacyPrescriptionChoice } from './pharmacyPrescriptionDetails';
-import { quoteExpired, quoteLines } from './prescriptionRequests';
+import { beneficiaryLabel, personPharmacyPrescriptions, prescriptionFileProblem, requestedMedicines, type PharmacyPrescriptionChoice } from './pharmacyPrescriptionDetails';
+import { differentProduct, quoteExpired, quoteLines } from './prescriptionRequests';
+import { onlinePaymentConfig } from '../../../services/razorpayCheckout';
 import { recordsApi } from '../records/recordsApi';
 import { money, moneyNumber, addressText, errorText, validPin, deliveryEtaText } from './pharmacyV2Ui';
+import BookingForChip, { useBookingFamily } from '../family/BookingForChip';
 import type { BasketLine } from './medicineBasket';
 import '../consultations/DoctorJourney.css';
 import './PharmacyV2.css';
@@ -121,6 +124,8 @@ export default function PharmacyV2() {
     ...(sortBy !== 'relevance' ? { sort: sortBy as 'price' | 'name' } : {}),
   };
   const requestParam = params.get('request') || params.get('pharmacyRequestId') || '';
+  // A link from a pharmacy card: browse what this one pharmacy stocks.
+  const pharmacyParam = params.get('pharmacy') || '';
   const view: 'search' | 'medicine' | 'cart' = medicineId ? 'medicine' : params.get('view') === 'cart' || requestParam ? 'cart' : 'search';
 
   const [term, setTerm] = useState(query);
@@ -129,6 +134,7 @@ export default function PharmacyV2() {
   const [results, setResults] = useState<NearSearchPage | null>(null);
   // Before a location is set the search still works: catalogue matches, no stock or price claims.
   const [catalogue, setCatalogue] = useState<(Paged<CatalogueMedicine> & { did_you_mean: string | null }) | null>(null);
+  const [stocked, setStocked] = useState<{ items: PharmacyMedicine[]; total: number } | null>(null);
   const [suggestions, setSuggestions] = useState<MedicineSuggestion[]>([]);
   const [suggestFix, setSuggestFix] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -159,6 +165,8 @@ export default function PharmacyV2() {
 
   const [requestNonce, setRequestNonce] = useState(0);
   const [activeRequest, setActiveRequest] = useState<PharmacyRequestItem | null>(null);
+  // A request that already became an order has nothing left to choose here: show the order, not a cart.
+  useEffect(() => { if (activeRequest?.order_id && !['Cancelled', 'Rejected', 'Expired'].includes(activeRequest.status)) navigate(`/pharmacy-orders/${activeRequest.order_id}`, { replace: true }); }, [activeRequest?.order_id, activeRequest?.status, navigate]);
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestError, setRequestError] = useState('');
 
@@ -182,12 +190,26 @@ export default function PharmacyV2() {
   const [delivery, setDelivery] = useState<DeliveryOptions | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [payMode, setPayMode] = useState<PayMode>('CASH');
+  // null = not known yet; the payment dialog still checks before charging.
+  const [onlineAvailable, setOnlineAvailable] = useState<boolean | null>(null);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState('');
   const [findingPharmacies, setFindingPharmacies] = useState(false);
 
+  // Who the medicine is for: 'self' or a family member's user id (same URL rule as every booking journey).
+  const [familyMemberId, setFamilyMemberId] = useState('');
+  const { family, error: familyError } = useBookingFamily(setFamilyMemberId);
+  const member = family.find((f) => String(f.memberUserId) === familyMemberId) || null;
+  const subject = member ? familyMemberId : 'self';
+  const forUserId = member ? Number(familyMemberId) : undefined;
+  // An upload belongs to the person it was filed under; it can't be sent for someone else.
+  const documentId = (draft.documentSubject || 'self') === subject ? draft.documentId : undefined;
+  // The patient decides before a quote takes the place of a basket they built themselves.
+  const [replaceBasket, setReplaceBasket] = useState(false);
+
   const requestId = requestParam || draft.requestId || '';
-  const pharmacyId = draft.pharmacyId || activeRequest?.pharmacy_partner_id || '';
+  // A request opened by link belongs to its own pharmacy, whatever is in the browser basket.
+  const pharmacyId = (requestParam && activeRequest?.pharmacy_partner_id) || draft.pharmacyId || activeRequest?.pharmacy_partner_id || '';
   const needsRx = draft.lines.some((line) => line.medicine.requires_prescription);
 
   const providerById = useMemo(() => new Map(providers.map((p) => [p.id, p])), [providers]);
@@ -195,14 +217,16 @@ export default function PharmacyV2() {
   const detailPrice = selectedRow?.price ?? (detail ? moneyNumber(detail.mrp) : 0);
   const deliverySearch = params.get('deliver') === '1';
   const sortedNear = useMemo(() => [...nearRows].sort((a, b) => {
+    if (pharmacyParam && (a.pharmacy_id === pharmacyParam) !== (b.pharmacy_id === pharmacyParam)) return a.pharmacy_id === pharmacyParam ? -1 : 1;
     if (deliverySearch && a.home_delivery !== b.home_delivery) return a.home_delivery ? -1 : 1;
     return nearSort === 'price'
       ? (a.price ?? 1e9) - (b.price ?? 1e9) || (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9)
       : 0;
-  }), [nearRows, nearSort, deliverySearch]);
+  }), [nearRows, nearSort, deliverySearch, pharmacyParam]);
   const provider = pharmacyId ? providerById.get(pharmacyId) : undefined;
   const nearPharmacy = pharmacyId ? nearMeta[pharmacyId] : undefined;
   const pharmacyName = provider?.name || nearPharmacy?.name || 'your selected pharmacy';
+  const chosenPharmacyName = pharmacyParam ? providerById.get(pharmacyParam)?.name || nearMeta[pharmacyParam]?.name || 'This pharmacy' : '';
   const pharmacyAddress = provider?.address || nearPharmacy?.address || '';
   const pharmacyDistanceText = provider && area ? (() => { const pin = provider.storePin; return pin ? formatDistance(Math.hypot((pin.lat - area.lat) * 111320, (pin.lng - area.lng) * 111320 * Math.cos(area.lat * Math.PI / 180))) : null; })() : null;
 
@@ -229,26 +253,40 @@ export default function PharmacyV2() {
     return new Map((here?.prices || []).map((x) => [x.medicine_id, Number(x.price)]));
   }, [together, draft.pharmacyId]);
 
+  const quoteExpiredNow = accepted && !!activeRequest?.quote_items && quoteExpired(activeRequest);
+
+  // With a quote, the cart IS the quote: one row per orderable line, exactly what the server charges.
+  // A substitute the patient never added still gets a row, built from the quote itself.
   const cartLines = useMemo<BasketLine[]>(() => {
     if (!quoteReady || !quote) {
       return draft.lines.map((line) => livePrices.has(line.medicine.id) ? { ...line, medicine: { ...line.medicine, mrp: livePrices.get(line.medicine.id)! } } : line);
     }
-    return quote.flatMap((line) => {
-      if (!line.available) return [];
+    return quote.flatMap((line): BasketLine[] => {
+      if (!line.available || !line.medicine_id) return [];
       const existing = draft.lines.find((item) => item.medicine.id === line.medicine_id);
-      if (!existing) return [];
       const price = Number(line.unit_price);
-      return [{
-        medicine: { ...existing.medicine, mrp: Number.isFinite(price) ? price : existing.medicine.mrp },
-        quantity: Math.max(1, Number(line.quantity) || existing.quantity),
-      }];
+      const medicine: BasketLine['medicine'] = existing?.medicine || {
+        id: line.medicine_id, code: null, medicine_name: line.item_name || line.prescribed_name, brand_name: null,
+        generic_name: '', strength: '', strength_unit: '', dosage_form: '', mrp: price, requires_prescription: false,
+        image_url: null, packaging_type: null, units_per_pack: null,
+      };
+      return [{ medicine: { ...medicine, mrp: Number.isFinite(price) ? price : medicine.mrp }, quantity: Math.max(1, Number(line.quantity) || 1) }];
     });
   }, [draft.lines, quote, quoteReady, livePrices]);
 
-  const itemsTotal = quoteReady && activeRequest && Number.isFinite(moneyNumber(activeRequest.quote_total))
-    ? moneyNumber(activeRequest.quote_total)
-    : cartLines.reduce((sum, line) => sum + Math.round(moneyNumber(line.medicine.mrp) * 100) * line.quantity, 0) / 100;
+  const itemsTotal = cartLines.reduce((sum, line) => sum + Math.round(moneyNumber(line.medicine.mrp) * 100) * line.quantity, 0) / 100;
+  // Basket items the pharmacist did not quote (e.g. no-prescription items): they won't be in this order.
+  const notInQuote = quoteReady && quote && draft.requestId === activeRequest?.id
+    ? draft.lines.filter((line) => !quote.some((row) => row.available && row.medicine_id === line.medicine.id))
+    : [];
+  // The prescription decides this order until a live quote exists, even if the basket has no Rx line.
+  const openRequest = !!activeRequest && !activeRequest.order_id;
+  const rxPending = (needsRx || openRequest) && !quoteReady;
+  // Opened from Requests with nothing orderable yet: show the request, not a cart.
+  const requestOnly = !!requestId && !quoteReady && (cartLines.length === 0 || (!!requestParam && draft.requestId !== requestParam));
 
+  // The pharmacy's own minimum for home delivery, shown before the order is placed.
+  const belowMinimum = fulfilment === 'DELIVERY' && !!delivery?.available && delivery.min_order != null && itemsTotal < delivery.min_order;
   const deliveryFee = fulfilment === 'DELIVERY' && delivery?.available
     ? (delivery.free_above != null && itemsTotal >= delivery.free_above ? 0 : delivery.fee)
     : 0;
@@ -350,10 +388,19 @@ export default function PharmacyV2() {
 
   // Nearby search: /medicines/near always needs the patient's coordinates.
   useEffect(() => {
-    if (view !== 'search') { setResults(null); setCatalogue(null); return; }
+    if (view !== 'search') { setResults(null); setCatalogue(null); setStocked(null); return; }
     const keyword = query.length >= 2 ? query : '';
     let active = true;
     setSearching(true); setSearchError('');
+    if (pharmacyParam) {
+      setResults(null); setCatalogue(null);
+      getPharmacyCatalogueApi(pharmacyParam, keyword, Math.max(1, Number(params.get('page')) || 1))
+        .then((page) => { if (active) setStocked(page); })
+        .catch((error) => { if (active) { setSearchError(errorText(error, 'This pharmacy\'s medicines could not be loaded.')); setStocked(null); } })
+        .finally(() => { if (active) setSearching(false); });
+      return () => { active = false; };
+    }
+    setStocked(null);
     if (!area) {
       setResults(null);
       discoverMedicinesApi({ keyword, page: Math.max(1, Number(params.get('page')) || 1), page_size: 10, ...listFilters })
@@ -371,7 +418,7 @@ export default function PharmacyV2() {
       .catch((error) => { if (active) { setSearchError(errorText(error, 'Medicines could not be searched near you.')); setResults(null); } })
       .finally(() => { if (active) setSearching(false); });
     return () => { active = false; };
-  }, [view, area?.lat, area?.lng, area?.pincode, query, params.get('page'), filterRx, filterDelivery, filterPrice, sortBy, retry]);
+  }, [view, area?.lat, area?.lng, area?.pincode, query, params.get('page'), filterRx, filterDelivery, filterPrice, sortBy, retry, pharmacyParam]);
 
   // The catalogue has no "popular" flag; this is a real unfiltered slice of the nearby catalogue.
   useEffect(() => {
@@ -463,21 +510,36 @@ export default function PharmacyV2() {
 
   // Prescription choices for an Rx basket.
   useEffect(() => {
-    if (view !== 'cart' || !needsRx) { setPrescriptions([]); return; }
+    if (view !== 'cart' || (!needsRx && !activeRequest?.prescription_id)) { setPrescriptions([]); return; }
     let active = true;
     setPrescriptionLoading(true);
-    personPharmacyPrescriptions('self')
+    personPharmacyPrescriptions(subject)
       .then((rows) => {
         if (!active) return;
         setPrescriptions(rows);
         const rxLines = draft.lines.filter((line) => line.medicine.requires_prescription);
         const match = rows.find((p) => rxLines.every((line) => (p.medicines || []).some((m) => norm(m.name) === norm(line.medicine.medicine_name))));
-        setPrescriptionId((current) => current || match?.id || rows[0]?.id || '');
+        // Family lists carry no medicine names, so the patient picks: never guess a prescription for someone else.
+        setPrescriptionId((current) => current || match?.id || (subject === 'self' ? rows[0]?.id : '') || '');
       })
       .catch(() => { if (active) setPrescriptions([]); })
       .finally(() => { if (active) setPrescriptionLoading(false); });
     return () => { active = false; };
-  }, [view, needsRx, draft.lines.length]);
+  }, [view, needsRx, draft.lines.length, activeRequest?.prescription_id, subject]);
+
+  useEffect(() => {
+    if (view !== 'cart') return;
+    let active = true;
+    onlinePaymentConfig()
+      .then((config) => {
+        if (!active) return;
+        const ready = config.provider === 'razorpay';
+        setOnlineAvailable(ready);
+        if (!ready) setPayMode('CASH');
+      })
+      .catch(() => { if (active) setOnlineAvailable(null); });
+    return () => { active = false; };
+  }, [view]);
 
   // Poll the request so the quote appears without a manual refresh.
   useEffect(() => {
@@ -506,6 +568,7 @@ export default function PharmacyV2() {
   useEffect(() => {
     if (!activeRequest || !baskets.draftReady) return;
     if (baskets.draft.requestId === activeRequest.id && baskets.draft.lines.length) return;
+    if (baskets.draft.lines.length && !replaceBasket) return;
     const rows = quoteLines(activeRequest);
     if (!rows?.length) return;
     let active = true;
@@ -527,7 +590,28 @@ export default function PharmacyV2() {
       });
     });
     return () => { active = false; };
-  }, [activeRequest?.id, activeRequest?.quote_items, baskets.draftReady]);
+  }, [activeRequest?.id, activeRequest?.quote_items, baskets.draftReady, replaceBasket]);
+
+  // The choice survives moving between pages through the saved draft.
+  useEffect(() => {
+    if (!baskets.draftReady) return;
+    const key = params.get('family_member_id');
+    if (key === null) {
+      if (draft.subject && draft.subject !== 'self' && !familyMemberId) setFamilyMemberId(draft.subject);
+      return;
+    }
+    if (key !== (draft.subject || 'self') && (key === 'self' || subject === key)) baskets.updateDraft((current) => ({ ...current, subject: key }));
+  }, [baskets.draftReady, params, draft.subject, familyMemberId, subject]);
+
+  // Someone with family sees who the cart is for. A sent request already names its own patient.
+  useEffect(() => {
+    if (view !== 'cart' || requestId || !family.length || !baskets.draftReady || params.has('family_member_id')) return;
+    const next = new URLSearchParams(params);
+    next.set('family_member_id', draft.subject || 'self');
+    setParams(next, { replace: true });
+  }, [view, requestId, family.length, baskets.draftReady, params, draft.subject]);
+
+  useEffect(() => { setPrescriptionId(''); }, [subject]);
 
   // Move the whole cart to a pharmacy that stocks every item, at that pharmacy's prices.
   const switchPharmacy = (target: PharmacyWithAll) => {
@@ -552,7 +636,7 @@ export default function PharmacyV2() {
     const ok = baskets.updateDraft({
       ...draft, lines, pharmacyId: targetPharmacy,
       requestId: undefined, prescriptionId: undefined,
-      subject: draft.subject || 'self',
+      subject,
     });
     if (!ok) { setActionError('Your basket could not be saved in this browser. Allow local storage and try again.'); return; }
     const next = new URLSearchParams(params);
@@ -607,9 +691,9 @@ export default function PharmacyV2() {
       const form = new FormData();
       form.append('file', file);
       form.append('doc_type', 'PRESCRIPTION');
-      form.append('subject', 'self');
+      form.append('subject', subject);
       const document = await recordsApi.upload(form);
-      baskets.updateDraft({ ...draft, documentId: document.id, documentName: document.file_name, documentSubject: 'self', prescriptionSource: 'upload' });
+      baskets.updateDraft({ ...draft, documentId: document.id, documentName: document.file_name, documentSubject: subject, prescriptionSource: 'upload' });
       setRxSource('upload');
       if (view !== 'cart') setUploadSend({ open: true, pharmacyId: '', busy: false, error: '' });
     } catch (error) {
@@ -621,10 +705,10 @@ export default function PharmacyV2() {
   };
 
   const sendUploadForQuote = async () => {
-    if (!draft.documentId || !uploadSend.pharmacyId) return;
+    if (!documentId || !uploadSend.pharmacyId) return;
     setUploadSend((u) => ({ ...u, busy: true, error: '' }));
     try {
-      await createUploadedPharmacyRequestApi({ pharmacy_partner_id: uploadSend.pharmacyId, document_id: draft.documentId, items: [] });
+      await createUploadedPharmacyRequestApi({ pharmacy_partner_id: uploadSend.pharmacyId, document_id: documentId, items: [], ...(forUserId != null ? { for_user_id: forUserId } : {}) });
       baskets.updateDraft({ ...draft, documentId: undefined, documentName: undefined, prescriptionSource: undefined });
       setUploadSend({ open: false, pharmacyId: '', busy: false, error: '' });
       navigate('/pharmacy-orders?tab=requests&sent=1');
@@ -640,15 +724,16 @@ export default function PharmacyV2() {
     try {
       let sent: PharmacyRequestItem;
       if (rxSource === 'upload') {
-        if (!draft.documentId) throw new Error('Upload your prescription first.');
+        if (!documentId) throw new Error('Upload your prescription first.');
         sent = await createUploadedPharmacyRequestApi({
           pharmacy_partner_id: pharmacyId,
-          document_id: draft.documentId,
+          document_id: documentId,
           items: rxLines.map((line) => ({ medicine_id: line.medicine.id, name: line.medicine.medicine_name, quantity: line.quantity })),
+          ...(forUserId != null ? { for_user_id: forUserId } : {}),
         });
       } else {
         if (!prescriptionId) throw new Error('Choose a doctor prescription for these medicines.');
-        sent = await createPharmacyRequestApi(prescriptionId, pharmacyId);
+        sent = await createPharmacyRequestApi(prescriptionId, pharmacyId, forUserId);
       }
       baskets.updateDraft({ ...draft, requestId: sent.id, prescriptionId: rxSource === 'vizito' ? prescriptionId : undefined });
       setActiveRequest(sent);
@@ -681,6 +766,12 @@ export default function PharmacyV2() {
     }
   };
 
+  const keepBasket = () => {
+    const next = new URLSearchParams(params);
+    next.delete('request'); next.delete('pharmacyRequestId'); next.delete('step'); next.set('view', 'cart');
+    changeParams(next);
+  };
+
   const startFresh = () => {
     baskets.updateDraft({ ...draft, requestId: undefined, prescriptionId: undefined });
     setActiveRequest(null);
@@ -692,7 +783,8 @@ export default function PharmacyV2() {
 
   const placeOrder = async () => {
     if (!pharmacyId) { setPlaceError('Choose a pharmacy first.'); return; }
-    if (needsRx && !quoteReady) { setPlaceError('The pharmacist must accept your prescription and send a quote before you can order.'); return; }
+    if (quoteExpiredNow) { setPlaceError('This quote has expired. Cancel the request and send it again to get a fresh quote.'); return; }
+    if (rxPending) { setPlaceError('The pharmacist must accept your prescription and send a quote before you can order.'); return; }
     if (fulfilment === 'DELIVERY') {
       if (deliveryText.length < 8) { setPlaceError('Add the full delivery address.'); return; }
       if (!validPin(deliveryPin)) { setPlaceError('Add a valid 6-digit delivery PIN code.'); return; }
@@ -701,7 +793,7 @@ export default function PharmacyV2() {
     }
     setPlacing(true); setPlaceError(''); setActionError('');
     try {
-      const items = draft.lines.map((line) => ({ medicine_id: line.medicine.id, quantity: line.quantity }));
+      const items = cartLines.map((line) => ({ medicine_id: line.medicine.id, quantity: line.quantity }));
       const common = {
         fulfillment_type: fulfilment,
         payment_method: (payMode === 'CASH' ? 'CASH' : 'UPI') as 'CASH' | 'UPI',
@@ -795,21 +887,22 @@ export default function PharmacyV2() {
           {draft.lines.length > 3 && <p className="ph2-muted">+ {draft.lines.length - 3} more medicine{draft.lines.length - 3 === 1 ? '' : 's'}</p>}
           <div className="ph2-mini-total"><span>Item total</span><b>{money(itemsTotal)}</b></div>
           <Link className="ph2-btn ph2-btn--primary ph2-btn--block" to="/pharmacy-orders/new?view=cart">View cart &amp; checkout <ArrowRight /></Link>
-          <p className="ph2-fee-note">Delivery fee is calculated by the pharmacy at checkout.</p>
+          <p className="ph2-fee-note">Delivery fee is shown at checkout.</p>
         </>
       )}
     </aside>
   );
 
   // ---------- Medicine list (same pattern as Find Doctors / Find Hospitals) ----------
-  const listRows: (MedicineNearResult | CatalogueMedicine)[] = area ? (results?.items || []) : (catalogue?.items || []);
-  const listTotal = area ? (results?.total || 0) : (catalogue?.total || 0);
+  const listRows: (MedicineNearResult | CatalogueMedicine)[] = pharmacyParam ? (stocked?.items || []) : area ? (results?.items || []) : (catalogue?.items || []);
+  const listTotal = pharmacyParam ? (stocked?.total || 0) : area ? (results?.total || 0) : (catalogue?.total || 0);
   const listPage = area ? results : catalogue;
+  const stockedPage = Math.max(1, Number(params.get('page')) || 1);
   const didYouMean = results?.did_you_mean || catalogue?.did_you_mean || null;
   const filtersOn = !!(filterRx || filterDelivery || filterPrice);
   const quickSearches = ['Paracetamol', 'Cetirizine', 'Pantoprazole', 'Azithromycin', 'Metformin', 'Amlodipine'];
 
-  const medicineCard = (m: MedicineNearResult | CatalogueMedicine, state: 'near' | 'nolocation' | 'unavailable') => {
+  const medicineCard = (m: MedicineNearResult | CatalogueMedicine, state: 'near' | 'nolocation' | 'unavailable' | 'stocked') => {
     const near = state === 'near' && 'pharmacies_near' in m ? m : null;
     const mrp = moneyNumber(m.mrp);
     const price = near?.price_from != null
@@ -835,6 +928,7 @@ export default function PharmacyV2() {
         </dl>
         <div className="dj-card-next">
           {state === 'near' && <><small>Availability</small><strong className="ph3-ok">In stock nearby</strong>{near?.nearest?.distance_km != null && <span>Nearest {near.nearest.distance_km < 1 ? 'under 1 km' : `${near.nearest.distance_km} km`}</span>}</>}
+          {state === 'stocked' && <><small>Availability</small><strong className="ph3-ok">In stock here</strong><span>{chosenPharmacyName}</span></>}
           {state === 'nolocation' && <><small>Availability</small><strong>Set your location</strong><span>to see pharmacies and prices</span></>}
           {state === 'unavailable' && <><small>Availability</small><strong className="ph3-bad">Not in stock nearby</strong><span>No pharmacy within 10 km</span></>}
         </div>
@@ -854,6 +948,7 @@ export default function PharmacyV2() {
   const searchView = (
     <div className="dj ph3">
       <nav className="dj-breadcrumb"><Link to="/dashboard">Dashboard</Link><ChevronRight /><span>Pharmacy</span></nav>
+      <BookingForChip family={family} value={member ? familyMemberId : ''} onChange={setFamilyMemberId} />
       <header className="dj-hero">
         <div>
           <h1>Order medicines from pharmacies near you</h1>
@@ -906,8 +1001,14 @@ export default function PharmacyV2() {
 
       {actionError && <p role="alert" className="ph2-error" style={{ marginBottom: 12 }}>{actionError}</p>}
 
-      <div className="dj-layout">
-        <aside className={`dj-filters${showFilters ? ' open' : ''}`}>
+      {pharmacyParam && (
+        <p className="ph2-inline-info" style={{ marginBottom: 12 }}><Store />Showing what {chosenPharmacyName} stocks.{' '}
+          <button type="button" className="ph2-link" onClick={() => { const next = new URLSearchParams(params); next.delete('pharmacy'); next.delete('page'); changeParams(next); }}>Search all nearby pharmacies</button>
+        </p>
+      )}
+
+      <div className={`dj-layout${pharmacyParam ? ' ph3-one-pharmacy' : ''}`}>
+        {!pharmacyParam && <aside className={`dj-filters${showFilters ? ' open' : ''}`}>
           <header><h2>Filters</h2><button type="button" onClick={() => setFilter({ rx: '', delivery: '', price: '' })}>Clear all</button></header>
           <label>Prescription
             <ThemedSelect aria-label="Prescription filter" value={filterRx} onChange={(e) => setFilter({ rx: e.target.value })}>
@@ -931,16 +1032,16 @@ export default function PharmacyV2() {
             </ThemedSelect>
             {!area && <small className="ph3-hint">Set your location to filter by delivery.</small>}
           </label>
-        </aside>
+        </aside>}
 
         <section aria-label="Medicine results">
           <div className="dj-result-heading">
             <div>
-              <h2>{searching ? 'Searching…' : `${listTotal} ${listTotal === 1 ? 'medicine' : 'medicines'} ${area ? 'in stock near you' : 'found'}`}</h2>
-              <p>{area ? `Pharmacies within 10 km of ${area.label}${query ? ` · results for “${didYouMean || query}”` : ''}`
+              <h2>{searching ? 'Searching…' : `${listTotal} ${listTotal === 1 ? 'medicine' : 'medicines'} ${pharmacyParam ? `in stock at ${chosenPharmacyName}` : area ? 'in stock near you' : 'found'}`}</h2>
+              <p>{pharmacyParam ? `Open a medicine to see this pharmacy's price${query ? ` · results for “${query}”` : ''}.` : area ? `Pharmacies within 10 km of ${area.label}${query ? ` · results for “${didYouMean || query}”` : ''}`
                 : `From the Vizito catalogue${query ? ` · results for “${didYouMean || query}”` : ''}. Set your location to see which pharmacies have them.`}</p>
             </div>
-            <div className="dj-tools">
+            {!pharmacyParam && <div className="dj-tools">
               <button type="button" className="dj-filter-toggle" aria-expanded={showFilters} onClick={() => setShowFilters((v) => !v)}>Filters{filtersOn ? ' •' : ''}</button>
               <label>Sort by
                 <ThemedSelect variant="menu" aria-label="Sort medicines" value={sortBy} onChange={(e) => setFilter({ sort: e.target.value })}>
@@ -949,7 +1050,7 @@ export default function PharmacyV2() {
                   <option value="name">Name: A to Z</option>
                 </ThemedSelect>
               </label>
-            </div>
+            </div>}
           </div>
           {didYouMean && <p className="ph2-inline-info" style={{ marginBottom: 12 }}><Info />No exact match for “{query}”. Showing results for <b>“{didYouMean}”</b>.</p>}
 
@@ -959,20 +1060,22 @@ export default function PharmacyV2() {
             <div className="dj-state" role="alert"><h2>Unable to load medicines</h2><p>{searchError}</p><button type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>
           ) : listRows.length ? (
             <>
-              <div className="dj-cards">{listRows.map((m) => medicineCard(m, area ? 'near' : 'nolocation'))}</div>
-              {listPage && listPage.total_pages > 1 && <VizitoPagination page={listPage.page} pageSize={10} total={listPage.total} onPageChange={searchPage} onPageSizeChange={() => undefined} label="medicines" />}
+              <div className="dj-cards">{listRows.map((m) => medicineCard(m, pharmacyParam ? 'stocked' : area ? 'near' : 'nolocation'))}</div>
+              {pharmacyParam
+                ? listTotal > 24 && <div className="ph2-dialog-actions" style={{ marginTop: 12 }}><button type="button" className="ph2-btn ph2-btn--ghost ph2-btn--sm" disabled={stockedPage <= 1} onClick={() => searchPage(stockedPage - 1)}>Previous</button><span className="ph2-muted">Page {stockedPage} of {Math.ceil(listTotal / 24)}</span><button type="button" className="ph2-btn ph2-btn--ghost ph2-btn--sm" disabled={stockedPage >= Math.ceil(listTotal / 24)} onClick={() => searchPage(stockedPage + 1)}>Next</button></div>
+                : listPage && listPage.total_pages > 1 && <VizitoPagination page={listPage.page} pageSize={10} total={listPage.total} onPageChange={searchPage} onPageSizeChange={() => undefined} label="medicines" />}
             </>
           ) : (
             <div className="dj-state">
               <Package />
-              <h2>{area ? (query ? `No pharmacy near you has “${didYouMean || query}” in stock` : 'No medicines in stock near you yet') : 'No medicines found'}</h2>
-              <p>{filtersOn ? 'Try clearing your filters.' : area ? 'Upload your prescription and nearby pharmacies will quote what they can supply, or try another area.' : 'Check the spelling, or search by the generic name printed on the strip (e.g. paracetamol).'}</p>
-              {filtersOn ? <button type="button" onClick={() => setFilter({ rx: '', delivery: '', price: '' })}>Clear filters</button>
+              <h2>{pharmacyParam ? (query ? `${chosenPharmacyName} doesn't have “${query}” in stock` : `${chosenPharmacyName} has no medicines listed yet`) : area ? (query ? `No pharmacy near you has “${didYouMean || query}” in stock` : 'No medicines in stock near you yet') : 'No medicines found'}</h2>
+              <p>{pharmacyParam ? 'Search all nearby pharmacies instead.' : filtersOn ? 'Try clearing your filters.' : area ? 'Upload your prescription and send it to a nearby pharmacy for a quote, or try another area.' : 'Check the spelling, or search by the generic name printed on the strip (e.g. paracetamol).'}</p>
+              {pharmacyParam ? null : filtersOn ? <button type="button" onClick={() => setFilter({ rx: '', delivery: '', price: '' })}>Clear filters</button>
                 : area ? <button type="button" disabled={uploading} onClick={() => fileInput.current?.click()}>Upload prescription</button> : null}
             </div>
           )}
 
-          {area && !searching && !searchError && !!results?.unavailable_nearby.length && (
+          {area && !pharmacyParam && !searching && !searchError && !!results?.unavailable_nearby.length && (
             <div className="ph3-unavailable">
               <h2>Also matches, but not in stock near you</h2>
               <p>These are in the Vizito catalogue. No pharmacy within 10 km has them today.</p>
@@ -1059,9 +1162,10 @@ export default function PharmacyV2() {
             ) : detailState === 'loading' ? (
               <div className="dj-state" role="status" aria-busy="true">Checking nearby pharmacies…</div>
             ) : detailState === 'none' ? (
-              <div className="dj-state"><Store /><h2>Not in stock near you</h2><p>Upload your prescription and nearby pharmacies will quote what they can supply. You can also try another area.</p><button type="button" disabled={uploading} onClick={() => fileInput.current?.click()}>Upload prescription</button></div>
+              <div className="dj-state"><Store /><h2>Not in stock near you</h2><p>Upload your prescription and send it to a nearby pharmacy for a quote. You can also try another area.</p><button type="button" disabled={uploading} onClick={() => fileInput.current?.click()}>Upload prescription</button></div>
             ) : (
               <div className="ph3-pharmacies">
+                {pharmacyParam && !nearRows.some((p) => p.pharmacy_id === pharmacyParam && p.in_stock) && <p className="ph2-inline-info is-warn"><AlertTriangle />{chosenPharmacyName} isn't listed here: it may be more than 10 km from your location or out of stock. These pharmacies have it.</p>}
                 {sortedNear.filter((p) => p.in_stock).map((p) => {
                   const unit = p.price ?? (moneyNumber(detail.mrp) > 0 ? moneyNumber(detail.mrp) : null);
                   return (
@@ -1069,6 +1173,7 @@ export default function PharmacyV2() {
                       <MediaImage kind="business" businessType="pharmacy" name={p.name} src={p.logo_url} />
                       <div className="ph3-pharmacy-info">
                         <h3>{p.name}
+                          {p.pharmacy_id === pharmacyParam && <span className="ph3-badge is-green">Your chosen pharmacy</span>}
                           {p.tags.includes('nearest') && <span className="ph3-badge">Nearest</span>}
                           {p.tags.includes('lowest_price') && <span className="ph3-badge is-green">Lowest price</span>}
                         </h3>
@@ -1113,11 +1218,13 @@ export default function PharmacyV2() {
   );
 
   const rxPanel = (() => {
-    if (!needsRx) return null;
+    if (!needsRx && !activeRequest) return null;
     if (activeRequest) {
       const status = activeRequest.status;
       const lines = quote;
       const expired = quoteExpired(activeRequest);
+      const requested = requestedMedicines(activeRequest).map((item) => item.name);
+      const sentMedicines = requested.length ? requested : (prescriptions.find((p) => p.id === activeRequest.prescription_id)?.medicines || []).map((m) => m.name).filter(Boolean);
       return (
         <section className="ph2-request" aria-label="Prescription request">
           <div className="ph2-request-head">
@@ -1125,17 +1232,21 @@ export default function PharmacyV2() {
               {status === 'Accepted' ? <CheckCircle2 /> : status === 'Rejected' || status === 'Cancelled' || status === 'Expired' ? <AlertTriangle /> : <Clock />}
             </span>
             <div>
-              <h2>{activeRequest.order_id ? 'Order already created' : status === 'Requested' ? 'Waiting for pharmacist review' : status === 'Accepted' ? 'Pharmacist accepted your prescription' : status === 'Rejected' ? 'Prescription not accepted' : `Request ${status.toLowerCase()}`}</h2>
+              <h2>{activeRequest.order_id && status === 'Accepted' ? 'Order already created' : status === 'Requested' ? 'Waiting for pharmacist review' : status === 'Accepted' ? (expired && activeRequest.quote_items ? 'Quote expired' : 'Pharmacist accepted your prescription') : status === 'Rejected' ? 'Prescription not accepted' : `Request ${status.toLowerCase()}`}</h2>
               <p>
                 {activeRequest.order_id ? 'This prescription request has already become an order.'
                   : status === 'Requested' ? 'The pharmacy is checking your prescription and stock. This page refreshes automatically.'
                     : status === 'Accepted' && !activeRequest.quote_items ? 'The pharmacist accepted the request and is preparing a quote.'
+                      : status === 'Accepted' && expired ? 'The pharmacist’s price is no longer valid, so this quote can’t be ordered.'
                       : status === 'Accepted' ? 'Review the pharmacist’s quote, then place your order.'
                         : activeRequest.reject_reason || 'You can start a new request with another prescription or pharmacy.'}
               </p>
             </div>
           </div>
           {activeRequest.order_id && <Link className="ph2-btn ph2-btn--primary ph2-btn--sm" to={`/pharmacy-orders/${activeRequest.order_id}`}>View order <ChevronRight /></Link>}
+          {beneficiaryLabel(activeRequest) && <p className="ph2-muted" style={{ marginTop: 8 }}>{beneficiaryLabel(activeRequest)}</p>}
+          {!activeRequest.quote_items && sentMedicines.length > 0 && <p className="ph2-muted" style={{ marginTop: 8 }}>Medicines on this prescription: {sentMedicines.join(', ')}</p>}
+          {status === 'Accepted' && !activeRequest.quote_items && !activeRequest.order_id && <p className="ph2-muted" style={{ marginTop: 8 }}>Nothing to do yet. You’ll get a notification when the price is ready.</p>}
           {status === 'Accepted' && activeRequest.quote_items && (
             <>
               {lines === null ? <p className="ph2-error">Quote details could not be read. Refresh before ordering.</p> : (
@@ -1215,7 +1326,7 @@ export default function PharmacyV2() {
           <div className="ph2-upload" style={{ marginTop: 10 }}>
             <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png" aria-label="Prescription file" disabled={uploading || sendingRequest} onChange={(event) => void uploadPrescription(event.target.files?.[0])} />
             <small>Photo (JPG/PNG) or PDF, up to 10 MB. The file is stored in your medical records.</small>
-            {draft.documentId && <span className="ph2-chip ph2-chip--green"><FileText />{draft.documentName || 'Prescription uploaded'}</span>}
+            {documentId && <span className="ph2-chip ph2-chip--green"><FileText />{draft.documentName || 'Prescription uploaded'}</span>}
             {uploading && <p role="status" className="ph2-muted">Uploading prescription...</p>}
           </div>
         )}
@@ -1224,7 +1335,7 @@ export default function PharmacyV2() {
           <button
             type="button"
             className="ph2-btn ph2-btn--primary ph2-btn--sm"
-            disabled={sendingRequest || uploading || (rxSource === 'vizito' ? !prescriptionId : !draft.documentId)}
+            disabled={sendingRequest || uploading || (rxSource === 'vizito' ? !prescriptionId : !documentId)}
             onClick={() => void sendRequest()}
           >
             {sendingRequest ? 'Sending...' : 'Send to pharmacist'}<ArrowRight />
@@ -1238,17 +1349,27 @@ export default function PharmacyV2() {
   const cartView = (
     <>
       <nav className="ph2-crumbs" aria-label="Breadcrumb">
-        <Link to="/pharmacy-orders/new">Pharmacy</Link><ChevronRight /><b>Your cart</b>
+        <Link to="/pharmacy-orders/new">Pharmacy</Link><ChevronRight /><b>{requestOnly ? 'Prescription request' : 'Your cart'}</b>
       </nav>
       <div className="ph2-head">
         <div>
-          <h1>Your cart</h1>
-          <p className="ph2-sub">Items from {pharmacyName}</p>
+          <h1>{requestOnly ? 'Prescription request' : 'Your cart'}</h1>
+          <p className="ph2-sub">{requestOnly ? (activeRequest ? `Sent to ${pharmacyName}` : 'Checking your request') : `Items from ${pharmacyName}`}</p>
         </div>
         <Link className="ph2-back" to="/pharmacy-orders"><ArrowLeft />Back to pharmacy</Link>
       </div>
+      {!requestId && <BookingForChip family={family} value={member ? familyMemberId : ''} onChange={setFamilyMemberId} />}
+      {familyError && params.has('family_member_id') && <p role="alert" className="ph2-error" style={{ marginBottom: 12 }}>{familyError}</p>}
+      {member && !requestId && !needsRx && cartLines.length > 0 && <p className="ph2-inline-info is-warn" style={{ marginBottom: 12 }}><AlertTriangle />Medicines without a prescription are saved on your own account for now, not under {member.name}.</p>}
       {actionError && <p role="alert" className="ph2-error" style={{ marginBottom: 12 }}>{actionError}</p>}
-      {draft.lines.length === 0 ? (
+      {requestOnly ? (
+        <div className="ph2-request-only">
+          {activeRequest ? rxPanel
+            : requestLoading ? <div className="ph2-card"><p role="status" className="ph2-muted">Loading your request...</p></div>
+              : <div className="ph2-empty" role="alert"><AlertTriangle /><h3>This request could not be loaded</h3><p>{requestError || 'Please try again.'}</p><button type="button" className="ph2-btn ph2-btn--ghost" onClick={() => setRequestNonce((n) => n + 1)}>Try again</button></div>}
+          <Link className="ph2-link" to="/pharmacy-orders?tab=requests">All prescription requests <ChevronRight /></Link>
+        </div>
+      ) : cartLines.length === 0 ? (
         <div className="ph2-empty"><ShoppingCart /><h3>Your cart is empty</h3><p>Search for a medicine and choose a nearby pharmacy to start your order.</p><Link className="ph2-btn ph2-btn--primary" to="/pharmacy-orders/new">Browse medicines</Link></div>
       ) : (
         <div className="ph2-cart-grid">
@@ -1273,9 +1394,12 @@ export default function PharmacyV2() {
                           <div>
                             <b>{line.medicine.medicine_name}</b>
                             <small>{packText(line.medicine) || 'Medicine'}</small>
-                            {line.medicine.requires_prescription
-                              ? <span className="ph2-chip ph2-chip--rx"><FileText />Prescription required</span>
-                              : <span className="ph2-chip ph2-chip--otc">No prescription needed</span>}
+                            {quoteReady
+                              ? <span className="ph2-chip ph2-chip--rx"><FileText />In pharmacist’s quote</span>
+                              : line.medicine.requires_prescription
+                                ? <span className="ph2-chip ph2-chip--rx"><FileText />Prescription required</span>
+                                : <span className="ph2-chip ph2-chip--otc">No prescription needed</span>}
+                            {(() => { const row = quoteReady ? quote?.find((q) => q.available && q.medicine_id === line.medicine.id) : null; return row && differentProduct(row) ? <small>Replaces {row.prescribed_name}</small> : null; })()}
                           </div>
                         </div>
                       </td>
@@ -1296,6 +1420,7 @@ export default function PharmacyV2() {
                 </tbody>
               </table>
               {locked && <p className="ph2-inline-info"><Info />{quoteReady ? 'These are the medicines and prices in the pharmacist’s quote. To change them, cancel the request and send it again.' : 'Your prescription is with the pharmacist. Items are locked until they reply with a quote.'}</p>}
+              {notInQuote.length > 0 && <p className="ph2-inline-info is-warn"><AlertTriangle />Not in this quote, so not in this order: {notInQuote.map((line) => line.medicine.medicine_name).join(', ')}. Order {notInQuote.length === 1 ? 'it' : 'them'} separately after this order.</p>}
               {together && !locked && !together.some((p) => p.pharmacy_id === draft.pharmacyId) && (
                 <p className="ph2-inline-info is-warn"><AlertTriangle />{pharmacyName} no longer has every item in stock. The pharmacy re-checks stock when you place the order{together.length ? ', or choose a pharmacy below that has everything' : ''}.</p>
               )}
@@ -1365,7 +1490,8 @@ export default function PharmacyV2() {
                       <label className="ph2-field"><span>PIN code</span><input inputMode="numeric" maxLength={6} value={manualPin} onChange={(event) => setManualPin(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN" /></label>
                     </div>
                   )}
-                  {delivery?.free_above != null && <p className="ph2-fee-note">Free delivery on orders above {money(delivery.free_above)}. The pharmacy calculates the final fee when the order is placed.</p>}
+                  {belowMinimum && <p className="ph2-error" role="status">Home delivery needs medicines worth at least {money(delivery!.min_order)}. Add {money(delivery!.min_order! - itemsTotal)} more, or choose store pickup.</p>}
+                  {delivery?.free_above != null && <p className="ph2-fee-note">Free delivery on orders above {money(delivery.free_above)}.</p>}
                 </div>
               )}
               {fulfilment === 'DELIVERY' && <p className="ph2-inline-info" style={{ marginTop: 12 }}><Info />The pharmacy will confirm the delivery time after you place the order.</p>}
@@ -1389,8 +1515,6 @@ export default function PharmacyV2() {
                 <div><dt>{fulfilment === 'PICKUP' ? 'Pickup fee' : 'Delivery fee (Home delivery)'}</dt><dd>{fulfilment === 'PICKUP' ? 'Free' : deliveryLoading ? 'Checking...' : delivery?.available === false ? '—' : deliveryFee === 0 ? 'Free' : money(deliveryFee)}</dd></div>
                 <div className="ph2-summary-total"><dt>Total</dt><dd>{money(estimatedTotal)}</dd></div>
               </dl>
-              <p className="ph2-summary-tax">Inclusive of all taxes</p>
-              {fulfilment === 'DELIVERY' && <p className="ph2-fee-note">The final delivery fee is calculated by the pharmacy from the confirmed order total.</p>}
             </section>
             <section className="ph2-card">
               <h2>Choose payment option</h2>
@@ -1399,23 +1523,24 @@ export default function PharmacyV2() {
                   <span /><span><ShieldCheck /></span>
                   <span><b>{fulfilment === 'PICKUP' ? 'Pay at pharmacy (on pickup)' : 'Pay on delivery'}</b><small>{fulfilment === 'PICKUP' ? 'Pay in cash or UPI when you collect your order.' : 'Pay the pharmacy in cash or by UPI when you receive your order.'}</small></span>
                 </button>
-                <button type="button" aria-pressed={payMode === 'ONLINE'} onClick={() => setPayMode('ONLINE')}>
+                <button type="button" aria-pressed={payMode === 'ONLINE'} disabled={onlineAvailable === false} onClick={() => setPayMode('ONLINE')}>
                   <span /><span><ShoppingCart /></span>
-                  <span><b>Pay online now</b><small>UPI, card or net banking · secured by Razorpay.</small></span>
+                  <span><b>Pay online now</b><small>{onlineAvailable === false ? 'Online payment is not available right now.' : 'UPI, card or net banking · secured by Razorpay.'}</small></span>
                 </button>
               </div>
+              <CancellationRefundPolicy service="pharmacy" compact className="ph2-policy" />
               {placeError && <p className="ph2-error" style={{ marginTop: 10 }}>{placeError}</p>}
               <button
                 type="button"
                 className="ph2-btn ph2-btn--primary ph2-btn--lg ph2-btn--block"
                 style={{ marginTop: 12 }}
-                disabled={placing || deliveryLoading || (needsRx && !quoteReady) || (fulfilment === 'DELIVERY' && (!deliveryText || !validPin(deliveryPin) || !delivery?.available))}
+                disabled={placing || deliveryLoading || rxPending || (fulfilment === 'DELIVERY' && (!deliveryText || !validPin(deliveryPin) || !delivery?.available || belowMinimum))}
                 onClick={() => void placeOrder()}
               >
-                {placing ? 'Placing order...' : needsRx && !quoteReady ? <>Awaiting pharmacist quote</> : <>Place order · {money(estimatedTotal)} <ArrowRight /></>}
+                {placing ? 'Placing order...' : quoteExpiredNow ? <>Quote expired</> : rxPending ? <>Awaiting pharmacist quote</> : <>Place order · {money(estimatedTotal)} <ArrowRight /></>}
               </button>
-              {needsRx && !quoteReady && (
-                <p className="ph2-muted" style={{ marginTop: 8 }}>Send your prescription to the pharmacist above. You can place the order once the quote is ready.</p>
+              {rxPending && (
+                <p className="ph2-muted" style={{ marginTop: 8 }}>{quoteExpiredNow ? 'This quote has expired. Cancel the request above and send it again to get a fresh quote.' : activeRequest ? 'You can place the order once the pharmacist\'s quote is ready.' : 'Send your prescription to the pharmacist above. You can place the order once the quote is ready.'}</p>
               )}
               <div className="ph2-secure" style={{ marginTop: 10 }}><ShieldCheck /><span>Your order is safe and secure. We share your information only with the pharmacy to process this order.</span></div>
             </section>
@@ -1461,6 +1586,20 @@ export default function PharmacyV2() {
             <p className="ph2-warn">No Vizito pharmacy is listed within 10 km of {area.label}. Try a nearby area.</p>
           )}
           {uploadSend.error && <p role="alert" className="ph2-error">{uploadSend.error}</p>}
+        </VizitoDialog>
+      )}
+      {quoteReady && !replaceBasket && draft.lines.length > 0 && draft.requestId !== activeRequest?.id && (
+        <VizitoDialog
+          title="Replace your basket with this quote?"
+          onClose={keepBasket}
+          className="ph2-dialog"
+          footer={<div className="ph2-dialog-actions">
+            <button type="button" className="ph2-btn ph2-btn--ghost" autoFocus onClick={keepBasket}>Keep my basket</button>
+            <button type="button" className="ph2-btn ph2-btn--primary" onClick={() => setReplaceBasket(true)}>Replace basket</button>
+          </div>}
+        >
+          <p>Your basket has {draft.lines.length} {draft.lines.length === 1 ? 'medicine' : 'medicines'}{draft.pharmacyId && providerById.get(draft.pharmacyId) ? ` from ${providerById.get(draft.pharmacyId)!.name}` : ''}. Ordering this quote from {pharmacyName} will remove {draft.lines.length === 1 ? 'it' : 'them'}.</p>
+          <p>If you keep your basket, this quote stays in Prescription requests until it expires.</p>
         </VizitoDialog>
       )}
       {pendingAdd && (

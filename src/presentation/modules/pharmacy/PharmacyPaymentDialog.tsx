@@ -27,11 +27,12 @@ export default function PharmacyPaymentDialog({ order, onClose, onPaid }: {
       const paid = await payOnline({
         amount: Number(order.total_amount),
         purpose: 'pharmacy',
+        reference: order.id,
         description: `Pharmacy order #${order.id.slice(0, 8).toUpperCase()}`,
       });
       const result = await payOrderApi(order.id, paid as unknown as ProcessPaymentInput);
       if (!result.success || result.payment_status !== 'PAID') {
-        throw new Error(`${result.failure_reason || 'Payment was not completed.'} If money was taken it will be refunded automatically.`);
+        throw new Error(`${result.failure_reason || 'Payment was not completed.'} If money left your account, contact Help with this order number.`);
       }
       onPaid();
     } catch (failure) {

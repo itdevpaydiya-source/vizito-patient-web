@@ -766,3 +766,9 @@
 .ph3-pick button b { display: block; font-size: 13.5px; color: var(--ph-ink); }
 .ph3-pick button small { display: block; font-size: 11.5px; color: var(--ph-muted); }
 .ph3-pick button[aria-checked="true"] { border-color: var(--ph-orange); background: var(--ph-orange-soft); }
+
+/* Request opened before a quote exists; chosen-pharmacy list has no filter column. */
+.ph2-request-only { display: grid; gap: 12px; max-width: 760px; }
+.ph2-request-only .ph2-link { justify-self: start; }
+.ph3-one-pharmacy { grid-template-columns: minmax(0, 1fr); }
+.ph2-policy { margin-top: 12px; }

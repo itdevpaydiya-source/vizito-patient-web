@@ -53,7 +53,8 @@ export default function ReviewsScreen() {
     try {
       const [dash, reviewsRaw, labs, pharm, hc, equip, trips] = await Promise.all([
         getDashboardApi().catch(() => null),
-        getMyReviewListApi().catch(() => []),
+        // No fallback here: without the list of reviews already written, every visit would look unrated.
+        getMyReviewListApi(),
         myLabOrdersApi().catch(() => []),
         getMyOrdersApi().catch(() => []),
         hcMineApi().catch(() => []),
@@ -84,7 +85,7 @@ export default function ReviewsScreen() {
       for (const o of pharm) {
         if (o.status !== 'COMPLETED' || reviewed.has(o.id)) continue;
         items.push({ key: `p:${o.id}`, kind: 'pharmacy', provider: '', partnerId: o.pharmacy_partner_id, what: `Pharmacy order #${o.id.slice(0, 8)} · ${o.items?.length || 0} item${o.items?.length === 1 ? '' : 's'}`,
-          where: null, when: o.created_at, forWhom: null, submit: (r, t, g) => ratePharmacyOrderApi(o.id, r, t, g) });
+          where: null, when: o.timeline?.find((st) => st.code === 'COLLECTED' || st.code === 'DELIVERED')?.occurred_at || o.created_at, forWhom: null, submit: (r, t, g) => ratePharmacyOrderApi(o.id, r, t, g) });
       }
       for (const o of hc) for (const v of o.visits || []) {
         if (v.status !== 'COMPLETED' || v.patient_rating) continue;

@@ -85,13 +85,13 @@ const POLICY_DETAILS: Record<
     points: [
       {
         icon: CheckCircle,
-        title: '100% Refund Before Dispensing',
-        desc: 'Cancel free of charge with a 100% refund while your order is awaiting payment or before packing.',
+        title: 'Full Refund Before Billing',
+        desc: 'Cancel free of charge, with a full refund, until the pharmacy bills your order and makes it ready for pickup or delivery.',
       },
       {
         icon: Clock,
-        title: 'Non-Cancellable Once In Fulfillment',
-        desc: 'Once the licensed pharmacy starts processing or dispensing your medications, orders cannot be cancelled.',
+        title: 'Call The Pharmacy After Billing',
+        desc: 'Once your order is billed and ready for pickup or out for delivery, it can no longer be cancelled in the app. Call the pharmacy.',
       },
       {
         icon: RotateCcw,

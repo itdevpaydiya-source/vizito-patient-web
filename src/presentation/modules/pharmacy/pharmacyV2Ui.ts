@@ -45,7 +45,7 @@ export const deliveryEtaText = (value: string | null | undefined): string | null
 export const orderStatusLabel = (order: PatientOrder): string => ({
   CREATED: order.payment_method === 'CASH' ? 'Awaiting confirmation' : 'Awaiting payment',
   AWAITING_PAYMENT: 'Payment required',
-  PAID: 'Confirmed by pharmacy',
+  PAID: 'Paid, waiting for the pharmacy',
   PROCESSING: 'Being packed',
   READY_FOR_PICKUP: 'Ready for pickup',
   OUT_FOR_DELIVERY: 'Out for delivery',
@@ -57,7 +57,7 @@ export const orderStatusLabel = (order: PatientOrder): string => ({
 export const orderStatusTone = (order: PatientOrder): string => {
   if (order.status === 'CANCELLED' || order.status === 'FULFILLMENT_FAILED') return 'is-cancel';
   if (order.status === 'COMPLETED') return 'is-done';
-  if (order.status === 'AWAITING_PAYMENT' || order.status === 'CREATED') return 'is-wait';
+  if (order.status === 'AWAITING_PAYMENT' || order.status === 'CREATED' || order.status === 'PAID') return 'is-wait';
   return 'is-active';
 };
 

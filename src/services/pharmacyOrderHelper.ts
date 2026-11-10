@@ -125,7 +125,9 @@ export interface MedicineSearchResult {
 
 export const searchMedicinesApi = async (keyword: string): Promise<MedicineSearchResult[]> => {
   if (!keyword || keyword.trim().length < 2) return [];
-  const res = await apiClient.get(ENDPOINTS.MEDICINES.AUTOCOMPLETE, { params: { keyword: keyword.trim() } });
+  // scope=patient: an old master medicine is listed only where some pharmacy holds unexpired stock.
+  // The server ignores unknown scopes, so this is safe before Agent 1 adds 'patient' to the controller.
+  const res = await apiClient.get(ENDPOINTS.MEDICINES.AUTOCOMPLETE, { params: { keyword: keyword.trim(), scope: 'patient' } });
   const list = res?.data;
   if (!Array.isArray(list)) return [];
   return list.map((m: any): MedicineSearchResult => ({
@@ -355,6 +357,8 @@ export interface DeliveryOptions {
   pickup: boolean;
   fee: number;
   free_above: number | null;
+  /** Smallest medicine total the pharmacy delivers (null = no minimum). */
+  min_order: number | null;
   hours: { open: string; close: string } | null;
   available: boolean;
   reason?: string | null;
@@ -367,6 +371,7 @@ export const getDeliveryOptionsApi = async (pharmacyId: string, pincode: string)
     pickup: Boolean(data.pickup),
     fee: Number(data.fee) || 0,
     free_above: data.free_above == null ? null : Number(data.free_above),
+    min_order: data.min_order == null || !Number.isFinite(Number(data.min_order)) || Number(data.min_order) <= 0 ? null : Number(data.min_order),
     hours: data.hours ?? null,
     available: Boolean(data.available),
     reason: data.reason ?? null,

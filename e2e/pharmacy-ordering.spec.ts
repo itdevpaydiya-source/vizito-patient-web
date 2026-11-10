@@ -226,30 +226,19 @@ test.describe('Patient pharmacy ordering — real UI, real backend', () => {
     await expect(page).toHaveURL(/\/pharmacy-orders\?tab=requests/);
     await expect(page.getByRole('article').getByText('Waiting for pharmacy', { exact: true })).toBeVisible();
 
-    // ---- Pharmacy accepts (backend-verified — no pharmacy UI exists in this app) ----
-    const acceptRes = await request.patch(`${API}/pharmacy-requests/${pharmacyRequest.id}/accept`, {
+    // ---- Pharmacy quotes (backend-verified; no pharmacy UI in this app) ----
+    const quoteRes = await request.patch(`${API}/pharmacy-requests/${pharmacyRequest.id}/quote`, {
       headers: { Authorization: `Bearer ${pharmacy.token}` },
+      data: { items: [{ prescribed_name: medicine.medicine_name, available: true, medicine_id: medicine.id, item_name: medicine.medicine_name, quantity: 1, unit_price: 55 }] },
     });
-    expect(acceptRes.ok()).toBeTruthy();
+    expect(quoteRes.ok()).toBeTruthy();
 
-    // ---- Real UI: refresh, see Accepted, Build Order ----
+    // ---- Real UI: refresh, see the quote, review it. The patient never matches medicines. ----
     await page.reload();
-    await expect(page.getByRole('article').getByText('Accepted', { exact: false })).toBeVisible();
-    await page.getByRole('button', { name: /Build order/i }).click();
-    await expect(page).toHaveURL(new RegExp(`pharmacyRequestId=${pharmacyRequest.id}`));
-    await expect(page.getByRole('heading',{name:'Confirm your prescription order',exact:true})).toBeVisible();
-    await expect(page.getByText(medicine.medicine_name.split(' ').slice(0, 2).join(' '), { exact: false })).toBeVisible();
-
-    // Match the free-text prescribed line to the real catalogue medicine.
-    const [matchAutocomplete] = await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/medicines/autocomplete')),
-      page.getByPlaceholder('Match to a catalogue medicine...').fill(medicine.medicine_name),
-    ]);
-    expect(matchAutocomplete.ok()).toBeTruthy();
-    // A plain text match also hits the static prescribed-name paragraph above the search
-    // dropdown (same DOM-ambiguity class as pharmacy-inventory-ledger.spec.ts's "Close"
-    // button on the partner side) — the actual clickable result is specifically a button.
-    await page.getByRole('button', { name: new RegExp(medicine.medicine_name) }).click();
+    await expect(page.getByRole('article').getByText('Quote ready', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: /Review & order/i }).click();
+    await expect(page).toHaveURL(new RegExp(`request=${pharmacyRequest.id}`));
+    await expect(page.getByText(medicine.medicine_name.split(' ').slice(0, 2).join(' '), { exact: false }).first()).toBeVisible();
     await expect(page.getByText('₹55.00', { exact: false }).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Pay online now' }).click();

@@ -14,6 +14,7 @@ import { getProviderDetailApi, type ProviderDetail } from '../../../services/boo
 import { paymentMethodLabel } from '../../../utils/paymentLabels';
 import { usePharmacyBaskets } from '../../../services/PharmacyBasketContext';
 import { printPharmacyInvoice } from './pharmacyInvoice';
+import { quoteLines, differentProduct } from './prescriptionRequests';
 import PharmacyPaymentDialog from './PharmacyPaymentDialog';
 import {
   dateTime, dayTime, deliveryEtaText, errorText, money, moneyNumber, onlinePaymentNeeded,
@@ -48,7 +49,7 @@ const statusExplanation = (order: PatientOrderV2): string => {
       ? 'The pharmacy is confirming your order. Nothing is payable until you receive it.'
       : 'Your order is waiting for the online payment to be completed.';
     case 'AWAITING_PAYMENT': return 'Complete the payment to let the pharmacy start preparing your medicines.';
-    case 'PAID': return 'The pharmacy has confirmed your order and will start packing your medicines.';
+    case 'PAID': return 'We have your payment. The pharmacy has 30 minutes to accept the order; if it doesn\'t, the order is cancelled and refunded in full.';
     case 'PROCESSING': return 'Your medicines are being packed and checked by the pharmacist.';
     case 'READY_FOR_PICKUP': return 'Your medicines are packed and waiting at the pharmacy counter.';
     case 'OUT_FOR_DELIVERY': return `Your medicines are on the way${order.delivery_person_name ? ` with ${order.delivery_person_name}` : ''}. Share the delivery code only when you receive the order.`;
@@ -403,8 +404,9 @@ export default function PharmacyOrderDetailV2() {
             <MapPin />
             <div>
               <b>Store pickup</b>
-              <strong>{order.status === 'COMPLETED' ? 'Collected' : order.status === 'READY_FOR_PICKUP' ? 'Ready now' : ['CANCELLED', 'FULFILLMENT_FAILED'].includes(order.status) ? 'Cancelled' : 'Being prepared'}</strong>
-              <small>{deliveredAt ? dateTime(deliveredAt) : order.status === 'READY_FOR_PICKUP' ? 'Waiting at the pharmacy counter' : active ? 'The pharmacy is preparing your medicines' : 'This order will not be collected'}</small>
+              {/* Only say "preparing" once the pharmacy has accepted: unpaid and not-yet-accepted orders get their own words. */}
+              <strong>{order.status === 'COMPLETED' ? 'Collected' : order.status === 'READY_FOR_PICKUP' ? 'Ready now' : ['CANCELLED', 'FULFILLMENT_FAILED'].includes(order.status) ? 'Cancelled' : onlinePaymentNeeded(order) ? 'Waiting for payment' : ['CREATED', 'PAID'].includes(order.status) ? 'Waiting for the pharmacy' : 'Being prepared'}</strong>
+              <small>{deliveredAt ? dateTime(deliveredAt) : order.status === 'READY_FOR_PICKUP' ? 'Waiting at the pharmacy counter' : onlinePaymentNeeded(order) ? 'Pay to send this order to the pharmacy' : ['CREATED', 'PAID'].includes(order.status) ? 'The pharmacy will confirm your order soon' : active ? 'The pharmacy is preparing your medicines' : 'This order will not be collected'}</small>
             </div>
           </div>
           {(code || active) && (
@@ -430,12 +432,15 @@ export default function PharmacyOrderDetailV2() {
               {order.items.map((item) => {
                 const medicine = item.medicine;
                 const detail = [strengthText(medicine), packText(medicine)].filter(Boolean).join(' · ');
+                // Substitute agreed in the quote: keep telling the patient what it replaced and why.
+                const sub = (request ? quoteLines(request) : null)?.find((q) => q.available && q.medicine_id === item.medicine_id && differentProduct(q));
                 return (
                   <div className="ph2-item" key={item.id}>
                     <MediaImage kind="medicine" category={medicine?.dosage_form} src={medicine?.image_url} name={medicine?.medicine_name || 'Medicine'} />
                     <div>
                       <b>{medicine?.medicine_name || 'Unnamed item'}</b>
                       <small>{detail || 'Medicine'}</small>
+                      {sub && <small>Replaces {sub.prescribed_name}{sub.note ? ` · ${sub.note}` : ''}</small>}
                       {medicine?.requires_prescription && <span className="ph2-chip ph2-chip--rx" style={{ marginTop: 4 }}><FileText />Prescription required</span>}
                     </div>
                     <span className="ph2-item-qty">Qty: {item.quantity}</span>
@@ -499,7 +504,6 @@ export default function PharmacyOrderDetailV2() {
                 <dd>{money(order.total_amount)}</dd>
               </div>
             </dl>
-            <p className="ph2-bill-tax">Inclusive of all taxes</p>
 
             <div className="ph2-pay-method">
               {order.payment_status === 'PAID' ? <CheckCircle2 /> : order.payment_status === 'REFUNDED' ? <RotateCcw /> : order.payment_status === 'REFUND_PENDING' ? <Clock /> : <CreditCard />}
@@ -511,7 +515,7 @@ export default function PharmacyOrderDetailV2() {
 
             {order.payment_status === 'REFUND_PENDING' && (
               <p className="ph2-warn" style={{ marginTop: 10 }}>
-                {money(order.total_amount)} is being refunded to {methodLabel(order)}. Refunds usually appear within 5–7 working days.
+                {money(order.total_amount)} is being refunded to {methodLabel(order)}. The time it takes to reach your account depends on your bank.
               </p>
             )}
             {order.payment_status === 'REFUNDED' && (
@@ -544,7 +548,7 @@ export default function PharmacyOrderDetailV2() {
               </button>
               {active && order.can_cancel === true && (
                 <button type="button" className="ph2-btn ph2-btn--danger" onClick={() => setCancelOpen(true)}>
-                  <XCircle />Cancel order{order.status === 'PAID' || order.status === 'CREATED' || order.status === 'AWAITING_PAYMENT' ? ' · before packing' : ''}
+                  <XCircle />Cancel order
                 </button>
               )}
               {active && order.can_cancel !== true && order.cancel_unavailable_reason && (
@@ -554,7 +558,7 @@ export default function PharmacyOrderDetailV2() {
                 <p className="ph2-fee-note">
                   {order.payment_status === 'PAID'
                     ? 'Cancelling a paid order starts a refund to the original payment method.'
-                    : 'You can cancel until the pharmacy starts packing your order.'}
+                    : 'You can cancel until the pharmacy bills your order and makes it ready.'}
                 </p>
               )}
               <Link className="ph2-btn ph2-btn--ghost" to="/help"><LifeBuoy />Need help?</Link>
@@ -594,7 +598,7 @@ export default function PharmacyOrderDetailV2() {
         >
           <p>The pharmacy will be notified and stop preparing this order.</p>
           {order.payment_status === 'PAID' && (
-            <p>{money(order.total_amount)} will be refunded to {methodLabel(order)}. Refunds usually appear within 5–7 working days.</p>
+            <p>{money(order.total_amount)} will be refunded to {methodLabel(order)}. The time it takes to reach your account depends on your bank.</p>
           )}
           <label>
             Reason (optional)
