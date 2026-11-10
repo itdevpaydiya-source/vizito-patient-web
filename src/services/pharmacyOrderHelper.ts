@@ -318,6 +318,13 @@ export interface PharmacyWithAll {
   prices: { medicine_id: string; price: number }[];
 }
 
+/** Cart: whole packs each medicine has in stock at the chosen pharmacy (the same count the order check uses). */
+export const getPharmacyStockApi = async (pharmacyId: string, medicineIds: string[]): Promise<Map<string, number>> => {
+  const res = await apiClient.get(`${ENDPOINTS.MEDICINES.SEARCH}/pharmacy-stock/${encodeURIComponent(pharmacyId)}`, { params: { ids: medicineIds.join(',') } });
+  const items: any[] = Array.isArray(res.data?.items) ? res.data.items : [];
+  return new Map(items.map((i) => [String(i.medicine_id), Math.max(0, Math.floor(Number(i.available_packs) || 0))]));
+};
+
 /** Nearby pharmacies that stock every medicine in the cart, with the items total at each. */
 export const getPharmaciesWithAllApi = async (
   medicineIds: string[],

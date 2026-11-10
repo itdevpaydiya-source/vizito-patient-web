@@ -16,7 +16,7 @@ import {
   createDirectOrderApi, createPharmacyRequestApi, createRxOrderApi, createUploadedPharmacyRequestApi,
   cancelPharmacyRequestApi, getDeliveryOptionsApi, getMedicineDetailApi,
   getMedicinePharmaciesNearApi, getMyOrdersGroupedPageApi, getPharmacyRequestsApi,
-  searchMedicinesNearApi, discoverMedicinesApi, suggestMedicinesApi, getPharmaciesWithAllApi, getPharmacyCatalogueApi,
+  searchMedicinesNearApi, discoverMedicinesApi, suggestMedicinesApi, getPharmaciesWithAllApi, getPharmacyCatalogueApi, getPharmacyStockApi,
   type DeliveryOptions, type MedicineDetail, type MedicineNearPharmacy, type CatalogueMedicine, type NearSearchPage,
   type MedicineNearResult, type MedicineSearchResult, type MedicineSuggestion, type Paged, type PatientOrderV2, type PharmacyMedicine, type PharmacyWithAll,
 } from '../../../services/pharmacyOrderHelper';
@@ -143,6 +143,9 @@ export default function PharmacyV2() {
   // After "Upload prescription" outside the cart: the next step — send it to a nearby pharmacy for a quote.
   const [uploadSend, setUploadSend] = useState<{ open: boolean; pharmacyId: string; busy: boolean; error: string }>({ open: false, pharmacyId: '', busy: false, error: '' });
   const [together, setTogether] = useState<PharmacyWithAll[] | null>(null);
+  // Cart: whole packs in stock at the chosen pharmacy, per medicine; lines we cut down to that stock.
+  const [stockHere, setStockHere] = useState<Map<string, number> | null>(null);
+  const [reducedTo, setReducedTo] = useState<Record<string, number>>({});
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -317,6 +320,27 @@ export default function PharmacyV2() {
       .catch(() => { if (active) setTogether(null); });
     return () => { active = false; };
   }, [view, area?.lat, area?.lng, area?.pincode, cartIds, quoteReady]);
+
+  // Cart: stock at the chosen pharmacy, so problems show on the row before Place order (the server re-checks).
+  useEffect(() => {
+    if (view !== 'cart' || !draft.pharmacyId || !cartIds || quoteReady) { setStockHere(null); return; }
+    let active = true;
+    getPharmacyStockApi(draft.pharmacyId, cartIds.split(','))
+      .then((map) => { if (active) setStockHere(map); })
+      .catch(() => { if (active) setStockHere(null); });
+    return () => { active = false; };
+  }, [view, draft.pharmacyId, cartIds, quoteReady]);
+  useEffect(() => { setReducedTo({}); }, [draft.pharmacyId]);
+  // A quantity above the pharmacy's stock is cut down to that stock (out of stock lines stay for the patient to resolve).
+  useEffect(() => {
+    if (!stockHere || locked || quoteReady) return;
+    const over = draft.lines.filter((l) => { const n = stockHere.get(l.medicine.id); return n != null && n > 0 && l.quantity > n; });
+    if (!over.length) return;
+    const ok = baskets.updateDraft({ ...draft, lines: draft.lines.map((l) => { const n = stockHere.get(l.medicine.id); return n != null && n > 0 && l.quantity > n ? { ...l, quantity: n } : l; }) });
+    if (ok) setReducedTo((r) => ({ ...r, ...Object.fromEntries(over.map((l) => [l.medicine.id, stockHere.get(l.medicine.id)!])) }));
+  }, [stockHere, draft, locked, quoteReady]);
+  const stockOf = (id: string) => (!quoteReady && stockHere ? stockHere.get(id) : undefined);
+  const overStock = cartLines.some((l) => { const n = stockOf(l.medicine.id); return n != null && l.quantity > n; });
 
   const goSearch = (keyword: string) => {
     setSuggestOpen(false);
@@ -669,7 +693,9 @@ export default function PharmacyV2() {
 
   const changeQuantity = (id: string, quantityValue: number) => {
     if (locked) return;
-    const nextQuantity = Math.max(1, Math.min(99, Math.floor(quantityValue) || 1));
+    const stock = stockOf(id);
+    const nextQuantity = Math.max(1, Math.min(stock && stock > 0 ? stock : 99, 99, Math.floor(quantityValue) || 1));
+    setReducedTo((r) => { if (!(id in r)) return r; const next = { ...r }; delete next[id]; return next; });
     baskets.updateDraft({ ...draft, lines: draft.lines.map((line) => line.medicine.id === id ? { ...line, quantity: nextQuantity } : line) });
   };
 
@@ -785,6 +811,7 @@ export default function PharmacyV2() {
     if (!pharmacyId) { setPlaceError('Choose a pharmacy first.'); return; }
     if (quoteExpiredNow) { setPlaceError('This quote has expired. Cancel the request and send it again to get a fresh quote.'); return; }
     if (rxPending) { setPlaceError('The pharmacist must accept your prescription and send a quote before you can order.'); return; }
+    if (overStock) { setPlaceError('Some items are not in stock at this pharmacy in that quantity. Fix the items marked above.'); return; }
     if (fulfilment === 'DELIVERY') {
       if (deliveryText.length < 8) { setPlaceError('Add the full delivery address.'); return; }
       if (!validPin(deliveryPin)) { setPlaceError('Add a valid 6-digit delivery PIN code.'); return; }
@@ -879,7 +906,7 @@ export default function PharmacyV2() {
                 <span className="ph2-mini-qty">
                   <button type="button" aria-label={`Reduce ${line.medicine.medicine_name}`} disabled={locked} onClick={() => changeQuantity(line.medicine.id, line.quantity - 1)}><Minus /></button>
                   <span>{line.quantity}</span>
-                  <button type="button" aria-label={`Add another ${line.medicine.medicine_name}`} disabled={locked} onClick={() => changeQuantity(line.medicine.id, line.quantity + 1)}><Plus /></button>
+                  <button type="button" aria-label={`Add another ${line.medicine.medicine_name}`} disabled={locked || (stockOf(line.medicine.id) ?? Infinity) <= line.quantity} onClick={() => changeQuantity(line.medicine.id, line.quantity + 1)}><Plus /></button>
                 </span>
               </div>
             </div>
@@ -1386,14 +1413,19 @@ export default function PharmacyV2() {
               <table className="ph2-cart-table">
                 <thead><tr><th>Item</th><th>Price</th><th>Quantity</th><th>Total</th></tr></thead>
                 <tbody>
-                  {cartLines.map((line) => (
+                  {cartLines.map((line) => { const stock = stockOf(line.medicine.id), out = stock === 0, dim = out ? { opacity: 0.5 } : undefined; return (
                     <tr key={line.medicine.id}>
                       <td>
                         <div className="ph2-cart-med">
                           <MediaImage kind="medicine" name={line.medicine.medicine_name} src={line.medicine.image_url} />
                           <div>
-                            <b>{line.medicine.medicine_name}</b>
-                            <small>{packText(line.medicine) || 'Medicine'}</small>
+                            <b style={dim}>{line.medicine.medicine_name}</b>
+                            <small style={dim}>{packText(line.medicine) || 'Medicine'}</small>
+                            {stock != null && !locked && (out
+                              ? <small><span className="ph3-low">Out of stock at this pharmacy</span></small>
+                              : reducedTo[line.medicine.id] === stock && line.quantity === stock
+                                ? <small><span className="ph3-low">Reduced to {stock}, the available stock</span></small>
+                                : (stock <= 10 || line.quantity >= stock) && <small><span className="ph3-low">Only {stock} left</span></small>)}
                             {quoteReady
                               ? <span className="ph2-chip ph2-chip--rx"><FileText />In pharmacist’s quote</span>
                               : line.medicine.requires_prescription
@@ -1403,20 +1435,21 @@ export default function PharmacyV2() {
                           </div>
                         </div>
                       </td>
-                      <td><span className="ph2-cart-price">{money(line.medicine.mrp)}</span></td>
+                      <td><span className="ph2-cart-price" style={dim}>{money(line.medicine.mrp)}</span></td>
                       <td>
-                        <span className="ph2-mini-qty">
-                          <button type="button" aria-label={`Reduce ${line.medicine.medicine_name}`} disabled={locked} onClick={() => changeQuantity(line.medicine.id, line.quantity - 1)}><Minus /></button>
+                        <span className="ph2-mini-qty" style={dim}>
+                          <button type="button" aria-label={`Reduce ${line.medicine.medicine_name}`} disabled={locked || out} onClick={() => changeQuantity(line.medicine.id, line.quantity - 1)}><Minus /></button>
                           <span>{line.quantity}</span>
-                          <button type="button" aria-label={`Add another ${line.medicine.medicine_name}`} disabled={locked} onClick={() => changeQuantity(line.medicine.id, line.quantity + 1)}><Plus /></button>
+                          <button type="button" aria-label={`Add another ${line.medicine.medicine_name}`} disabled={locked || (stock != null && line.quantity >= stock)} onClick={() => changeQuantity(line.medicine.id, line.quantity + 1)}><Plus /></button>
                         </span>
                       </td>
                       <td>
-                        <span className="ph2-cart-line-total">{money(moneyNumber(line.medicine.mrp) * line.quantity)}</span>
+                        <span className="ph2-cart-line-total" style={dim}>{money(moneyNumber(line.medicine.mrp) * line.quantity)}</span>
                         <button type="button" className="ph2-cart-remove" disabled={locked} onClick={() => removeLine(line.medicine.id)}><Trash2 />Remove</button>
+                        {out && !locked && <button type="button" className="ph2-link" onClick={() => openMedicine(line.medicine.id)}>Find another pharmacy</button>}
                       </td>
                     </tr>
-                  ))}
+                  ); })}
                 </tbody>
               </table>
               {locked && <p className="ph2-inline-info"><Info />{quoteReady ? 'These are the medicines and prices in the pharmacist’s quote. To change them, cancel the request and send it again.' : 'Your prescription is with the pharmacist. Items are locked until they reply with a quote.'}</p>}
@@ -1534,11 +1567,12 @@ export default function PharmacyV2() {
                 type="button"
                 className="ph2-btn ph2-btn--primary ph2-btn--lg ph2-btn--block"
                 style={{ marginTop: 12 }}
-                disabled={placing || deliveryLoading || rxPending || (fulfilment === 'DELIVERY' && (!deliveryText || !validPin(deliveryPin) || !delivery?.available || belowMinimum))}
+                disabled={placing || deliveryLoading || rxPending || overStock || (fulfilment === 'DELIVERY' && (!deliveryText || !validPin(deliveryPin) || !delivery?.available || belowMinimum))}
                 onClick={() => void placeOrder()}
               >
                 {placing ? 'Placing order...' : quoteExpiredNow ? <>Quote expired</> : rxPending ? <>Awaiting pharmacist quote</> : <>Place order · {money(estimatedTotal)} <ArrowRight /></>}
               </button>
+              {overStock && !rxPending && <p className="ph2-muted" style={{ marginTop: 8 }}>Some items are not in stock at this pharmacy in that quantity. Fix the items marked above to place the order.</p>}
               {rxPending && (
                 <p className="ph2-muted" style={{ marginTop: 8 }}>{quoteExpiredNow ? 'This quote has expired. Cancel the request above and send it again to get a fresh quote.' : activeRequest ? 'You can place the order once the pharmacist\'s quote is ready.' : 'Send your prescription to the pharmacist above. You can place the order once the quote is ready.'}</p>
               )}
