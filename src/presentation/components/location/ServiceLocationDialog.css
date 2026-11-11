@@ -3,3 +3,24 @@
 @media(prefers-reduced-motion:reduce){.sl-spin{animation:none}}
 
 
+
+/* Saved addresses (Home / Work / named places) */
+.sl-saved{margin:4px 0 14px}
+.sl-saved-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.sl-saved-head h3{margin:0;font-size:15px}
+.sl-saved-head a{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:#0b7d83;text-decoration:none}
+.sl-saved-head a svg{width:14px;height:14px}
+.sl-saved ul{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:220px;overflow-y:auto}
+.sl-saved li button{width:100%;display:flex;align-items:flex-start;gap:10px;text-align:left;padding:10px 12px;border:1px solid #dbe7ef;border-radius:12px;background:#fff;font:inherit;color:inherit;cursor:pointer}
+.sl-saved li button:hover:not(:disabled){border-color:#7cc9cc;background:#f5fbfb}
+.sl-saved li button.is-on{border-color:#0b9ea3;background:#ecf8f8}
+.sl-saved li button:disabled{cursor:default;opacity:.75}
+.sl-saved-icon{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:#e6f5f5;color:#0b7d83;flex-shrink:0}
+.sl-saved-icon svg{width:16px;height:16px}
+.sl-saved-text{flex:1;min-width:0;display:grid;gap:2px}
+.sl-saved-text strong{font-size:14px;display:flex;align-items:center;gap:6px}
+.sl-saved-text em{font-style:normal;font-size:11px;font-weight:600;color:#0b7d83;background:#e6f5f5;border-radius:6px;padding:1px 6px}
+.sl-saved-text small{font-size:12px;color:#5f7389;overflow-wrap:anywhere}
+.sl-saved-nopin{color:#b45309!important}
+.sl-saved-check{width:18px;height:18px;color:#0b9ea3;flex-shrink:0;margin-top:6px}
+.sl-saved-empty{font-size:13px;color:#5f7389;margin:0}

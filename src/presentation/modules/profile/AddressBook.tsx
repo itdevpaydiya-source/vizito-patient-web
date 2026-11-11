@@ -1,5 +1,7 @@
 import ThemedSelect from '../../components/forms/ThemedSelect';
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { addressAt, useSearchArea } from "../../../services/location";
 import { PhDialog } from "./ProfileUi";
 import { landmarkText } from "../../../utils/address";
 import {
@@ -112,6 +114,8 @@ export default function AddressBook({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [confirmDel, setConfirmDel] = useState<PatientAddress | null>(null);
+  const area = useSearchArea();
+  const [params, setParams] = useSearchParams();
 
   // The address found at the pin replaces the street, city, state and PIN code (house number stays).
   const fillFrom = (a: PinAddress) => {
@@ -157,6 +161,29 @@ export default function AddressBook({
       isDefault: a.isDefault,
     });
   };
+
+  // NEW-06: start a new address from the location the patient chose or detected. Nothing is saved
+  // until they add the house / flat number and press Save (GPS can't know the flat or landmark).
+  const openFromArea = () => {
+    if (!area) return;
+    open();
+    const pin = { lat: area.lat, lng: area.lng };
+    setMapPin(pin);
+    setForm((f) => (f ? { ...f, pin, pincode: area.pincode || f.pincode, city: area.city || f.city } : f));
+    addressAt(pin).then((a) => { if (a) fillFrom(a); }).catch(() => { /* the patient can type it */ });
+  };
+  // Opened from the dashboard's "Save as an address" link (/profile?add=current).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || params.get("add") !== "current" || !area) return;
+    opened.current = true;
+    openFromArea();
+    document.getElementById("ph-addresses")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const next = new URLSearchParams(params);
+    next.delete("add");
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, area]);
 
   const validate = (f: NonNullable<typeof form>) => {
     const e: Record<string, string> = {};
@@ -649,12 +676,24 @@ export default function AddressBook({
               Add your home address once and it is filled in for lab home
               collection, home care and deliveries.
             </p>
-            <button
-              onClick={() => open()}
-              className="mt-1 px-4 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" /> Add your first address
-            </button>
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              {area && (
+                <button
+                  onClick={openFromArea}
+                  className="px-4 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                >
+                  <MapPin className="w-4 h-4" /> Use my current location ({area.label})
+                </button>
+              )}
+              <button
+                onClick={() => open()}
+                className={area
+                  ? "px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5"
+                  : "px-4 py-2 rounded-xl bg-teal-700 text-white text-xs font-bold inline-flex items-center gap-1.5"}
+              >
+                <Plus className="w-4 h-4" /> Add your first address
+              </button>
+            </div>
           </div>
         )
       )}

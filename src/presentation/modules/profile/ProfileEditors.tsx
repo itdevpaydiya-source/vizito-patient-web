@@ -4,7 +4,7 @@ import { Plus, X } from "lucide-react";
 import api from "../../../services/index";
 import {
   updateProfileApi,
-  uploadPatientPhotoApi,
+
   sendContactOtpApi,
   verifyContactApi,
   type PatientProfileData,
@@ -19,6 +19,7 @@ import {
 } from "../../../services/healthProfileHelper";
 import { profileError } from "../../../services/profileHelpHelper";
 import { PhDialog } from "./ProfileUi";
+import ProfilePhoto from "./ProfilePhoto";
 export const healthPayload = (h: HealthProfile): HealthProfileInput => ({
   blood_group: h.blood_group || "",
   height_cm: h.height_cm,
@@ -42,7 +43,6 @@ export function PersonalEditor({
     [dob, setDob] = useState(profile.dateOfBirth || ""),
     [gender, setGender] = useState(profile.gender || ""),
     [blood, setBlood] = useState(health.blood_group || ""),
-    [photo, setPhoto] = useState<File | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -60,7 +60,6 @@ export function PersonalEditor({
           ...healthPayload(health),
           blood_group: blood,
         });
-      if (photo) await uploadPatientPhotoApi(photo);
       await onSaved();
       onClose();
     } catch (e) {
@@ -72,15 +71,10 @@ export function PersonalEditor({
   return (
     <PhDialog title="Edit personal details" onClose={onClose}>
       <form onSubmit={submit} className="ph-stack">
-        <label>
-          Change photo
-          <input
-            type="file"
-            aria-label="Change photo"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-          />
-        </label>
+        <div className="ph-photo-inline">
+          <ProfilePhoto name={name} current={profile.profilePicture} onSaved={onSaved} />
+          <span>Tap the camera to change your photo.</span>
+        </div>
         <label>
           Full name
           <input

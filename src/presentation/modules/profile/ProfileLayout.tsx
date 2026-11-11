@@ -40,6 +40,7 @@ import {
   DeleteAccountDialog,
 } from "./AccountPanels";
 import AddressBook from "./AddressBook";
+import ProfilePhoto from "./ProfilePhoto";
 import { PhDialog, showValue } from "./ProfileUi";
 import "./profileHelp.css";
 export default function ProfileLayout() {
@@ -164,11 +165,10 @@ export default function ProfileLayout() {
           <section className="ph-card" aria-label="Personal details">
             {header("Personal details", ShieldCheck, "personal")}
             <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-              <MediaImage
-                kind="professional"
-                name={profile.fullName || "Your profile"}
-                src={photoUrl(profile.profilePicture)}
-                className="ph-avatar"
+              <ProfilePhoto
+                name={profile.fullName || ""}
+                current={profile.profilePicture}
+                onSaved={load}
               />
               <dl className="ph-facts" style={{ flex: 1 }}>
                 <div>

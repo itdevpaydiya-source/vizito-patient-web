@@ -6,3 +6,6 @@
 .dash-visit-info h3{font-size:16px}
 
 .dash-greeting h1,.dash-favorites article a{overflow-wrap:anywhere}.dash-hero-photo{mask-image:linear-gradient(90deg,transparent,#000 18%)}
+
+/* Location line + "Save as an address" (NEW-06) */
+.dash-location-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-top:15px}.dash-location-row .dash-location{margin-top:0}.dash-save-address{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--nav-active-bg)}.dash-save-address svg{width:13px;height:13px}

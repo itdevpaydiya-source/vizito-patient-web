@@ -7,9 +7,16 @@ import {
   EyeOff,
   User,
   Calendar,
+  Stethoscope,
+  Building2,
+  FlaskConical,
+  Pill,
+  Home,
+  Accessibility,
+  Ambulance,
+  Droplet,
   ShieldCheck,
-  Users,
-  HeartPulse,
+  Zap,
   AlertCircle,
   CheckCircle2,
   ChevronRight,
@@ -18,7 +25,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import logoImg from '../../../assets/vizito_logo.png';
-import { exploreAssets } from '../../../assets/explore';
+import familyImg from '../../../assets/auth-family.jpg';
 import {
   loginPatientApi,
   sendOtpApi,
@@ -41,6 +48,18 @@ interface AuthModuleProps {
 }
 
 type MainTab = 'login' | 'register';
+
+// Every service a patient can use on Vizito, shown on the sign-in panel.
+const AUTH_SERVICES = [
+  { icon: Stethoscope, title: 'Doctors', desc: 'In-clinic or online visits' },
+  { icon: Building2, title: 'Hospitals', desc: 'Trusted and nearby' },
+  { icon: FlaskConical, title: 'Lab tests', desc: 'Home sample or at a centre' },
+  { icon: Pill, title: 'Pharmacy', desc: 'Genuine medicines' },
+  { icon: Home, title: 'Home care', desc: 'Nursing and care at home' },
+  { icon: Accessibility, title: 'Medical equipment', desc: 'Rent or buy' },
+  { icon: Ambulance, title: 'Ambulance', desc: 'Book when it matters' },
+  { icon: Droplet, title: 'Blood', desc: 'Find or donate' },
+];
 type LoginMode = 'password' | 'otp-request' | 'otp-verify';
 type ForgotStep = 1 | 2 | 3;
 
@@ -73,10 +92,17 @@ export default function AuthModule({
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  // Field-level messages for password login (NEW-04): shown under the field, not in the top banner.
+  const [loginErr, setLoginErr] = useState<{ id?: string; pw?: string }>({});
   const [rememberMe, setRememberMe] = useState(true);
 
   // OTP Login state
   const [otpPhone, setOtpPhone] = useState('');
+  // Log in with a code sent to a mobile number or an email (NEW-03).
+  const [loginOtpChannel, setLoginOtpChannel] = useState<'mobile' | 'email'>('mobile');
+  const loginOtpId = loginOtpChannel === 'mobile' ? otpPhone.replace(/\D/g, '').slice(-10) : otpPhone.trim().toLowerCase();
+  const loginOtpLabel = loginOtpChannel === 'mobile' ? `+91 ${loginOtpId}` : loginOtpId;
+  const loginOtpValid = loginOtpChannel === 'mobile' ? /^[6-9]\d{9}$/.test(loginOtpId) : /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(loginOtpId);
   const [loginOtpCode, setLoginOtpCode] = useState(['', '', '', '', '', '']);
   const [otpCountdown, setOtpCountdown] = useState(30);
   const [canResendOtp, setCanResendOtp] = useState(false);
@@ -101,7 +127,12 @@ export default function AuthModule({
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regAgreedTerms, setRegAgreedTerms] = useState(false);
-  const [regOtpStep, setRegOtpStep] = useState(false);
+  // Sign-up runs in 3 short steps: 1 mobile/email, 2 code, 3 about you (each fits one screen).
+  const [regStep, setRegStep] = useState<1 | 2 | 3>(1);
+  const [regChannel, setRegChannel] = useState<'mobile' | 'email'>('mobile');
+  const [regContact, setRegContact] = useState('');
+  const regOtpStep = regStep === 2;
+  const [showRegConfirm, setShowRegConfirm] = useState(false);
   const [regOtpCode, setRegOtpCode] = useState(['', '', '', '', '', '']);
   const [regToken, setRegToken] = useState('');
 
@@ -134,7 +165,11 @@ export default function AuthModule({
     setActiveTab(tab);
     setIsForgotFlow(false);
     setLoginMode('password');
-    setRegOtpStep(false);
+    setRegStep(1);
+    setRegToken('');
+    setDevOtpHint('');
+    setShowRegErrors(false);
+    setLoginErr({});
     setErrorMessage('');
     setSuccessMessage('');
     if (tab === 'register' && onRegisterClick) {
@@ -197,20 +232,24 @@ export default function AuthModule({
     setSuccessMessage('');
 
     const idVal = loginIdentifier.trim();
-    if (!idVal) {
-      setErrorMessage('Please enter your mobile number or email.');
-      return;
-    }
-    if (!loginPassword) {
-      setErrorMessage('Please enter your password.');
+    const digits = idVal.replace(/[\s+-]/g, '');
+    const looksLikePhone = /^\d+$/.test(digits);
+    const cleanPhone = digits.replace(/^(91|0)(?=\d{10}$)/, '');
+    const errs: { id?: string; pw?: string } = {};
+    if (!idVal) errs.id = 'Enter your mobile number or email.';
+    else if (looksLikePhone && !/^[6-9]\d{9}$/.test(cleanPhone)) errs.id = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.';
+    else if (!looksLikePhone && idVal.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(idVal)) errs.id = 'Enter a valid email address, like name@gmail.com.';
+    else if (!looksLikePhone && !idVal.includes('@')) errs.id = 'Enter a valid mobile number or email.';
+    if (!loginPassword) errs.pw = 'Enter your password.';
+    setLoginErr(errs);
+    if (errs.id || errs.pw) {
+      document.getElementById(errs.id ? 'login-id' : 'login-password')?.focus();
       return;
     }
 
     setBusy(true);
     try {
-      const isPhone = /^[0-9+ ]{8,15}$/.test(idVal);
-      const cleanPhone = idVal.replace(/\D/g, '').slice(-10);
-      const payload = isPhone
+      const payload = looksLikePhone
         ? { phone: cleanPhone, password: loginPassword }
         : { email: idVal.toLowerCase(), password: loginPassword };
 
@@ -218,21 +257,26 @@ export default function AuthModule({
       if (res?.success || res?.token || res?.access_token) {
         const userData = {
           patient_id: res.patient_id || res.data?.patient_id || res.userId || 'kavya-reddy',
-          email: res.email || res.data?.email || (isPhone ? '' : idVal),
-          mobile: res.mobile || res.data?.mobile || (isPhone ? cleanPhone : ''),
+          email: res.email || res.data?.email || (looksLikePhone ? '' : idVal),
+          mobile: res.mobile || res.data?.mobile || (looksLikePhone ? cleanPhone : ''),
           fullName: res.full_name || res.data?.fullName || res.data?.user?.fullName || 'Kavya Reddy',
           token: res.token || res.access_token || res.data?.access_token,
         };
         onLoginSuccess(userData);
       } else {
-        setErrorMessage(res?.message || 'Incorrect password. Please try again.');
+        setLoginErr({ pw: 'Mobile number/email or password is incorrect.' });
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || '';
-      if (/password|credential|unauthorized|401/i.test(msg)) {
-        setErrorMessage('Incorrect password. Please try again.');
+      const status = err?.response?.status;
+      const raw = err?.response?.data?.message;
+      const msg = Array.isArray(raw) ? raw.join(' ') : String(raw || err?.message || '');
+      if (!err?.response) {
+        setErrorMessage('Could not reach Vizito. Check your internet connection and try again.');
+      } else if (status === 429 || /too many|locked|try again in/i.test(msg)) {
+        setErrorMessage(msg || 'Too many attempts. Please wait a few minutes and try again.');
       } else {
-        setErrorMessage(msg || 'Incorrect password. Please try again.');
+        // Never say which one is wrong, or whether the account exists.
+        setLoginErr({ pw: 'Mobile number/email or password is incorrect.' });
       }
     } finally {
       setBusy(false);
@@ -243,24 +287,25 @@ export default function AuthModule({
   const handleRequestLoginOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    const clean = otpPhone.replace(/\D/g, '').slice(-10);
-    if (clean.length !== 10) {
-      setErrorMessage('Enter a valid 10-digit mobile number.');
+    if (!loginOtpValid) {
+      setErrorMessage(loginOtpChannel === 'mobile'
+        ? 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.'
+        : 'Enter a valid email address, like name@gmail.com.');
       return;
     }
 
     setBusy(true);
     try {
-      const res = await sendOtpApi(clean, 'mobile');
+      const res = await sendOtpApi(loginOtpId, loginOtpChannel);
       setLoginMode('otp-verify');
       setOtpCountdown(30);
       setCanResendOtp(false);
       if (res?.dev_otp) {
         setDevOtpHint(String(res.dev_otp));
       }
-      setSuccessMessage(`OTP sent to +91 ${clean}`);
+      setSuccessMessage(`Code sent to ${loginOtpLabel}`);
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || 'Unable to send OTP. Please check your number.');
+      setErrorMessage(err?.response?.data?.message || 'Unable to send the code. Please check and try again.');
     } finally {
       setBusy(false);
     }
@@ -269,7 +314,6 @@ export default function AuthModule({
   const handleVerifyLoginOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    const clean = otpPhone.replace(/\D/g, '').slice(-10);
     const code = loginOtpCode.join('');
     if (code.length !== 6) {
       setErrorMessage('Please enter the full 6-digit OTP code.');
@@ -278,12 +322,12 @@ export default function AuthModule({
 
     setBusy(true);
     try {
-      const res = await verifyOtpApi(clean, code, 'mobile');
+      const res = await verifyOtpApi(loginOtpId, code, loginOtpChannel);
       if (res?.success || res?.token || res?.access_token) {
         const userData = {
           patient_id: res.patient_id || res.data?.patient_id || 'patient-user',
-          email: res.email || res.data?.email || '',
-          mobile: clean,
+          email: res.email || res.data?.email || (loginOtpChannel === 'email' ? loginOtpId : ''),
+          mobile: res.mobile || res.data?.mobile || (loginOtpChannel === 'mobile' ? loginOtpId : ''),
           fullName: res.full_name || res.data?.fullName || 'Patient',
           token: res.token || res.access_token || res.data?.access_token,
         };
@@ -301,97 +345,134 @@ export default function AuthModule({
   // ================= 3. REGISTRATION FLOW =================
   const regPwRules = checkPasswordRules(regPassword);
   const regPasswordsMatch = regPassword.length > 0 && regPassword === regConfirmPassword;
-  const isRegFormValid =
-    regFullName.trim().length >= 2 &&
-    regPhone.replace(/\D/g, '').slice(-10).length === 10 &&
-    regDob.length > 0 &&
-    regPwRules.minLength &&
-    regPwRules.hasLetterAndNum &&
-    regPwRules.hasSpecial &&
-    regPasswordsMatch &&
-    regAgreedTerms;
+  const regContactClean = regChannel === 'mobile' ? regContact.replace(/\D/g, '').slice(-10) : regContact.trim().toLowerCase();
+  const regMobileClean = regChannel === 'mobile' ? regContactClean : regPhone.replace(/\D/g, '').slice(-10);
+  const regContactLabel = regChannel === 'mobile' ? `+91 ${regContactClean}` : regContactClean;
 
+  // Errors show under their own field after the first tap on the step's button (NEW-01, TC-08).
+  const [showRegErrors, setShowRegErrors] = useState(false);
+  type RegField = 'contact' | 'terms' | 'name' | 'phone' | 'dob' | 'password' | 'confirm';
+  const regErrors: Partial<Record<RegField, string>> = {};
+  if (regChannel === 'mobile' && !/^[6-9]\d{9}$/.test(regContactClean))
+    regErrors.contact = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.';
+  if (regChannel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(regContactClean))
+    regErrors.contact = 'Enter a valid email address, like name@gmail.com.';
+  if (!regAgreedTerms) regErrors.terms = 'Accept the Terms of Service and Privacy Policy to continue.';
+  // Same rule as the server: letters, spaces, dots, apostrophes and hyphens only (TC-04, TC-06).
+  if (regFullName.trim().length < 2) regErrors.name = 'Enter your full name.';
+  else if (!/^[A-Za-z][A-Za-z .'-]*$/.test(regFullName.trim())) regErrors.name = 'Use letters only (spaces, dots and hyphens are fine).';
+  if (regChannel === 'email' && !/^[6-9]\d{9}$/.test(regMobileClean))
+    regErrors.phone = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.';
+  if (!regDob) regErrors.dob = 'Enter your date of birth.';
+  else if (regDob > new Date().toISOString().slice(0, 10)) regErrors.dob = 'Date of birth cannot be in the future.';
+  if (!regPassword) regErrors.password = 'Create a password.';
+  else if (!regPwRules.minLength) regErrors.password = 'Password must be at least 8 characters.';
+  else if (!regPwRules.hasLetterAndNum) regErrors.password = 'Password must include a letter and a number.';
+  else if (!regPwRules.hasSpecial) regErrors.password = 'Password must include a special character (e.g. ! @ # $).';
+  if (!regConfirmPassword) regErrors.confirm = 'Re-enter your password.';
+  else if (!regPasswordsMatch) regErrors.confirm = 'Passwords do not match.';
+  const regErr = (k: RegField) => (showRegErrors ? regErrors[k] : undefined);
+  const firstRegError = (fields: RegField[]) => {
+    const first = fields.find((k) => regErrors[k]);
+    if (!first) return false;
+    setShowRegErrors(true);
+    document.getElementById(`reg-${first}`)?.focus();
+    return true;
+  };
+
+  // Step 1 (and Resend): send a code to the chosen mobile or email.
   const handleRegisterSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
-
-    if (!isRegFormValid) {
-      setErrorMessage('Please complete all required fields and accept the Terms.');
-      return;
-    }
-
-    const clean = regPhone.replace(/\D/g, '').slice(-10);
+    if (firstRegError(['contact', 'terms'])) return;
     setBusy(true);
     try {
-      const res = await registerSendOtpApi(clean, 'mobile');
-      setRegOtpStep(true);
+      const res = await registerSendOtpApi(regContactClean, regChannel);
+      setRegStep(2);
+      setShowRegErrors(false);
+      setRegOtpCode(['', '', '', '', '', '']);
       setOtpCountdown(30);
       setCanResendOtp(false);
-      if (res?.dev_otp) {
-        setDevOtpHint(String(res.dev_otp));
-      }
-      setSuccessMessage(`OTP sent to +91 ${clean}`);
+      setDevOtpHint(res?.dev_otp ? String(res.dev_otp) : '');
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || 'Unable to send registration OTP.');
+      setErrorMessage(err?.response?.data?.message || 'Unable to send the code. Please try again.');
     } finally {
       setBusy(false);
     }
   };
 
+  // Back to step 1 to change the mobile/email: the old code is no longer valid.
+  const restartRegistration = () => {
+    setRegStep(1);
+    setRegToken('');
+    setDevOtpHint('');
+    setRegOtpCode(['', '', '', '', '', '']);
+    setErrorMessage('');
+    setSuccessMessage('');
+  };
+
+  // Step 2: check the code; the server returns a short-lived proof used in step 3.
+  const handleRegisterVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    const code = regOtpCode.join('');
+    if (code.length !== 6) {
+      setErrorMessage('Enter the 6-digit code.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const verifyRes = await registerVerifyOtpApi(regContactClean, code, regChannel);
+      const token = verifyRes?.registration_token || verifyRes?.data?.registration_token;
+      if (!token) throw new Error('Could not verify the code. Please try again.');
+      setRegToken(token);
+      setDevOtpHint('');
+      setRegStep(3);
+    } catch (err: any) {
+      setErrorMessage(err?.response?.data?.message || err?.message || 'Invalid or expired code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Step 3: create the account with the verified contact.
   const handleRegisterVerifyAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    const clean = regPhone.replace(/\D/g, '').slice(-10);
-    const code = regOtpCode.join('');
-    if (code.length !== 6) {
-      setErrorMessage('Enter the 6-digit OTP code.');
-      return;
-    }
-
+    if (firstRegError(['name', 'phone', 'dob', 'password', 'confirm'])) return;
     setBusy(true);
     try {
-      // Step A: Verify OTP
-      const verifyRes = await registerVerifyOtpApi(clean, code, 'mobile');
-      const token = verifyRes?.registration_token || verifyRes?.data?.registration_token;
-      if (!token) {
-        throw new Error('Registration token not received.');
-      }
-      setRegToken(token);
-
-      // Step B: Submit Patient Registration
+      const email = regChannel === 'email' ? regContactClean : undefined;
       const regRes = await registerPatientApi({
         full_name: regFullName.trim(),
-        phone: clean,
-        email: regEmail.trim() || undefined,
+        phone: regMobileClean,
+        email,
         password: regPassword,
-        registration_token: token,
+        registration_token: regToken,
         date_of_birth: regDob,
         gender: regGender,
       });
-
-      if (regRes?.success || regRes?.token || regRes?.access_token) {
-        const userData = {
-          patient_id: regRes.patient_id || regRes.data?.patient_id || 'new-patient',
-          email: regEmail.trim(),
-          mobile: clean,
-          fullName: regFullName.trim(),
-          token: regRes.token || regRes.access_token || regRes.data?.access_token,
-        };
-        onLoginSuccess(userData);
-      } else {
-        // Automatically login if registration completed without immediate token
-        const loginRes = await loginPatientApi({ phone: clean, password: regPassword });
-        onLoginSuccess({
-          patient_id: loginRes.patient_id || 'new-patient',
-          email: regEmail.trim(),
-          mobile: clean,
-          fullName: regFullName.trim(),
-          token: loginRes.token || loginRes.access_token,
-        });
-      }
+      const token = regRes?.token || regRes?.access_token || regRes?.data?.access_token;
+      const loginRes = token ? null : await loginPatientApi({ phone: regMobileClean, password: regPassword });
+      // The dashboard shows "Welcome to Vizito, <name>! Your account is ready." once (TC-22).
+      try { sessionStorage.setItem('vizito_welcome', '1'); } catch { /* storage blocked: skip the banner */ }
+      onLoginSuccess({
+        patient_id: regRes?.patient_id || regRes?.data?.patient_id || loginRes?.patient_id || 'new-patient',
+        email: email || '',
+        mobile: regMobileClean,
+        fullName: regFullName.trim(),
+        token: token || loginRes?.token || loginRes?.access_token,
+      });
     } catch (err: any) {
-      setErrorMessage(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
+      const msg = err?.response?.data?.message || err?.message || 'Registration failed. Please try again.';
+      if (/token|verification/i.test(String(msg))) {
+        // The 15-minute proof ran out or was used: verify again from step 1.
+        restartRegistration();
+        setErrorMessage('Your verification expired. Please verify your mobile or email again.');
+      } else {
+        setErrorMessage(Array.isArray(msg) ? msg.join(' ') : msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -497,8 +578,10 @@ export default function AuthModule({
   return (
     <div className="auth-v2-page">
       {/* ================= LEFT BRAND PANEL ================= */}
-      <aside className="auth-v2-left" aria-label="Vizito Healthcare Overview">
-        <div>
+      {/* One panel for Log in and Create account: family photo on top, every Vizito service below. */}
+      <aside className="auth-v2-left" aria-label="About Vizito">
+        <div className="auth-v2-left-inner">
+          <img src={familyImg} alt="" className="auth-v2-left-photo" />
           <div className="auth-v2-brand">
             <img src={logoImg} alt="Vizito logo" className="auth-v2-logo" />
             <div className="auth-v2-brand-text">
@@ -507,52 +590,24 @@ export default function AuthModule({
             </div>
           </div>
 
-          <h1 className="auth-v2-hero-title">
-            Healthcare made simpler for you and your family
-          </h1>
-          <p className="auth-v2-hero-subtitle">
-            Doctors, hospitals, lab tests, pharmacy, home care and more — all in one place.
-          </p>
-
-          <div className="auth-v2-hero-image-wrap">
-            <img
-              src={exploreAssets.hero}
-              alt="Healthcare professional caring for patient"
-              className="auth-v2-hero-image"
-            />
-          </div>
-        </div>
-
-        {/* 3 Value Proposition Cards */}
-        <div className="auth-v2-values">
-          <div className="auth-v2-value-card">
-            <div className="auth-v2-value-icon">
-              <ShieldCheck size={20} />
-            </div>
-            <div className="auth-v2-value-text">
-              <strong>Wide range of services</strong>
-              <p>Doctors, hospitals, lab tests, pharmacy, home care, medical equipment and more.</p>
-            </div>
-          </div>
-
-          <div className="auth-v2-value-card">
-            <div className="auth-v2-value-icon">
-              <Users size={20} />
-            </div>
-            <div className="auth-v2-value-text">
-              <strong>For your whole family</strong>
-              <p>Manage bookings and health records for your loved ones.</p>
-            </div>
-          </div>
-
-          <div className="auth-v2-value-card">
-            <div className="auth-v2-value-icon">
-              <HeartPulse size={20} />
-            </div>
-            <div className="auth-v2-value-text">
-              <strong>A safer, easier healthcare experience</strong>
-              <p>Find trusted providers and get the care you need, when you need it.</p>
-            </div>
+          <div className="auth-v2-left-copy">
+            <h1 className="auth-v2-hero-title">Your health, closer to you</h1>
+            <p className="auth-v2-hero-subtitle">
+              Doctors, hospitals, lab tests, medicines and care at home, for you and your family, in one place.
+            </p>
+            <ul className="auth-v2-services" aria-label="Vizito services">
+              {AUTH_SERVICES.map(({ icon: Icon, title }) => (
+                <li key={title}>
+                  <Icon size={22} aria-hidden="true" />
+                  <span>{title}</span>
+                </li>
+              ))}
+            </ul>
+            <ul className="auth-v2-trust" aria-label="Why Vizito">
+              <li><ShieldCheck size={18} aria-hidden="true" /> Verified providers</li>
+              <li><Zap size={18} aria-hidden="true" /> Easy booking</li>
+              <li><Lock size={18} aria-hidden="true" /> Secure &amp; private</li>
+            </ul>
           </div>
         </div>
       </aside>
@@ -798,36 +853,36 @@ export default function AuthModule({
           ) : (
             <>
               {/* ================= FLOW 2: LOGIN / REGISTER TABS ================= */}
-              <h2 className="auth-v2-card-title">
-                {activeTab === 'login' ? 'Log in to Vizito' : 'Create your Vizito account'}
-              </h2>
-              <p className="auth-v2-card-desc">
-                {activeTab === 'login'
-                  ? 'Access your bookings, medical records and more.'
-                  : 'Get started with your healthcare journey.'}
-              </p>
-
-              {/* Navigation Tabs */}
-              <div className="auth-v2-tabs" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'login'}
-                  onClick={() => switchTab('login')}
-                  className={`auth-v2-tab ${activeTab === 'login' ? 'is-active' : ''}`}
-                >
-                  Log in
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'register'}
-                  onClick={() => switchTab('register')}
-                  className={`auth-v2-tab ${activeTab === 'register' ? 'is-active' : ''}`}
-                >
-                  Create account
-                </button>
-              </div>
+              {!(activeTab === 'register' && regStep > 1) && (
+                <>
+                  <div className="auth-v2-tabs" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'login'}
+                      onClick={() => switchTab('login')}
+                      className={`auth-v2-tab ${activeTab === 'login' ? 'is-active' : ''}`}
+                    >
+                      Log in
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === 'register'}
+                      onClick={() => switchTab('register')}
+                      className={`auth-v2-tab ${activeTab === 'register' ? 'is-active' : ''}`}
+                    >
+                      Create account
+                    </button>
+                  </div>
+                  <h2 className="auth-v2-card-title">
+                    {activeTab === 'login' ? 'Log in to Vizito' : 'Create your Vizito account'}
+                  </h2>
+                  <p className="auth-v2-card-desc">
+                    {activeTab === 'login' ? 'Access your bookings, medical records and more.' : 'Step 1 of 3'}
+                  </p>
+                </>
+              )}
 
               {/* ================= MODE: LOG IN ================= */}
               {activeTab === 'login' && (
@@ -839,20 +894,31 @@ export default function AuthModule({
                         <label className="auth-v2-label">
                           Mobile number or email <span className="auth-v2-req">*</span>
                         </label>
-                        <div className="auth-v2-input-wrap">
+                        <div className={`auth-v2-input-wrap ${loginErr.id ? 'has-error' : ''}`}>
                           <div className="auth-v2-input-icon">
                             <Smartphone size={18} />
                           </div>
                           <input
+                            id="login-id"
                             type="text"
                             placeholder="Enter 10-digit mobile or email"
                             value={loginIdentifier}
-                            onChange={(e) => setLoginIdentifier(e.target.value)}
+                            onChange={(e) => { setLoginIdentifier(e.target.value); setLoginErr((x) => ({ ...x, id: undefined })); }}
                             className="auth-v2-input"
                             autoComplete="username"
-                            required
+                            aria-invalid={Boolean(loginErr.id)}
                           />
                         </div>
+                        {loginErr.id && <p className="auth-v2-field-error" role="alert">{loginErr.id}</p>}
+                        {!loginErr.id && loginIdentifier.includes('@') && suggestEmailFix(loginIdentifier.trim()) && (
+                          <p className="auth-v2-hint">
+                            Did you mean{' '}
+                            <button type="button" className="auth-v2-link" onClick={() => setLoginIdentifier(suggestEmailFix(loginIdentifier.trim()) as string)}>
+                              {suggestEmailFix(loginIdentifier.trim())}
+                            </button>
+                            ?
+                          </p>
+                        )}
                       </div>
 
                       {/* Password */}
@@ -860,18 +926,19 @@ export default function AuthModule({
                         <label className="auth-v2-label">
                           Password <span className="auth-v2-req">*</span>
                         </label>
-                        <div className="auth-v2-input-wrap">
+                        <div className={`auth-v2-input-wrap ${loginErr.pw ? 'has-error' : ''}`}>
                           <div className="auth-v2-input-icon">
                             <Lock size={18} />
                           </div>
                           <input
+                            id="login-password"
                             type={showLoginPassword ? 'text' : 'password'}
                             placeholder="Enter your password"
                             value={loginPassword}
-                            onChange={(e) => setLoginPassword(e.target.value)}
+                            onChange={(e) => { setLoginPassword(e.target.value); setLoginErr((x) => ({ ...x, pw: undefined })); }}
                             className="auth-v2-input"
                             autoComplete="current-password"
-                            required
+                            aria-invalid={Boolean(loginErr.pw)}
                           />
                           <button
                             type="button"
@@ -882,6 +949,7 @@ export default function AuthModule({
                             {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                           </button>
                         </div>
+                        {loginErr.pw && <p className="auth-v2-field-error" role="alert">{loginErr.pw}</p>}
                       </div>
 
                       {/* Remember me & Forgot Password */}
@@ -960,7 +1028,7 @@ export default function AuthModule({
                         </div>
                         <div className="auth-v2-card-action-text">
                           <strong>Log in with OTP instead</strong>
-                          <small>We'll send a 6-digit code to your mobile number.</small>
+                          <small>We'll send a 6-digit code to your mobile number or email.</small>
                         </div>
                         <ChevronRight size={18} color="#0d9488" />
                       </button>
@@ -982,30 +1050,48 @@ export default function AuthModule({
                         <ArrowLeft size={16} /> Back to password login
                       </button>
 
+                      <div className="auth-v2-seg" role="radiogroup" aria-label="Send the code to">
+                        {(['mobile', 'email'] as const).map((ch) => (
+                          <button
+                            key={ch}
+                            type="button"
+                            role="radio"
+                            aria-checked={loginOtpChannel === ch}
+                            className={`auth-v2-seg-btn ${loginOtpChannel === ch ? 'is-active' : ''}`}
+                            onClick={() => { setLoginOtpChannel(ch); setOtpPhone(''); setErrorMessage(''); }}
+                          >
+                            {ch === 'mobile' ? <Smartphone size={16} /> : <Mail size={16} />}
+                            {ch === 'mobile' ? 'Mobile' : 'Email'}
+                          </button>
+                        ))}
+                      </div>
+
                       <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Mobile number <span className="auth-v2-req">*</span>
+                        <label className="auth-v2-label" htmlFor="login-otp-id">
+                          {loginOtpChannel === 'mobile' ? 'Mobile number' : 'Email address'} <span className="auth-v2-req">*</span>
                         </label>
                         <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-phone-prefix">
-                            <span>🇮🇳 +91</span>
-                          </div>
+                          {loginOtpChannel === 'mobile' ? (
+                            <div className="auth-v2-phone-prefix"><span>🇮🇳 +91</span></div>
+                          ) : (
+                            <div className="auth-v2-input-icon"><Mail size={18} /></div>
+                          )}
                           <input
-                            type="tel"
-                            placeholder="98765 43210"
+                            id="login-otp-id"
+                            type={loginOtpChannel === 'mobile' ? 'tel' : 'email'}
+                            inputMode={loginOtpChannel === 'mobile' ? 'numeric' : 'email'}
+                            placeholder={loginOtpChannel === 'mobile' ? '98765 43210' : 'name@gmail.com'}
                             value={otpPhone}
-                            onChange={(e) => setOtpPhone(e.target.value)}
-                            maxLength={10}
+                            onChange={(e) => setOtpPhone(loginOtpChannel === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
                             className="auth-v2-input"
                             autoFocus
-                            required
                           />
                         </div>
                       </div>
 
                       <button
                         type="submit"
-                        disabled={busy || otpPhone.replace(/\D/g, '').length !== 10}
+                        disabled={busy || !loginOtpValid}
                         className="auth-v2-btn-primary"
                       >
                         {busy ? 'Sending code...' : 'Send OTP'}
@@ -1025,11 +1111,11 @@ export default function AuthModule({
                         className="auth-v2-link"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
                       >
-                        <ArrowLeft size={16} /> Change phone number
+                        <ArrowLeft size={16} /> {loginOtpChannel === 'mobile' ? 'Change number' : 'Change email'}
                       </button>
 
                       <p style={{ fontSize: '13px', color: '#475569', margin: '8px 0 14px 0' }}>
-                        Enter the 6-digit OTP sent to <strong>+91 {otpPhone}</strong>
+                        Enter the 6-digit code sent to <strong>{loginOtpLabel}</strong>
                       </p>
 
                       <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setLoginOtpCode)}>
@@ -1078,280 +1164,223 @@ export default function AuthModule({
               )}
 
               {/* ================= MODE: CREATE ACCOUNT ================= */}
-              {activeTab === 'register' && (
-                <>
-                  {!regOtpStep ? (
-                    <form onSubmit={handleRegisterSendOtp}>
-                      {/* Full name */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Full name <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-input-icon">
-                            <User size={18} />
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="e.g. Kavya Reddy"
-                            value={regFullName}
-                            onChange={(e) => setRegFullName(e.target.value)}
-                            className="auth-v2-input"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* Mobile number */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Mobile number <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-phone-prefix">
-                            <span>🇮🇳 +91</span>
-                          </div>
-                          <input
-                            type="tel"
-                            placeholder="98765 43210"
-                            value={regPhone}
-                            onChange={(e) => setRegPhone(e.target.value)}
-                            maxLength={10}
-                            className="auth-v2-input"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* Email (optional) */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">Email (optional)</label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-input-icon">
-                            <Mail size={18} />
-                          </div>
-                          <input
-                            type="email"
-                            placeholder="name@example.com"
-                            value={regEmail}
-                            onChange={(e) => setRegEmail(e.target.value)}
-                            className="auth-v2-input"
-                          />
-                        </div>
-                        {suggestEmailFix(regEmail) && (
-                          <p style={{ fontSize: 12, marginTop: 6, color: '#475569' }}>
-                            Did you mean{' '}
-                            <button type="button" className="auth-v2-link" onClick={() => setRegEmail(suggestEmailFix(regEmail) as string)}>
-                              {suggestEmailFix(regEmail)}
-                            </button>
-                            ?
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Date of birth */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Date of birth <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-input-icon">
-                            <Calendar size={18} />
-                          </div>
-                          <input
-                            type="date"
-                            value={regDob}
-                            onChange={(e) => setRegDob(e.target.value)}
-                            max={new Date().toISOString().split('T')[0]}
-                            className="auth-v2-input"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* Gender */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Gender <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-radio-group">
-                          {(['Female', 'Male', 'Other'] as const).map((gender) => (
-                            <label
-                              key={gender}
-                              className={`auth-v2-radio-pill ${regGender === gender ? 'is-selected' : ''}`}
-                            >
-                              <input
-                                type="radio"
-                                name="reg_gender"
-                                value={gender}
-                                checked={regGender === gender}
-                                onChange={() => setRegGender(gender)}
-                              />
-                              <span>{gender}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Password */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Password <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-input-icon">
-                            <Lock size={18} />
-                          </div>
-                          <input
-                            type={showRegPassword ? 'text' : 'password'}
-                            placeholder="Create a strong password"
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            className="auth-v2-input"
-                            required
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowRegPassword(!showRegPassword)}
-                            className="auth-v2-input-toggle"
-                            aria-label="Toggle password visibility"
-                          >
-                            {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Confirm Password */}
-                      <div className="auth-v2-field">
-                        <label className="auth-v2-label">
-                          Confirm password <span className="auth-v2-req">*</span>
-                        </label>
-                        <div className="auth-v2-input-wrap">
-                          <div className="auth-v2-input-icon">
-                            <Lock size={18} />
-                          </div>
-                          <input
-                            type={showRegPassword ? 'text' : 'password'}
-                            placeholder="Re-enter password"
-                            value={regConfirmPassword}
-                            onChange={(e) => setRegConfirmPassword(e.target.value)}
-                            className="auth-v2-input"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* Live Password Requirements Checklist */}
-                      <div className="auth-v2-pw-checklist">
-                        <div className={`auth-v2-pw-item ${regPwRules.minLength ? 'is-valid' : ''}`}>
-                          <div className="auth-v2-pw-dot">{regPwRules.minLength && <Check size={10} />}</div>
-                          <span>At least 8 characters</span>
-                        </div>
-                        <div className={`auth-v2-pw-item ${regPwRules.hasLetterAndNum ? 'is-valid' : ''}`}>
-                          <div className="auth-v2-pw-dot">{regPwRules.hasLetterAndNum && <Check size={10} />}</div>
-                          <span>Includes a letter and a number</span>
-                        </div>
-                        <div className={`auth-v2-pw-item ${regPwRules.hasSpecial ? 'is-valid' : ''}`}>
-                          <div className="auth-v2-pw-dot">{regPwRules.hasSpecial && <Check size={10} />}</div>
-                          <span>Includes a special character (e.g. ! @ # $)</span>
-                        </div>
-                        <div className={`auth-v2-pw-item ${regPasswordsMatch ? 'is-valid' : ''}`}>
-                          <div className="auth-v2-pw-dot">{regPasswordsMatch && <Check size={10} />}</div>
-                          <span>Confirm password matches</span>
-                        </div>
-                      </div>
-
-                      {/* Terms Agreement */}
-                      <div className="auth-v2-check-row" style={{ marginTop: '16px' }}>
-                        <label className="auth-v2-check-label">
-                          <input
-                            type="checkbox"
-                            checked={regAgreedTerms}
-                            onChange={(e) => setRegAgreedTerms(e.target.checked)}
-                            required
-                          />
-                          <span>
-                            I agree to the <span className="auth-v2-link">Terms of Service</span> and{' '}
-                            <span className="auth-v2-link">Privacy Policy</span>.
-                          </span>
-                        </label>
-                      </div>
-
-                      {/* Submit */}
+              {activeTab === 'register' && regStep === 1 && (
+                <form onSubmit={handleRegisterSendOtp} noValidate>
+                  <div className="auth-v2-seg" role="radiogroup" aria-label="Sign up with">
+                    {(['mobile', 'email'] as const).map((ch) => (
                       <button
-                        type="submit"
-                        disabled={busy || !isRegFormValid}
-                        className="auth-v2-btn-primary"
-                      >
-                        {busy ? 'Preparing OTP...' : 'Send OTP'}
-                      </button>
-
-                      <p style={{ textAlign: 'center', fontSize: '12px', color: '#64748b', marginTop: '12px' }}>
-                        We will send a 6-digit OTP to +91 {regPhone || '98765 43210'}
-                      </p>
-                    </form>
-                  ) : (
-                    /* Step 2: Verify Registration OTP */
-                    <form onSubmit={handleRegisterVerifyAndSubmit}>
-                      <button
+                        key={ch}
                         type="button"
-                        onClick={() => {
-                          setRegOtpStep(false);
-                          setErrorMessage('');
-                        }}
-                        className="auth-v2-link"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '16px' }}
+                        role="radio"
+                        aria-checked={regChannel === ch}
+                        className={`auth-v2-seg-btn ${regChannel === ch ? 'is-active' : ''}`}
+                        onClick={() => { setRegChannel(ch); setRegContact(''); setShowRegErrors(false); }}
                       >
-                        <ArrowLeft size={16} /> Back to details
+                        {ch === 'mobile' ? <Smartphone size={16} /> : <Mail size={16} />}
+                        {ch === 'mobile' ? 'Mobile' : 'Email'}
                       </button>
+                    ))}
+                  </div>
 
-                      <p style={{ fontSize: '13px', color: '#475569', marginBottom: '10px' }}>
-                        Enter the 6-digit OTP sent to <strong>+91 {regPhone}</strong>
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label" htmlFor="reg-contact">
+                      {regChannel === 'mobile' ? 'Mobile number' : 'Email address'} <span className="auth-v2-req">*</span>
+                    </label>
+                    <div className={`auth-v2-input-wrap ${regErr('contact') ? 'has-error' : ''}`}>
+                      {regChannel === 'mobile' ? (
+                        <div className="auth-v2-phone-prefix"><span>🇮🇳 +91</span></div>
+                      ) : (
+                        <div className="auth-v2-input-icon"><Mail size={18} /></div>
+                      )}
+                      <input
+                        id="reg-contact"
+                        type={regChannel === 'mobile' ? 'tel' : 'email'}
+                        inputMode={regChannel === 'mobile' ? 'numeric' : 'email'}
+                        autoComplete={regChannel === 'mobile' ? 'tel-national' : 'email'}
+                        placeholder={regChannel === 'mobile' ? '98765 43210' : 'name@gmail.com'}
+                        value={regContact}
+                        onChange={(e) => setRegContact(regChannel === 'mobile' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value)}
+                        className="auth-v2-input"
+                      />
+                    </div>
+                    {regErr('contact') && <p className="auth-v2-field-error" role="alert">{regErr('contact')}</p>}
+                    {regChannel === 'email' && suggestEmailFix(regContact) && (
+                      <p className="auth-v2-hint">
+                        Did you mean{' '}
+                        <button type="button" className="auth-v2-link" onClick={() => setRegContact(suggestEmailFix(regContact) as string)}>
+                          {suggestEmailFix(regContact)}
+                        </button>
+                        ?
                       </p>
+                    )}
+                  </div>
 
-                      <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setRegOtpCode)}>
-                        {regOtpCode.map((digit, idx) => (
-                          <input
-                            key={idx}
-                            ref={(el) => { otpInputRefs.current[idx] = el; }}
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={1}
-                            value={digit}
-                            onChange={(e) => handleOtpBoxChange(idx, e.target.value, setRegOtpCode)}
-                            onKeyDown={(e) => handleOtpKeyDown(idx, e, setRegOtpCode, regOtpCode)}
-                            className="auth-v2-otp-box"
-                            autoFocus={idx === 0}
-                          />
+                  <div className="auth-v2-check-row">
+                    <label className="auth-v2-check-label">
+                      <input id="reg-terms" type="checkbox" checked={regAgreedTerms} onChange={(e) => setRegAgreedTerms(e.target.checked)} />
+                      <span>
+                        I agree to Vizito's <span className="auth-v2-link">Terms of Service</span> and{' '}
+                        <span className="auth-v2-link">Privacy Policy</span>.
+                      </span>
+                    </label>
+                  </div>
+                  {regErr('terms') && <p className="auth-v2-field-error" role="alert">{regErr('terms')}</p>}
+
+                  <button type="submit" disabled={busy} className="auth-v2-btn-primary">
+                    {busy ? 'Sending code...' : 'Send code'}
+                  </button>
+                  {!regErrors.contact && (
+                    <p className="auth-v2-foot-note">We will send a 6-digit code to <strong>{regContactLabel}</strong></p>
+                  )}
+                </form>
+              )}
+
+              {activeTab === 'register' && regStep === 2 && (
+                <form onSubmit={handleRegisterVerifyOtp}>
+                  <div className="auth-v2-step-head">
+                    <button type="button" className="auth-v2-back" onClick={restartRegistration} aria-label="Back to step 1">
+                      <ArrowLeft size={20} />
+                    </button>
+                    <span>Step 2 of 3</span>
+                  </div>
+                  <p className="auth-v2-code-title">
+                    Enter the 6-digit code sent to <strong>{regContactLabel}</strong>
+                  </p>
+
+                  <div className="auth-v2-otp-grid" onPaste={(e) => handleOtpPaste(e, setRegOtpCode)}>
+                    {regOtpCode.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={(el) => { otpInputRefs.current[idx] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+                        aria-label={`Digit ${idx + 1}`}
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpBoxChange(idx, e.target.value, setRegOtpCode)}
+                        onKeyDown={(e) => handleOtpKeyDown(idx, e, setRegOtpCode, regOtpCode)}
+                        className="auth-v2-otp-box"
+                        autoFocus={idx === 0}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="auth-v2-resend-row">
+                    <button type="button" className="auth-v2-link" onClick={restartRegistration}>
+                      {regChannel === 'mobile' ? 'Change number' : 'Change email'}
+                    </button>
+                    {otpCountdown > 0 ? (
+                      <span>Resend in 0:{String(otpCountdown).padStart(2, '0')}</span>
+                    ) : (
+                      <button type="button" className="auth-v2-link" onClick={(e) => void handleRegisterSendOtp(e)}>
+                        Resend code
+                      </button>
+                    )}
+                  </div>
+
+                  <button type="submit" disabled={busy || regOtpCode.join('').length !== 6} className="auth-v2-btn-primary">
+                    {busy ? 'Verifying...' : 'Verify'}
+                  </button>
+                </form>
+              )}
+
+              {activeTab === 'register' && regStep === 3 && (
+                <form onSubmit={handleRegisterVerifyAndSubmit} noValidate>
+                  <div className="auth-v2-step-head">
+                    <button type="button" className="auth-v2-back" onClick={restartRegistration} aria-label="Start again">
+                      <ArrowLeft size={20} />
+                    </button>
+                    <span>Step 3 of 3</span>
+                  </div>
+                  <h2 className="auth-v2-card-title">Tell us about you</h2>
+                  <p className="auth-v2-card-desc auth-v2-verified">
+                    <CheckCircle2 size={14} className="auth-v2-verified-icon" /> Verified: {regContactLabel}
+                  </p>
+
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label" htmlFor="reg-name">Full name <span className="auth-v2-req">*</span></label>
+                    <div className={`auth-v2-input-wrap ${regErr('name') ? 'has-error' : ''}`}>
+                      <div className="auth-v2-input-icon"><User size={18} /></div>
+                      <input id="reg-name" type="text" autoComplete="name" placeholder="Enter your full name" value={regFullName} onChange={(e) => setRegFullName(e.target.value)} className="auth-v2-input" />
+                    </div>
+                    {regErr('name') && <p className="auth-v2-field-error" role="alert">{regErr('name')}</p>}
+                  </div>
+
+                  {regChannel === 'email' && (
+                    <div className="auth-v2-field">
+                      <label className="auth-v2-label" htmlFor="reg-phone">Mobile number <span className="auth-v2-req">*</span></label>
+                      <div className={`auth-v2-input-wrap ${regErr('phone') ? 'has-error' : ''}`}>
+                        <div className="auth-v2-phone-prefix"><span>🇮🇳 +91</span></div>
+                        <input id="reg-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={regPhone} onChange={(e) => setRegPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} className="auth-v2-input" />
+                      </div>
+                      {regErr('phone') ? <p className="auth-v2-field-error" role="alert">{regErr('phone')}</p> : <p className="auth-v2-hint">So doctors, hospitals and delivery staff can reach you.</p>}
+                    </div>
+                  )}
+
+                  <div className="auth-v2-row-2">
+                    <div className="auth-v2-field">
+                      <label className="auth-v2-label" htmlFor="reg-dob">Date of birth <span className="auth-v2-req">*</span></label>
+                      <div className={`auth-v2-input-wrap ${regErr('dob') ? 'has-error' : ''}`}>
+                        <input id="reg-dob" type="date" value={regDob} onChange={(e) => setRegDob(e.target.value)} max={new Date().toISOString().split('T')[0]} className="auth-v2-input auth-v2-input-plain" />
+                      </div>
+                      {regErr('dob') && <p className="auth-v2-field-error" role="alert">{regErr('dob')}</p>}
+                    </div>
+                    <div className="auth-v2-field">
+                      <span className="auth-v2-label">Gender <span className="auth-v2-req">*</span></span>
+                      <div className="auth-v2-gender" role="radiogroup" aria-label="Gender">
+                        {(['Female', 'Male', 'Other'] as const).map((g) => (
+                          <label key={g} className={`auth-v2-gender-opt ${regGender === g ? 'is-selected' : ''}`}>
+                            <input type="radio" name="reg_gender" value={g} checked={regGender === g} onChange={() => setRegGender(g)} />
+                            <span>{g}</span>
+                          </label>
                         ))}
                       </div>
+                    </div>
+                  </div>
 
-                      <div className="auth-v2-resend-row">
-                        <span>
-                          {otpCountdown > 0 ? (
-                            `Resend OTP in 00:${String(otpCountdown).padStart(2, '0')}`
-                          ) : (
-                            <button
-                              type="button"
-                              className="auth-v2-link"
-                              onClick={(e) => void handleRegisterSendOtp(e)}
-                            >
-                              Resend OTP
-                            </button>
-                          )}
-                        </span>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={busy || regOtpCode.join('').length !== 6}
-                        className="auth-v2-btn-primary"
-                      >
-                        {busy ? 'Creating account...' : 'Verify & Create account'}
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label" htmlFor="reg-password">Password <span className="auth-v2-req">*</span></label>
+                    <div className={`auth-v2-input-wrap ${regErr('password') ? 'has-error' : ''}`}>
+                      <div className="auth-v2-input-icon"><Lock size={18} /></div>
+                      <input id="reg-password" type={showRegPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="Create a password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} className="auth-v2-input" />
+                      <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} className="auth-v2-input-toggle" aria-label={showRegPassword ? 'Hide password' : 'Show password'}>
+                        {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
-                    </form>
-                  )}
-                </>
+                    </div>
+                    {regErr('password') && <p className="auth-v2-field-error" role="alert">{regErr('password')}</p>}
+                  </div>
+
+                  <div className="auth-v2-field">
+                    <label className="auth-v2-label" htmlFor="reg-confirm">Confirm password <span className="auth-v2-req">*</span></label>
+                    <div className={`auth-v2-input-wrap ${regErr('confirm') ? 'has-error' : ''}`}>
+                      <div className="auth-v2-input-icon"><Lock size={18} /></div>
+                      <input id="reg-confirm" type={showRegConfirm ? 'text' : 'password'} autoComplete="new-password" placeholder="Re-enter your password" value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)} className="auth-v2-input" />
+                      <button type="button" onClick={() => setShowRegConfirm(!showRegConfirm)} className="auth-v2-input-toggle" aria-label={showRegConfirm ? 'Hide confirm password' : 'Show confirm password'}>
+                        {showRegConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    {regErr('confirm') && <p className="auth-v2-field-error" role="alert">{regErr('confirm')}</p>}
+                  </div>
+
+                  <ul className="auth-v2-pw-box" aria-label="Password rules">
+                    {([
+                      [regPwRules.minLength, 'At least 8 characters'],
+                      [regPwRules.hasLetterAndNum, 'A letter and a number'],
+                      [regPwRules.hasSpecial, 'A special character (e.g. ! @ # $)'],
+                      [regPasswordsMatch, 'Passwords match'],
+                    ] as const).map(([ok, text]) => (
+                      <li key={text} className={ok ? 'is-valid' : ''}>
+                        <span className="auth-v2-pw-dot">{ok && <Check size={10} />}</span>
+                        {text}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button type="submit" disabled={busy} className="auth-v2-btn-primary">
+                    {busy ? 'Creating account...' : 'Create account'}
+                  </button>
+                </form>
               )}
             </>
           )}

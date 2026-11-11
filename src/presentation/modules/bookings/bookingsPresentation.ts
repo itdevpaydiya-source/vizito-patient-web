@@ -90,7 +90,13 @@ export function endOf(b: Booking): string | null {
   if (careEnd) return careEnd;
   const explicit = b.timeSlot?.split(/\s*[–-]\s*/)[1];
   if (explicit) return clock(explicit);
-  return ['Doctor', 'Hospital'].includes(typeOf(b)) ? clock(b.endTime) : null;
+  if (!['Doctor', 'Hospital'].includes(typeOf(b))) return null;
+  // NEW-19: a visit is one slot. An "end" hours after the start (e.g. the session's end) is not the
+  // appointment's end, so show just the start time rather than a misleading range.
+  const end = clock(b.endTime), start = timeOf(b);
+  const mins = (t: string | null) => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const s = mins(start), e = mins(end);
+  return s != null && e != null && (e <= s || e - s > 120) ? null : end;
 }
 export const timeLabel = (t: string | null) => {
   if (!t) return '';

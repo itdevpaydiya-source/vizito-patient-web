@@ -611,3 +611,24 @@
     flex: 1;
   }
 }
+
+/* Profile photo on the avatar (NEW-07) */
+.ph-photo { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+.ph-photo-avatar { position: relative; }
+.ph-photo-camera {
+  position: absolute; right: -4px; bottom: -4px; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; border: 2px solid #fff; background: #f56508; color: #fff; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+}
+.ph-photo-camera svg { width: 14px; height: 14px; }
+.ph-photo-camera:focus-visible { outline: 2px solid #0b918a; outline-offset: 2px; }
+.ph-photo-remove { border: 0; background: none; padding: 0; font-size: 11px; color: #e02940; cursor: pointer; }
+.ph-photo-error { margin: 0; font-size: 12px; color: #dc2626; max-width: 220px; text-align: center; }
+.ph-photo-preview { display: grid; gap: 12px; justify-items: center; text-align: center; }
+.ph-photo-preview img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 3px solid #f6eee8; }
+.ph-photo-preview p { margin: 0; font-size: 13px; color: #52729d; max-width: 340px; }
+.ph-photo-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.ph-photo-actions .ph-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ph-spin { animation: ph-spin 0.9s linear infinite; }
+@keyframes ph-spin { to { transform: rotate(360deg); } }
+.ph-photo-inline { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #52729d; }
