@@ -32,6 +32,7 @@ import {
   registerPatientApi,
 } from '../../../services/authHelper';
 import './AuthV2.css';
+import { suggestEmailFix } from '../../../utils/emailTypo';
 
 interface AuthModuleProps {
   onLoginSuccess: (user: any) => void;
@@ -1137,6 +1138,15 @@ export default function AuthModule({
                             className="auth-v2-input"
                           />
                         </div>
+                        {suggestEmailFix(regEmail) && (
+                          <p style={{ fontSize: 12, marginTop: 6, color: '#475569' }}>
+                            Did you mean{' '}
+                            <button type="button" className="auth-v2-link" onClick={() => setRegEmail(suggestEmailFix(regEmail) as string)}>
+                              {suggestEmailFix(regEmail)}
+                            </button>
+                            ?
+                          </p>
+                        )}
                       </div>
 
                       {/* Date of birth */}

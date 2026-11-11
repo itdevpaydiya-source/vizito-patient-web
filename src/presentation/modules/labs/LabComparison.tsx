@@ -176,6 +176,13 @@ export default function LabComparison(p: Props) {
             <RefreshCw className="w-3.5 h-3.5" /> Try again
           </button>
         </div>
+      ) : p.labs === null && !p.city && !area ? (
+        // No location yet: the lab search can't run, so ask for it instead of spinning forever.
+        <div role="status" className="rounded-2xl border border-slate-200 bg-white p-12 text-center space-y-2 shadow-xs">
+          <MapPin className="w-8 h-8 text-teal-600 mx-auto" />
+          <p className="text-sm font-bold text-slate-700">Set your location to see labs near you</p>
+          <p className="text-xs text-slate-500">Use “Set your location” above to choose your area.</p>
+        </div>
       ) : p.labs === null ? (
         <div role="status" className="rounded-2xl border border-slate-200 bg-white p-12 text-center space-y-3 shadow-xs">
           <div className="w-9 h-9 border-3 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />

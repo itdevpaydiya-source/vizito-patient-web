@@ -79,6 +79,9 @@ export interface MyLabReport {
   versions?: { version: number; status: 'CURRENT' | 'REPLACED'; released_at: string; amendment_reason: string | null; partial?: boolean }[];
 }
 export const myLabReportApi = async (id: string): Promise<MyLabReport> => (await apiClient.get(`/lab-orders/${encodeURIComponent(id)}/report`)).data;
+export interface LabReportImage { id: string; test_code: string | null; caption: string | null; mime: string; created_at: string }
+export const myLabImagesApi = async (id: string): Promise<LabReportImage[]> => (await apiClient.get(`/lab-orders/${encodeURIComponent(id)}/images`)).data;
+export const myLabImageBlobApi = async (id: string, imageId: string): Promise<Blob> => (await apiClient.get(`/lab-orders/${encodeURIComponent(id)}/images/${imageId}/file`, { responseType: 'blob' })).data;
 export const openMyLabReportPdf = async (id: string, version?: number) => {
   const r = await apiClient.get(`/lab-orders/${encodeURIComponent(id)}/report/pdf`, { params: version ? { version } : {}, responseType: 'blob' });
   window.open(URL.createObjectURL(r.data as Blob), '_blank', 'noopener');
