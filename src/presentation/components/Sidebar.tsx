@@ -22,7 +22,7 @@ const care:[string,string,ElementType][]=[['/healthcare-services','Explore servi
 export default function Sidebar({isOpen=false,onClose}:SidebarProps){
  const navigate=useNavigate(),location=useLocation(),{groups}=useBookingActivity();
  const ready=Object.values(groups).every(g=>g.state==='ready');
- const upcoming=ready?Object.values(groups).reduce((count,g)=>count+g.bookings.filter(b=>b.section==='upcoming').length,0):0;
+ const upcoming=ready?Object.values(groups).reduce((count,g)=>count+g.bookings.filter(b=>b.section==='upcoming'||b.section==='active').length,0):0;
  const selected=sidebarDestination(location.pathname);
  const item=(to:string,label:string,Icon:ElementType,badge=false)=><NavLink key={to} to={to} onClick={onClose} aria-current={selected===to?'page':false} className={`sidebar-link ${selected===to?'is-active':''}`}><Icon aria-hidden="true"/><span>{label}</span>{badge&&upcoming>0&&<b className="sidebar-count" aria-label={`${upcoming} upcoming bookings`}>{upcoming}</b>}</NavLink>;
  return <aside className={`patient-sidebar fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${isOpen?'translate-x-0':'-translate-x-full'}`} aria-label="Main navigation">

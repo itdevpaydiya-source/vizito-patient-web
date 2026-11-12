@@ -63,6 +63,104 @@ const AUTH_SERVICES = [
 type LoginMode = 'password' | 'otp-request' | 'otp-verify';
 type ForgotStep = 1 | 2 | 3;
 
+const GOOGLE_GIS_SCRIPT_ID = 'google-gis-script';
+const GOOGLE_GIS_SRC = 'https://accounts.google.com/gsi/client';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        id?: {
+          initialize: (config: { client_id: string; callback: (response: { credential?: string }) => void }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme?: string;
+              size?: string;
+              text?: string;
+              shape?: string;
+              width?: number;
+            },
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
+// Google Sign-In web client ID — must match GOOGLE_CLIENT_ID in vizito-auth/.env.
+export const getGoogleClientId = (): string =>
+  (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || '';
+
+// Loads the Google Identity Services script once and resolves when ready.
+export const loadGoogleIdentity = (): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return reject(new Error('Google Sign-In requires a browser environment'));
+    }
+    if (window.google?.accounts?.id) return resolve();
+
+    const existing = document.getElementById(GOOGLE_GIS_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.gsiState === 'error') {
+        existing.remove();
+      } else if (existing.dataset.gsiState === 'loaded') {
+        return window.google?.accounts?.id
+          ? resolve()
+          : reject(new Error('Google Sign-In unavailable'));
+      } else {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error('Failed to load Google script')), { once: true });
+        return;
+      }
+    }
+
+    const script = document.createElement('script');
+    script.src = GOOGLE_GIS_SRC;
+    script.async = true;
+    script.defer = true;
+    script.id = GOOGLE_GIS_SCRIPT_ID;
+    // Strip path/query from Referer while preserving origin for Google Identity Services.
+    script.referrerPolicy = 'strict-origin-when-cross-origin';
+    script.dataset.gsiState = 'loading';
+    script.onload = () => {
+      script.dataset.gsiState = 'loaded';
+      resolve();
+    };
+    script.onerror = () => {
+      script.dataset.gsiState = 'error';
+      reject(new Error('Failed to load Google script'));
+    };
+    document.head.appendChild(script);
+  });
+
+export const formatGoogleAuthError = (err: any): string => {
+  if (
+    err &&
+    typeof err === 'object' &&
+    !err.response &&
+    (err.isAxiosError || err.request || err.code === 'ERR_NETWORK' || err.message === 'Network Error')
+  ) {
+    return 'Could not reach Vizito. Check your internet connection and try again.';
+  }
+  const raw = err?.response?.data?.message;
+  const rawMsg = Array.isArray(raw) ? raw.join(', ') : String(raw || err?.message || '').trim();
+  if (!rawMsg) return 'Google sign-in failed. Please try again.';
+  if (/not authorized for role/i.test(rawMsg)) {
+    return 'This Google account is registered under a different role and cannot sign in as a patient. Please use another Google account or log in with your mobile number or email.';
+  }
+  if (/invalid google token|idtoken is required/i.test(rawMsg)) {
+    return 'Google sign-in could not be verified. Please try again.';
+  }
+  if (/email not verified/i.test(rawMsg)) {
+    return 'Your Google account email is not verified. Please verify it with Google and try again.';
+  }
+  if (/disabled or blocked/i.test(rawMsg)) {
+    return 'Your account has been disabled or blocked. Please contact Vizito support.';
+  }
+  return rawMsg;
+};
+
 // Password requirement checks matching backend validation
 const checkPasswordRules = (pw: string) => {
   return {
@@ -144,6 +242,11 @@ export default function AuthModule({
 
   // OTP box refs for auto-focus
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const googleClientId = getGoogleClientId();
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const [googleStatus, setGoogleStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    googleClientId ? 'loading' : 'idle',
+  );
 
   // Update tab if initialTab prop changes
   useEffect(() => {
@@ -225,6 +328,23 @@ export default function AuthModule({
     otpInputRefs.current[nextFocus]?.focus();
   };
 
+  // Shared post-login handler for password, OTP, and Google authentication.
+  const completeAuthLogin = (
+    res: any,
+    fallback: { patientId?: string; email?: string; mobile?: string; fullName?: string } = {},
+  ): boolean => {
+    const token = res?.token || res?.access_token || res?.data?.access_token;
+    if (!(res?.success || token)) return false;
+    onLoginSuccess({
+      patient_id: res.patient_id || res.data?.patient_id || res.userId || res.data?.userId || fallback.patientId || '',
+      email: res.email || res.data?.email || res.data?.user?.email || fallback.email || '',
+      mobile: res.mobile || res.data?.mobile || res.data?.user?.phone || fallback.mobile || '',
+      fullName: res.full_name || res.data?.fullName || res.data?.user?.fullName || fallback.fullName || 'Patient',
+      token,
+    });
+    return true;
+  };
+
   // ================= 1. PASSWORD LOGIN =================
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,16 +374,14 @@ export default function AuthModule({
         : { email: idVal.toLowerCase(), password: loginPassword };
 
       const res = await loginPatientApi(payload);
-      if (res?.success || res?.token || res?.access_token) {
-        const userData = {
-          patient_id: res.patient_id || res.data?.patient_id || res.userId || 'kavya-reddy',
-          email: res.email || res.data?.email || (looksLikePhone ? '' : idVal),
-          mobile: res.mobile || res.data?.mobile || (looksLikePhone ? cleanPhone : ''),
-          fullName: res.full_name || res.data?.fullName || res.data?.user?.fullName || 'Kavya Reddy',
-          token: res.token || res.access_token || res.data?.access_token,
-        };
-        onLoginSuccess(userData);
-      } else {
+      if (
+        !completeAuthLogin(res, {
+          patientId: 'kavya-reddy',
+          email: looksLikePhone ? '' : idVal,
+          mobile: looksLikePhone ? cleanPhone : '',
+          fullName: 'Kavya Reddy',
+        })
+      ) {
         setLoginErr({ pw: 'Mobile number/email or password is incorrect.' });
       }
     } catch (err: any) {
@@ -323,16 +441,14 @@ export default function AuthModule({
     setBusy(true);
     try {
       const res = await verifyOtpApi(loginOtpId, code, loginOtpChannel);
-      if (res?.success || res?.token || res?.access_token) {
-        const userData = {
-          patient_id: res.patient_id || res.data?.patient_id || 'patient-user',
-          email: res.email || res.data?.email || (loginOtpChannel === 'email' ? loginOtpId : ''),
-          mobile: res.mobile || res.data?.mobile || (loginOtpChannel === 'mobile' ? loginOtpId : ''),
-          fullName: res.full_name || res.data?.fullName || 'Patient',
-          token: res.token || res.access_token || res.data?.access_token,
-        };
-        onLoginSuccess(userData);
-      } else {
+      if (
+        !completeAuthLogin(res, {
+          patientId: 'patient-user',
+          email: loginOtpChannel === 'email' ? loginOtpId : '',
+          mobile: loginOtpChannel === 'mobile' ? loginOtpId : '',
+          fullName: 'Patient',
+        })
+      ) {
         setErrorMessage(res?.message || 'Invalid or expired OTP. Please try again.');
       }
     } catch (err: any) {
@@ -566,14 +682,76 @@ export default function AuthModule({
     }
   };
 
-  // Google Login Handler
-  const handleGoogleSignIn = async () => {
+  // Google Sign-In credential callback: sends ID token to /patient/auth/google and reuses
+  // the standard post-login handler (creating the patient account on first sign-in).
+  const handleGoogleCredential = async (response: { credential?: string }) => {
+    const idToken = response?.credential;
+    if (!idToken) {
+      setErrorMessage('Google sign-in failed. Please try again.');
+      return;
+    }
+    setBusy(true);
     setErrorMessage('');
+    setSuccessMessage('');
     try {
-      // In web preview without client ID, give helpful notification
-      setErrorMessage('Google Sign-In is configured. Please use mobile or password login for local testing.');
-    } catch (_) {}
+      const res = await googlePatientApi(idToken);
+      if (!completeAuthLogin(res, { fullName: 'Patient' })) {
+        setErrorMessage(res?.message || 'Google sign-in failed. Please try again.');
+      }
+    } catch (err: any) {
+      setErrorMessage(formatGoogleAuthError(err));
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const googleCredentialHandlerRef = useRef(handleGoogleCredential);
+  googleCredentialHandlerRef.current = handleGoogleCredential;
+
+  // Loads Google Identity Services and renders the official Google button whenever
+  // the password login screen is shown and VITE_GOOGLE_CLIENT_ID is configured.
+  useEffect(() => {
+    if (isForgotFlow || activeTab !== 'login' || loginMode !== 'password') return;
+    if (!googleClientId) {
+      setGoogleStatus('idle');
+      return;
+    }
+
+    let cancelled = false;
+    setGoogleStatus('loading');
+    loadGoogleIdentity()
+      .then(() => {
+        if (cancelled) return;
+        const gsi = window.google?.accounts?.id;
+        if (!gsi || !googleBtnRef.current) {
+          setGoogleStatus('error');
+          return;
+        }
+        gsi.initialize({
+          client_id: googleClientId,
+          callback: (response) => googleCredentialHandlerRef.current(response),
+        });
+        googleBtnRef.current.replaceChildren();
+        const containerWidth =
+          googleBtnRef.current.clientWidth || googleBtnRef.current.parentElement?.clientWidth || 380;
+        const googleButtonWidth = Math.max(240, Math.min(400, Math.floor(containerWidth)));
+        gsi.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'pill',
+          width: googleButtonWidth,
+        });
+        setGoogleStatus('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setGoogleStatus('error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, loginMode, isForgotFlow, googleClientId]);
 
   return (
     <div className="auth-v2-page">
@@ -987,31 +1165,58 @@ export default function AuthModule({
                       </div>
 
                       {/* Google Sign-In */}
-                      <button
-                        type="button"
-                        onClick={handleGoogleSignIn}
-                        className="auth-v2-btn-google"
-                      >
-                        <svg width="18" height="18" viewBox="0 0 18 18">
-                          <path
-                            fill="#4285F4"
-                            d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                      <div className="auth-v2-google-wrap">
+                        {googleClientId && googleStatus !== 'error' && (
+                          <div
+                            ref={googleBtnRef}
+                            className={`auth-v2-google-slot${googleStatus === 'ready' ? ' is-ready' : ''}${busy ? ' is-busy' : ''}`}
+                            aria-busy={busy}
                           />
-                          <path
-                            fill="#34A853"
-                            d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-                          />
-                          <path
-                            fill="#FBBC05"
-                            d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
-                          />
-                          <path
-                            fill="#EA4335"
-                            d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
-                          />
-                        </svg>
-                        <span>Continue with Google</span>
-                      </button>
+                        )}
+                        {(!googleClientId || googleStatus !== 'ready') && (
+                          <button
+                            type="button"
+                            disabled
+                            aria-disabled="true"
+                            className="auth-v2-btn-google"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                              <path
+                                fill="#4285F4"
+                                d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
+                              />
+                              <path
+                                fill="#EA4335"
+                                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"
+                              />
+                            </svg>
+                            <span>{googleClientId && googleStatus === 'loading' ? 'Loading Google Sign-In...' : 'Continue with Google'}</span>
+                          </button>
+                        )}
+                        {!googleClientId && (
+                          <p className="auth-v2-hint auth-v2-google-hint">
+                            Google Sign-In is unavailable in this environment. Use mobile, email, or OTP above.
+                          </p>
+                        )}
+                        {googleClientId && googleStatus === 'error' && (
+                          <p className="auth-v2-hint auth-v2-google-hint">
+                            Google Sign-In could not load right now. Use mobile, email, or OTP above.
+                          </p>
+                        )}
+                        {googleClientId && googleStatus === 'ready' && busy && (
+                          <p className="auth-v2-hint auth-v2-google-hint" role="status">
+                            Signing in with Google...
+                          </p>
+                        )}
+                      </div>
 
                       {/* Log in with OTP action card */}
                       <button

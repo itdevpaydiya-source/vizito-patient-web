@@ -1,6 +1,7 @@
 import { ENDPOINTS } from "./endpoints";
 import apiClient from "./index";
 import type { ProviderItem } from "./types";
+import { normalizeSpecialtyLabel, specialtyKey } from "../utils/specialties";
 
 // Authenticated patient profile. Identity comes from the JWT server-side (/patients/me resolves
 // req.user.userId = users.id). No patient_id is sent from the client. Throws on failure — no fake fallback.
@@ -63,16 +64,21 @@ export const changePasswordApi = async (currentPassword: string, newPassword: st
 const providerServiceParam = (serviceId?: string) => ({
   homecare: 'HOME_CARE', home_care: 'HOME_CARE', diagnostic: 'LAB', diagnostics: 'LAB', lab: 'LAB',
   equipment: 'EQUIPMENT', rental: 'EQUIPMENT', ambulance: 'AMBULANCE', doctor: 'DOCTOR', hospital: 'HOSPITAL', pharmacy: 'PHARMACY',
+  bloodbank: 'BLOOD_BANK', blood_bank: 'BLOOD_BANK', 'blood-bank': 'BLOOD_BANK', blood: 'BLOOD_BANK',
 } as Record<string, string>)[String(serviceId || '').toLowerCase()] || serviceId;
 
-const mapProviderItem = (p: any, serviceId?: string): ProviderItem => ({
+const mapProviderItem = (p: any, serviceId?: string): ProviderItem => {
+  const isDoctor = String(p.partner_type || '').toLowerCase() === 'doctor';
+  const rawDocSpec = p.specialization ?? p.doctor?.specialization ?? p.doctor?.primary_specialization;
+  const canonicalSpec = normalizeSpecialtyLabel(rawDocSpec);
+  return {
   id: String(p.id), serviceId: serviceId || '',
   name: p.display_name || p.business_name || p.name || (serviceId === 'hospital' ? 'Hospital' : 'Provider'),
-  subtitle: p.display_type || p.partner_type || undefined,
-  specialtyOrType: p.display_type || p.partner_type || undefined,
+  subtitle: isDoctor && p.display_type ? (normalizeSpecialtyLabel(p.display_type) || p.display_type) : (p.display_type || p.partner_type || undefined),
+  specialtyOrType: isDoctor && p.display_type ? (normalizeSpecialtyLabel(p.display_type) || p.display_type) : (p.display_type || p.partner_type || undefined),
   partnerType: String(p.partner_type || '').toLowerCase() || null,
   qualification: p.doctor?.qualification ?? null,
-  specialization: p.doctor?.specialization ?? p.doctor?.primary_specialization ?? null,
+  specialization: canonicalSpec ?? null,
   designation: p.doctor?.designation ?? null,
   expertise: Array.isArray(p.doctor?.expertise) ? p.doctor.expertise : [],
   superSpecialization: p.doctor?.super_specialization ?? null,
@@ -96,7 +102,8 @@ const mapProviderItem = (p: any, serviceId?: string): ProviderItem => ({
   hospital: p.hospital || null,
   nearestKm: p.nearest_km == null ? null : Number(p.nearest_km),
   distanceKnown: p.distance_known === true,
-});
+};
+};
 
 export const getProvidersApi = async (serviceId?: string, search?: string): Promise<ProviderItem[]> => {
   const params: Record<string, string> = {};
@@ -187,9 +194,15 @@ export interface SpecializationOption {
 export const getSpecializationsApi = async (): Promise<SpecializationOption[]> => {
   const res = await apiClient.get('/specializations');
   const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.data) ? res.data.data : []);
-  return list
-    .filter((s: any) => s.isActive !== false)
-    .map((s: any) => ({ id: s.id, name: s.name }));
+  const deduped = new Map<string, SpecializationOption>();
+  for (const s of list) {
+    if (s?.isActive === false) continue;
+    const label = normalizeSpecialtyLabel(s?.name);
+    const key = specialtyKey(label);
+    if (!label || !key || deduped.has(key)) continue;
+    deduped.set(key, { id: s.id, name: label });
+  }
+  return Array.from(deduped.values());
 };
 
 // Patient favorites (real, patient_profile-scoped via PatientFavorite entity). Each favorite links to

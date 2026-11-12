@@ -100,11 +100,13 @@ export default function AddressBook({
   me,
   onChanged,
   toast,
+  toastError,
 }: {
   addresses: PatientAddress[];
   me: { name: string; phone: string };
   onChanged: () => Promise<void> | void;
   toast: (m: string) => void;
+  toastError?: (m: string) => void;
 }) {
   const [form, setForm] = useState<ReturnType<typeof empty> | null>(null);
   const [mapPin, setMapPin] = useState<{ lat: number; lng: number } | null>(
@@ -603,7 +605,7 @@ export default function AddressBook({
                             await onChanged();
                             toast("Default address updated.");
                           } catch {
-                            toast("Could not change the default address.");
+                            (toastError || toast)("Could not change the default address.");
                           }
                         }}
                         className="px-2.5 py-1.5 rounded-lg text-slate-600 hover:bg-white inline-flex items-center gap-1"
@@ -649,7 +651,7 @@ export default function AddressBook({
                               await onChanged();
                               toast("Address deleted.");
                             } catch {
-                              toast("Could not delete the address.");
+                              (toastError || toast)("Could not delete the address.");
                             } finally {
                               setConfirmDel(null);
                             }

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   UserRound,
@@ -31,6 +31,7 @@ import {
   MedicalEditor,
   EmergencyEditor,
   ContactEditor,
+  type MedicalSection,
 } from "./ProfileEditors";
 import {
   NotificationCard,
@@ -54,9 +55,11 @@ export default function ProfileLayout() {
       emailVerified: false,
     }),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
+    [notice, setNotice] = useState<{ kind: "success" | "error"; text: string } | null>(null),
     [loading, setLoading] = useState(true),
     [editor, setEditor] = useState<string | null>(null);
+  const showToast = (kind: "success" | "error", text: string) =>
+    setNotice(text ? { kind, text } : null);
   const load = useCallback(async () => {
     try {
       const [p, h, a, v] = await Promise.all([
@@ -103,11 +106,11 @@ export default function ProfileLayout() {
   }, [params, loading]);
   const saved = async () => {
     await load();
-    setNotice("Your changes have been saved.");
+    setNotice({ kind: "success", text: "Your changes have been saved." });
   };
   const close = () => setEditor(null);
   const edit = (name: string) => {
-    setNotice("");
+    setNotice(null);
     setEditor(name);
   };
   const header = (title: string, Icon: typeof UserRound, action?: string) => (
@@ -141,8 +144,11 @@ export default function ProfileLayout() {
         </p>
       </header>
       {notice && (
-        <p className="ph-success" role="status">
-          {notice}
+        <p
+          className={notice.kind === "error" ? "ph-error" : "ph-success"}
+          role={notice.kind === "error" ? "alert" : "status"}
+        >
+          {notice.text}
         </p>
       )}
       {loading && <p role="status">Loading profile…</p>}
@@ -250,31 +256,36 @@ export default function ProfileLayout() {
                 <dd>{showValue(health.blood_group)}</dd>
               </div>
             </dl>
-            {[
+            {(
               [
-                "Allergies",
-                health.allergies.map((a) => a.allergen).join(", ") ||
-                  (health.no_known_allergies
-                    ? "No known allergies"
-                    : "No allergies added"),
-              ],
-              [
-                "Chronic conditions",
-                health.conditions.join(", ") || "No conditions added",
-              ],
-              [
-                "Current medicines",
-                health.medications
-                  .map((m) =>
-                    [m.name, m.dose, m.frequency].filter(Boolean).join(" · "),
-                  )
-                  .join("; ") || "No current medicines added",
-              ],
-            ].map(([title, value]) => (
+                [
+                  "Allergies",
+                  "medical:allergies",
+                  health.allergies.map((a) => a.allergen).join(", ") ||
+                    (health.no_known_allergies
+                      ? "No known allergies"
+                      : "No allergies added"),
+                ],
+                [
+                  "Chronic conditions",
+                  "medical:conditions",
+                  health.conditions.join(", ") || "No conditions added",
+                ],
+                [
+                  "Current medicines",
+                  "medical:medications",
+                  health.medications
+                    .map((m) =>
+                      [m.name, m.dose, m.frequency].filter(Boolean).join(" · "),
+                    )
+                    .join("; ") || "No current medicines added",
+                ],
+              ] as const
+            ).map(([title, target, value]) => (
               <div className="ph-health-line" key={title}>
                 <div className="ph-row">
                   <h3>{title}</h3>
-                  <button className="ph-link" onClick={() => edit("medical")}>
+                  <button className="ph-link" onClick={() => edit(target)}>
                     {value.startsWith("No ") ? "Add" : "Edit"}
                   </button>
                 </div>
@@ -304,7 +315,8 @@ export default function ProfileLayout() {
               addresses={addresses}
               me={{ name: profile.fullName || "", phone: profile.phone || "" }}
               onChanged={load}
-              toast={setNotice}
+              toast={(m) => showToast("success", m)}
+              toastError={(m) => showToast("error", m)}
             />
           </div>
           <div id="ph-notifications">
@@ -361,8 +373,13 @@ export default function ProfileLayout() {
               onSaved={saved}
             />
           )}
-          {editor === "medical" && (
-            <MedicalEditor health={health} onClose={close} onSaved={saved} />
+          {editor?.startsWith("medical") && (
+            <MedicalEditor
+              health={health}
+              section={(editor.split(":")[1] as MedicalSection) || "basics"}
+              onClose={close}
+              onSaved={saved}
+            />
           )}
           {editor === "emergency" && (
             <EmergencyEditor
@@ -378,7 +395,7 @@ export default function ProfileLayout() {
           {editor === "password" && (
             <PasswordEditor
               onClose={close}
-              onSaved={() => setNotice("Password changed.")}
+              onSaved={() => showToast("success", "Password changed.")}
             />
           )}
           {editor === "devices" && <DevicesDialog onClose={close} />}

@@ -1,5 +1,5 @@
 import ThemedSelect from '../../components/forms/ThemedSelect';
-﻿import { useState, useEffect, type FormEvent } from "react";
+﻿import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
 import api from "../../../services/index";
 import {
@@ -18,6 +18,7 @@ import {
   type ReportedMedication,
 } from "../../../services/healthProfileHelper";
 import { profileError } from "../../../services/profileHelpHelper";
+import { validatePersonName, validateDob } from "../../../utils/validators/india";
 import { PhDialog } from "./ProfileUi";
 import ProfilePhoto from "./ProfilePhoto";
 export const healthPayload = (h: HealthProfile): HealthProfileInput => ({
@@ -47,12 +48,29 @@ export function PersonalEditor({
     [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError("");
+    const nameCheck = validatePersonName(name);
+    if (!nameCheck.ok) {
+      setError("Enter a valid full name (letters, spaces, dots, apostrophes, and hyphens only).");
+      return;
+    }
+    const cleanDob = dob.trim();
+    if (!cleanDob && profile.dateOfBirth) {
+      setError("Please enter your date of birth.");
+      return;
+    }
+    if (cleanDob) {
+      const dobCheck = validateDob(cleanDob, { required: false });
+      if (!dobCheck.ok) {
+        setError("Enter a valid date of birth in the past.");
+        return;
+      }
+    }
+    setBusy(true);
     try {
       await updateProfileApi({
-        fullName: name.trim(),
-        dateOfBirth: dob,
+        fullName: nameCheck.value,
+        ...(cleanDob ? { dateOfBirth: cleanDob } : {}),
         gender: gender || undefined,
       });
       if (blood !== (health.blood_group || ""))
@@ -70,7 +88,7 @@ export function PersonalEditor({
   };
   return (
     <PhDialog title="Edit personal details" onClose={onClose}>
-      <form onSubmit={submit} className="ph-stack">
+      <form onSubmit={submit} noValidate className="ph-stack">
         <div className="ph-photo-inline">
           <ProfilePhoto name={name} current={profile.profilePicture} onSaved={onSaved} />
           <span>Tap the camera to change your photo.</span>
@@ -141,31 +159,58 @@ export function PersonalEditor({
     </PhDialog>
   );
 }
+export type MedicalSection = "basics" | "allergies" | "conditions" | "medications";
 export function MedicalEditor({
   health,
+  section = "basics",
   onClose,
   onSaved,
-}: { health: HealthProfile } & Common) {
+}: { health: HealthProfile; section?: MedicalSection } & Common) {
   const [f, setF] = useState(healthPayload(health)),
     [allergy, setAllergy] = useState(""),
     [condition, setCondition] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const allergySectionRef = useRef<HTMLElement>(null);
+  const conditionSectionRef = useRef<HTMLElement>(null);
+  const medSectionRef = useRef<HTMLElement>(null);
+  const allergyInputRef = useRef<HTMLInputElement>(null);
+  const conditionInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const map: Record<Exclude<MedicalSection, "basics">, { el: HTMLElement | null; input?: HTMLInputElement | null }> = {
+      allergies: { el: allergySectionRef.current, input: allergyInputRef.current },
+      conditions: { el: conditionSectionRef.current, input: conditionInputRef.current },
+      medications: { el: medSectionRef.current },
+    };
+    if (section !== "basics") {
+      const target = map[section];
+      target.el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.input?.focus();
+    }
+  }, [section]);
+
   const patch = (v: Partial<HealthProfileInput>) =>
     setF((old) => ({ ...old, ...v }));
   const addAllergy = () => {
-    if (allergy.trim().length < 2) return;
-    patch({
-      allergies: [...f.allergies, { allergen: allergy.trim() }],
-      no_known_allergies: false,
-    });
+    const clean = allergy.trim();
+    if (clean.length < 2) return;
+    if (!f.allergies.some((a) => a.allergen.toLowerCase() === clean.toLowerCase())) {
+      patch({
+        allergies: [...f.allergies, { allergen: clean }],
+        no_known_allergies: false,
+      });
+    }
     setAllergy("");
   };
   const addCondition = () => {
-    if (condition.trim().length < 2) return;
-    patch({
-      conditions: Array.from(new Set([...f.conditions, condition.trim()])),
-    });
+    const clean = condition.trim();
+    if (clean.length < 2) return;
+    if (!f.conditions.some((c) => c.toLowerCase() === clean.toLowerCase())) {
+      patch({
+        conditions: [...f.conditions, clean],
+      });
+    }
     setCondition("");
   };
   const medicine = (index: number, value: Partial<ReportedMedication>) =>
@@ -176,23 +221,56 @@ export function MedicalEditor({
     });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError("");
+    const pendingAllergy = allergy.trim();
+    const pendingCondition = condition.trim();
+    if (pendingAllergy.length === 1) {
+      setError("Enter at least 2 characters for the allergy name.");
+      return;
+    }
+    if (pendingCondition.length === 1) {
+      setError("Enter at least 2 characters for the condition name.");
+      return;
+    }
+    if (f.medications.some((m) => m.name.trim().length < 2)) {
+      setError("Enter a name (at least 2 characters) for each medicine.");
+      return;
+    }
+    const nextAllergies =
+      pendingAllergy.length >= 2 &&
+      !f.allergies.some((a) => a.allergen.toLowerCase() === pendingAllergy.toLowerCase())
+        ? [...f.allergies, { allergen: pendingAllergy }]
+        : f.allergies;
+    const nextConditions =
+      pendingCondition.length >= 2 &&
+      !f.conditions.some((c) => c.toLowerCase() === pendingCondition.toLowerCase())
+        ? [...f.conditions, pendingCondition]
+        : f.conditions;
+    const payload: HealthProfileInput = {
+      ...f,
+      allergies: nextAllergies,
+      no_known_allergies: nextAllergies.length ? false : f.no_known_allergies,
+      conditions: nextConditions,
+      medications: f.medications.map((m) => ({
+        name: m.name.trim(),
+        dose: m.dose?.trim() || "",
+        frequency: m.frequency?.trim() || "",
+      })),
+    };
+    setBusy(true);
     try {
-      if (f.medications.some((m) => m.name.trim().length < 2))
-        throw Error("Enter a name for each medicine.");
-      await saveHealthProfileApi(f);
+      await saveHealthProfileApi(payload);
       await onSaved();
       onClose();
-    } catch (e) {
-      setError(profileError(e));
+    } catch (err) {
+      setError(profileError(err));
     } finally {
       setBusy(false);
     }
   };
   return (
     <PhDialog title="Edit medical basics" onClose={onClose}>
-      <form onSubmit={submit} className="ph-stack">
+      <form onSubmit={submit} noValidate className="ph-stack">
         <div className="ph-grid">
           <label>
             Height (cm)
@@ -239,143 +317,165 @@ export function MedicalEditor({
             </ThemedSelect>
           </label>
         </div>
-        <h3>Allergies</h3>
-        <div className="ph-pill-list">
-          {f.allergies.map((a, i) => (
-            <span className="ph-chip" key={i}>
-              {a.allergen}
-              <button
-                type="button"
-                aria-label={`Remove allergy ${a.allergen}`}
-                onClick={() =>
-                  patch({ allergies: f.allergies.filter((_, n) => n !== i) })
-                }
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-        <label>
-          <input
-            type="checkbox"
-            checked={f.no_known_allergies}
-            onChange={(e) =>
-              patch({
-                no_known_allergies: e.target.checked,
-                allergies: e.target.checked ? [] : f.allergies,
-              })
-            }
-          />
-          No known allergies
-        </label>
-        <div className="ph-row">
-          <label style={{ flex: 1 }}>
-            Add allergy
-            <input
-              aria-label="Add allergy"
-              value={allergy}
-              onChange={(e) => setAllergy(e.target.value)}
-              maxLength={80}
-            />
-          </label>
-          <button type="button" className="ph-btn" onClick={addAllergy}>
-            Add allergy
-          </button>
-        </div>
-        <h3>Chronic conditions</h3>
-        <div className="ph-pill-list">
-          {f.conditions.map((c) => (
-            <span className="ph-chip" key={c}>
-              {c}
-              <button
-                type="button"
-                aria-label={`Remove condition ${c}`}
-                onClick={() =>
-                  patch({ conditions: f.conditions.filter((v) => v !== c) })
-                }
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-        <label>
-          Add condition
-          <input
-            aria-label="Add condition"
-            list="ph-condition-options"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-            maxLength={80}
-          />
-          <datalist id="ph-condition-options">
-            {COMMON_CONDITIONS.map((c) => (
-              <option key={c}>{c}</option>
+        <section ref={allergySectionRef} id="med-section-allergies" className="ph-med-section ph-stack" aria-label="Allergies">
+          <h3>Allergies</h3>
+          <div className="ph-pill-list">
+            {f.allergies.map((a, i) => (
+              <span className="ph-chip" key={`${a.allergen}-${i}`}>
+                {a.allergen}
+                <button
+                  type="button"
+                  aria-label={`Remove allergy ${a.allergen}`}
+                  onClick={() =>
+                    patch({ allergies: f.allergies.filter((_, n) => n !== i) })
+                  }
+                >
+                  <X size={12} />
+                </button>
+              </span>
             ))}
-          </datalist>
-        </label>
-        <button type="button" className="ph-btn" onClick={addCondition}>
-          Add condition
-        </button>
-        <h3>Current medicines</h3>
-        {f.medications.map((m, i) => (
-          <div className="ph-grid ph-info" key={i}>
-            <label>
-              Medicine name
-              <input
-                required
-                minLength={2}
-                aria-label={`Medicine name ${i + 1}`}
-                value={m.name}
-                maxLength={100}
-                onChange={(e) => medicine(i, { name: e.target.value })}
-              />
-            </label>
-            <label>
-              Dose
-              <input
-                aria-label={`Dose ${i + 1}`}
-                value={m.dose || ""}
-                maxLength={80}
-                onChange={(e) => medicine(i, { dose: e.target.value })}
-              />
-            </label>
-            <label>
-              Frequency
-              <input
-                aria-label={`Frequency ${i + 1}`}
-                value={m.frequency || ""}
-                maxLength={60}
-                onChange={(e) => medicine(i, { frequency: e.target.value })}
-              />
-            </label>
-            <button
-              type="button"
-              className="ph-link"
-              onClick={() =>
-                patch({ medications: f.medications.filter((_, n) => n !== i) })
+          </div>
+          <label>
+            <input
+              type="checkbox"
+              checked={f.no_known_allergies}
+              onChange={(e) =>
+                patch({
+                  no_known_allergies: e.target.checked,
+                  allergies: e.target.checked ? [] : f.allergies,
+                })
               }
-            >
-              Remove medicine
+            />
+            No known allergies
+          </label>
+          <div className="ph-row">
+            <label style={{ flex: 1 }}>
+              Add allergy
+              <input
+                ref={allergyInputRef}
+                aria-label="Add allergy"
+                value={allergy}
+                onChange={(e) => setAllergy(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addAllergy();
+                  }
+                }}
+                maxLength={80}
+              />
+            </label>
+            <button type="button" className="ph-btn" onClick={addAllergy}>
+              Add allergy
             </button>
           </div>
-        ))}
-        <button
-          type="button"
-          className="ph-btn"
-          onClick={() =>
-            patch({
-              medications: [
-                ...f.medications,
-                { name: "", dose: "", frequency: "" },
-              ],
-            })
-          }
-        >
-          <Plus />
-          Add medicine
-        </button>
+        </section>
+        <section ref={conditionSectionRef} id="med-section-conditions" className="ph-med-section ph-stack" aria-label="Chronic conditions">
+          <h3>Chronic conditions</h3>
+          <div className="ph-pill-list">
+            {f.conditions.map((c) => (
+              <span className="ph-chip" key={c}>
+                {c}
+                <button
+                  type="button"
+                  aria-label={`Remove condition ${c}`}
+                  onClick={() =>
+                    patch({ conditions: f.conditions.filter((v) => v !== c) })
+                  }
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="ph-row">
+            <label style={{ flex: 1 }}>
+              Add condition
+              <input
+                ref={conditionInputRef}
+                aria-label="Add condition"
+                list="ph-condition-options"
+                value={condition}
+                onChange={(e) => setCondition(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCondition();
+                  }
+                }}
+                maxLength={80}
+              />
+              <datalist id="ph-condition-options">
+                {COMMON_CONDITIONS.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </datalist>
+            </label>
+            <button type="button" className="ph-btn" onClick={addCondition}>
+              Add condition
+            </button>
+          </div>
+        </section>
+        <section ref={medSectionRef} id="med-section-medications" className="ph-med-section ph-stack" aria-label="Current medicines">
+          <h3>Current medicines</h3>
+          {f.medications.map((m, i) => (
+            <div className="ph-grid ph-info" key={i}>
+              <label>
+                Medicine name
+                <input
+                  required
+                  minLength={2}
+                  aria-label={`Medicine name ${i + 1}`}
+                  value={m.name}
+                  maxLength={100}
+                  onChange={(e) => medicine(i, { name: e.target.value })}
+                />
+              </label>
+              <label>
+                Dose
+                <input
+                  aria-label={`Dose ${i + 1}`}
+                  value={m.dose || ""}
+                  maxLength={80}
+                  onChange={(e) => medicine(i, { dose: e.target.value })}
+                />
+              </label>
+              <label>
+                Frequency
+                <input
+                  aria-label={`Frequency ${i + 1}`}
+                  value={m.frequency || ""}
+                  maxLength={60}
+                  onChange={(e) => medicine(i, { frequency: e.target.value })}
+                />
+              </label>
+              <button
+                type="button"
+                className="ph-link"
+                onClick={() =>
+                  patch({ medications: f.medications.filter((_, n) => n !== i) })
+                }
+              >
+                Remove medicine
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="ph-btn"
+            onClick={() =>
+              patch({
+                medications: [
+                  ...f.medications,
+                  { name: "", dose: "", frequency: "" },
+                ],
+              })
+            }
+          >
+            <Plus />
+            Add medicine
+          </button>
+        </section>
         {error && (
           <p role="alert" className="ph-error">
             {error}

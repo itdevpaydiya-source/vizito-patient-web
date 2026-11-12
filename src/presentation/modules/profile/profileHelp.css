@@ -1,4 +1,4 @@
-﻿.ph-page {
+.ph-page {
   max-width: 1100px;
   margin: auto;
   padding: 20px;
@@ -632,3 +632,5 @@
 .ph-spin { animation: ph-spin 0.9s linear infinite; }
 @keyframes ph-spin { to { transform: rotate(360deg); } }
 .ph-photo-inline { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #52729d; }
+.ph-med-section { border: 1px solid #e3edf5; border-radius: 8px; padding: 14px; background: #fbfdff; }
+.ph-med-section h3 { margin: 0; font-size: 14px; color: #123057; }

@@ -9,7 +9,7 @@ import type { HcOrder } from '../../../services/homecareHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import { calendarEscape } from '../labs/labConfirmationDetails';
 
-export type BookingStatus = 'upcoming' | 'completed' | 'cancelled';
+export type BookingStatus = 'active' | 'upcoming' | 'completed' | 'cancelled';
 export type BookingType = 'Doctor' | 'Lab Test' | 'Home Care' | 'Hospital' | 'Pharmacy' | 'Equipment';
 export type Booking = Partial<DashboardBooking> & {
   id: string; status: string;
@@ -24,17 +24,20 @@ export type Booking = Partial<DashboardBooking> & {
 };
 export const typeOf = (b: Booking): BookingType =>
   b.pharmacy ? 'Pharmacy' : b.rental ? 'Equipment' : b.labOrder ? 'Lab Test' : b.homeCare ? 'Home Care' : b.business?.type === 'Hospital' ? 'Hospital' : 'Doctor';
-export const statusOf = (b: DashboardBooking): BookingStatus => {
-  const s = (
-    b.labOrder?.status ||
-    b.homeCare?.status ||
-    b.status
-  ).toUpperCase();
-  return /CANCEL|DECLIN|REJECT/.test(s)
-    ? 'cancelled'
-    : /COMPLETED|REPORTED|NO_SHOW|FAILED/.test(s) && s !== 'PARTIALLY_REPORTED'
-      ? 'completed'
-      : 'upcoming';
+const ACTIVE_STATUS_RE = /^(IN_PROGRESS|IN_CONSULTATION|CHECKED_IN|ARRIVED|ONGOING|STARTED|ON_THE_WAY|SAMPLE_PENDING|PARTIALLY_REPORTED)$/i;
+export const statusOf = (b: DashboardBooking, activeHint = false): BookingStatus => {
+  const candidates = [
+    b.labOrder?.status,
+    b.homeCare?.status,
+    b.appointmentStatus,
+    b.status,
+  ]
+    .filter((v): v is string => !!v)
+    .map((v) => v.toUpperCase());
+  if (candidates.some((s) => /CANCEL|DECLIN|REJECT/.test(s))) return 'cancelled';
+  if (candidates.some((s) => /COMPLETED|REPORTED|NO_SHOW|FAILED/.test(s) && s !== 'PARTIALLY_REPORTED')) return 'completed';
+  if (activeHint || candidates.some((s) => ACTIVE_STATUS_RE.test(s))) return 'active';
+  return 'upcoming';
 };
 export const titleOf = (b: Booking) =>
   b.pharmacy ? 'Pharmacy Order' : b.rental ? 'Equipment Rental' : b.labOrder
@@ -140,20 +143,32 @@ export const permissionsOf = (b: Booking) =>
   b.visit || b.lab || b.labOrder || b.care || b.homeCare;
 export const canCancel = (b: Booking) => {
   if (['Doctor','Hospital'].includes(typeOf(b))) return b.visit?.can_cancel === true;
-  if (b.section !== 'upcoming') return false;
   if (b.pharmacy) return ['CREATED','AWAITING_PAYMENT','PAID'].includes(b.pharmacy.status);
   if (b.rental) return ['NEW','ACCEPTED'].includes(b.rental.status) && !b.rental.delivery_address?.return_schedule
     && !['out_for_delivery','delivered'].includes(b.rental.delivery_address?.delivery_status || '') && !b.rental.delivery_address?.delivery_otp?.verified;
+  if (b.section !== 'upcoming' && b.section !== 'active') return false;
   return permissionsOf(b)?.can_cancel === true;
 };
 export const canReschedule = (b: Booking) => !b.pharmacy && !b.rental && permissionsOf(b)?.can_reschedule === true;
-export const commerceStatus = (status: string): BookingStatus => /CANCEL|REJECT|FULFILLMENT_FAILED/.test(status) ? 'cancelled' : status === 'COMPLETED' ? 'completed' : 'upcoming';
-export const statusText = (b: Booking) =>
-  b.section === 'cancelled'
-    ? 'Cancelled'
-    : b.section === 'completed'
-      ? 'Completed'
-      : 'Upcoming';
+export const commerceStatus = (status: string): BookingStatus =>
+  /CANCEL|REJECT|FULFILLMENT_FAILED/.test(status)
+    ? 'cancelled'
+    : status === 'COMPLETED'
+      ? 'completed'
+      : /^(PROCESSING|READY_FOR_PICKUP|OUT_FOR_DELIVERY|ACTIVE|IN_PROGRESS)$/i.test(status)
+        ? 'active'
+        : 'upcoming';
+export const statusText = (b: Booking) => {
+  if (b.section === 'cancelled') return 'Cancelled';
+  if (b.section === 'completed') return 'Completed';
+  if (b.section === 'active') {
+    const s = String(b.appointmentStatus || b.status || '').toUpperCase();
+    if (s === 'IN_PROGRESS' || s === 'IN_CONSULTATION' || s === 'STARTED' || s === 'ONGOING') return 'In consultation';
+    if (s === 'CHECKED_IN' || s === 'ARRIVED') return 'Checked in';
+    return 'Active';
+  }
+  return 'Upcoming';
+};
 
 /** A start-only event stays start-only when the API has no end time; never assume a duration. */
 export function bookingIcs(b: Booking) {

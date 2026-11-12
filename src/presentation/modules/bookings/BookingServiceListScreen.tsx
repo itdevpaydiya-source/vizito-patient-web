@@ -84,6 +84,7 @@ type Filters = {
 const clearFilters: Filters = { type: 'All', status: 'All', from: '', to: '' };
 const tabs: { key: Tab; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'completed', label: 'Completed' },
   { key: 'cancelled', label: 'Cancelled' },
@@ -135,6 +136,7 @@ export default function BookingServiceListScreen() {
         equipmentService.getBookingOrders(),
         getAddressesApi(),
       ]);
+      const activeIds = new Set(data.active.map((b) => b.id));
       const unique = new Map(
         [...data.active, ...data.upcoming, ...data.history].map((b) => [
           b.id,
@@ -144,7 +146,7 @@ export default function BookingServiceListScreen() {
       const clinical: Booking[] = Array.from(unique.values()).map((b) => ({
         dashboard: b,
         ...b,
-        section: statusOf(b),
+        section: statusOf(b, activeIds.has(b.id)),
         lab: labs.find((o) => o.id === b.labOrder?.id),
         care: care.find((o) => o.id === b.homeCare?.id),
       }));
@@ -266,6 +268,7 @@ export default function BookingServiceListScreen() {
   }, [params]);
   const counts = {
     all: bookings.length,
+    active: bookings.filter((b) => b.section === 'active').length,
     upcoming: bookings.filter((b) => b.section === 'upcoming').length,
     completed: bookings.filter((b) => b.section === 'completed').length,
     cancelled: bookings.filter((b) => b.section === 'cancelled').length,
@@ -293,11 +296,12 @@ export default function BookingServiceListScreen() {
       );
     })
     .sort((a, b) => {
-      if (a.section === 'upcoming' && b.section !== 'upcoming') return -1;
-      if (b.section === 'upcoming' && a.section !== 'upcoming') return 1;
+      const rank = (s: BookingStatus) => (s === 'active' ? 0 : s === 'upcoming' ? 1 : 2);
+      const ra = rank(a.section), rb = rank(b.section);
+      if (ra !== rb) return ra - rb;
       const x = `${dateOf(a) || ''} ${timeOf(a) || ''}`,
         y = `${dateOf(b) || ''} ${timeOf(b) || ''}`;
-      return a.section === 'upcoming' ? x.localeCompare(y) : y.localeCompare(x);
+      return (a.section === 'upcoming' || a.section === 'active') ? x.localeCompare(y) : y.localeCompare(x);
     });
   const changed = async (text: string) => {
     close();
@@ -578,7 +582,7 @@ export default function BookingServiceListScreen() {
                   <Status booking={b} />
                 </div>
                 <div className="bk-row-actions">
-                  {b.section === 'upcoming' && !b.pharmacy && !b.rental ? (
+                  {(b.section === 'upcoming' || b.section === 'active') && !b.pharmacy && !b.rental ? (
                     <>
                       {canReschedule(b) && (
                         <button
@@ -652,7 +656,7 @@ export default function BookingServiceListScreen() {
             <fieldset>
               <legend>Status</legend>
               <div className="bk-chips">
-                {(['All', 'upcoming', 'completed', 'cancelled'] as const).map(
+                {(['All', 'active', 'upcoming', 'completed', 'cancelled'] as const).map(
                   (s) => (
                     <button
                       key={s}

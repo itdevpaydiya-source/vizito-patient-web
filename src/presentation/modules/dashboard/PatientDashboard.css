@@ -9,3 +9,19 @@
 
 /* Location line + "Save as an address" (NEW-06) */
 .dash-location-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-top:15px}.dash-location-row .dash-location{margin-top:0}.dash-save-address{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--nav-active-bg)}.dash-save-address svg{width:13px;height:13px}
+
+/* Favourite provider full-card stretched link (NEW-23) & recent orders/reports layout (NEW-24) */
+.dash-favorites article{position:relative;cursor:pointer;transition:border-color .15s,background-color .15s}
+.dash-favorites article:hover{border-color:#b7cfe7;background:#f8fbff}
+.dash-favorites article a.dash-favorite-link::after{content:"";position:absolute;inset:0;border-radius:8px;z-index:1}
+.dash-favorites article a.dash-favorite-link:focus-visible{outline:none;text-decoration:underline}
+.dash-favorites article:has(a.dash-favorite-link:focus-visible){outline:2px solid #0b918a;outline-offset:2px}
+.dash-favorites article>button{position:relative;z-index:2}
+
+.dash-recent article{display:grid;grid-template-columns:46px minmax(0,1fr);grid-template-rows:1fr auto;align-items:start;gap:10px;padding:11px}
+.dash-recent article>img{width:46px;height:46px;border-radius:7px;object-fit:cover}
+.dash-recent article>div{min-width:0;display:flex;flex-direction:column;gap:3px;height:100%}
+.dash-recent h3{font-size:14px;line-height:1.35;min-height:calc(2 * 1.35em);display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.dash-recent p{margin:0;line-height:1.45;overflow-wrap:anywhere}
+.dash-recent p.dash-recent-status{margin-top:auto}
+.dash-recent .dash-outline{grid-column:1 / -1;justify-self:end;align-self:end;margin-left:0;padding:6px 10px}

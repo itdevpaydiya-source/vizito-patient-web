@@ -10,8 +10,8 @@ export const bookingTypes:BookingType[]=['Doctor','Lab Test','Home Care','Hospit
 export type BookingGroup={state:'loading'|'ready'|'error';bookings:Booking[]};
 export type BookingGroups=Record<BookingType,BookingGroup>;
 const initialGroups=()=>bookingTypes.reduce((groups,type)=>{groups[type]={state:'loading',bookings:[]};return groups;},{} as BookingGroups);
-export function labBooking(o:MyLabOrder):Booking{return {id:o.id,status:o.status,section:o.status==='CANCELLED'?'cancelled':o.status==='REPORTED'?'completed':'upcoming',lab:o,labOrder:{...o,visit_type:o.visit_type||'LAB_VISIT',patient_name:o.patient_name||null,tests:o.items.filter(i=>i.status!=='CANCELLED').map(i=>i.test_name),package_name:o.items.find(i=>i.package_name)?.package_name||null}};}
-export function dashboardBookings(data:DashboardData){return [...new Map([...data.active,...data.upcoming,...data.history].map(b=>[b.id,b])).values()].map(b=>({...b,dashboard:b,section:statusOf(b)}));}
+export function labBooking(o:MyLabOrder):Booking{return {id:o.id,status:o.status,section:o.status==='CANCELLED'?'cancelled':o.status==='REPORTED'?'completed':['SAMPLE_PENDING','IN_PROGRESS','PARTIALLY_REPORTED'].includes(o.status)?'active':'upcoming',lab:o,labOrder:{...o,visit_type:o.visit_type||'LAB_VISIT',patient_name:o.patient_name||null,tests:o.items.filter(i=>i.status!=='CANCELLED').map(i=>i.test_name),package_name:o.items.find(i=>i.package_name)?.package_name||null}};}
+export function dashboardBookings(data:DashboardData){const activeIds=new Set(data.active.map(b=>b.id));return [...new Map([...data.active,...data.upcoming,...data.history].map(b=>[b.id,b])).values()].map(b=>({...b,dashboard:b,section:statusOf(b,activeIds.has(b.id))}));}
 export function useBookingGroups(){
  const [groups,setGroups]=useState<BookingGroups>(initialGroups);const epoch=useRef(0),versions=useRef<Record<string,number>>({});
  const load=useCallback((only?:BookingType)=>{
