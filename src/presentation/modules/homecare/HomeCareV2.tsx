@@ -1163,7 +1163,26 @@ function SchedulePage({ tab, pkg, service, draft, setDraft, family, familyError,
                   <label className="hc2-field">PIN code<input inputMode="numeric" maxLength={6} value={draft.address.pincode} onChange={e => setDraft(cur => ({ ...cur, address: { ...cur.address, pincode: e.target.value.replace(/\D/g, '') } }))} placeholder="500084" /></label>
                   <label className="hc2-field">Landmark (optional)<input value={draft.address.landmark} maxLength={120} onChange={e => setDraft(cur => ({ ...cur, address: { ...cur.address, landmark: e.target.value } }))} placeholder="Near the park" /></label>
                 </div>
-                <HomePinField value={draft.homePin} onChange={pin => setDraft(cur => ({ ...cur, homePin: pin }))} who="care professional" />
+                <HomePinField
+                  value={draft.homePin}
+                  onChange={pin => setDraft(cur => ({ ...cur, homePin: pin }))}
+                  who="care professional"
+                  onAddressResolved={(resolved) => {
+                    setDraft(cur => ({
+                      ...cur,
+                      address: {
+                        ...cur.address,
+                        line: resolved.line || cur.address.line,
+                        area: resolved.area || cur.address.area,
+                        city: resolved.city || cur.address.city,
+                        pincode: resolved.pincode || cur.address.pincode,
+                        landmark: resolved.landmark || cur.address.landmark,
+                      },
+                      homePin: resolved.pin !== undefined ? resolved.pin : cur.homePin,
+                    }));
+                  }}
+                  currentAddress={draft.address}
+                />
                 <button type="button" className="hc2-text-link" onClick={() => setDraft(cur => ({ ...cur, addressOpen: false }))}>{addressText ? 'Done' : 'Hide address fields'}</button>
               </div>
             )}

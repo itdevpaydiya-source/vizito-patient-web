@@ -13,3 +13,7 @@ dialog.vizito-dialog{height:fit-content!important}.vizito-dialog-body{flex:0 1 a
 dialog.vizito-dialog[open]{animation:vizito-dialog-fade 150ms ease-out!important;transform:none!important}@keyframes vizito-dialog-fade{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){dialog.vizito-dialog[open]{animation:none!important}}
 
 @media(max-width:600px){dialog.vizito-dialog[open]{inset:0!important;margin:0!important;width:100%!important;max-width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important}}.vizito-dialog :focus-visible{outline:2px solid #eb8e45!important;outline-offset:3px}
+.fm-editor-avatar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fm-photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fm-photo-actions small { flex-basis: 100%; color: #64748b; font-size: 12px; }
+.fm-link { background: none; border: 0; color: #b91c1c; font-weight: 600; cursor: pointer; padding: 0; }

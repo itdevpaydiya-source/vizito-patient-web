@@ -18,6 +18,9 @@ import LabBookingScreen from '../presentation/modules/labs/LabBookingScreen';
 import LabBookingConfirmation from '../presentation/modules/labs/LabBookingConfirmation';
 import LabBookingsScreen from '../presentation/modules/labs/LabBookingsScreen';
 import VerifyReportScreen from '../presentation/modules/labs/VerifyReportScreen';
+import VerifyPrescriptionScreen from '../presentation/modules/labs/VerifyPrescriptionScreen';
+import SharedPrescriptionScreen from '../presentation/modules/labs/SharedPrescriptionScreen';
+import SharedLabReportScreen from '../presentation/modules/labs/SharedLabReportScreen';
 import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
 import FindBloodScreen from '../presentation/modules/bloodbank/FindBloodScreen';
 import RequestBloodScreen from '../presentation/modules/bloodbank/RequestBloodScreen';
@@ -160,6 +163,10 @@ const AppNavigator = () => {
       <Route path="/shared/:token" element={<SharedRecordPage />} />
       {/* Public: lab report verification from the QR code (no login, no patient data) */}
       <Route path="/verify-report/:token" element={<VerifyReportScreen />} />
+      <Route path="/verify-prescription/:number/:code" element={<VerifyPrescriptionScreen />} />
+      <Route path="/rx/:token" element={<SharedPrescriptionScreen />} />
+      {/* Public: lab report share from doctor (7-day time-limited, no OTP) */}
+      <Route path="/r/:token" element={<SharedLabReportScreen />} />
 
       {/* Root Session Guard */}
       <Route path="/" element={<RootSessionGuard />} />

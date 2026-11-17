@@ -165,8 +165,9 @@ export const formatGoogleAuthError = (err: any): string => {
 const checkPasswordRules = (pw: string) => {
   return {
     minLength: pw.length >= 8,
-    hasLetterAndNum: /[a-zA-Z]/.test(pw) && /\d/.test(pw),
-    hasSpecial: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw),
+    // Same policy as the server (identity.validators.ts PASSWORD_POLICY): upper + lower + number + symbol.
+    hasLetterAndNum: /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /\d/.test(pw),
+    hasSpecial: /[^A-Za-z0-9]/.test(pw),
   };
 };
 
@@ -483,7 +484,7 @@ export default function AuthModule({
   else if (regDob > new Date().toISOString().slice(0, 10)) regErrors.dob = 'Date of birth cannot be in the future.';
   if (!regPassword) regErrors.password = 'Create a password.';
   else if (!regPwRules.minLength) regErrors.password = 'Password must be at least 8 characters.';
-  else if (!regPwRules.hasLetterAndNum) regErrors.password = 'Password must include a letter and a number.';
+  else if (!regPwRules.hasLetterAndNum) regErrors.password = 'Password must include an uppercase letter, a lowercase letter and a number.';
   else if (!regPwRules.hasSpecial) regErrors.password = 'Password must include a special character (e.g. ! @ # $).';
   if (!regConfirmPassword) regErrors.confirm = 'Re-enter your password.';
   else if (!regPasswordsMatch) regErrors.confirm = 'Passwords do not match.';
@@ -1010,7 +1011,7 @@ export default function AuthModule({
                     </div>
                     <div className={`auth-v2-pw-item ${newPwRules.hasLetterAndNum ? 'is-valid' : ''}`}>
                       <div className="auth-v2-pw-dot">{newPwRules.hasLetterAndNum && <Check size={10} />}</div>
-                      <span>Includes a letter and a number</span>
+                      <span>Upper- and lowercase letters and a number</span>
                     </div>
                     <div className={`auth-v2-pw-item ${newPwRules.hasSpecial ? 'is-valid' : ''}`}>
                       <div className="auth-v2-pw-dot">{newPwRules.hasSpecial && <Check size={10} />}</div>
@@ -1571,7 +1572,7 @@ export default function AuthModule({
                   <ul className="auth-v2-pw-box" aria-label="Password rules">
                     {([
                       [regPwRules.minLength, 'At least 8 characters'],
-                      [regPwRules.hasLetterAndNum, 'A letter and a number'],
+                      [regPwRules.hasLetterAndNum, 'Upper- and lowercase letters and a number'],
                       [regPwRules.hasSpecial, 'A special character (e.g. ! @ # $)'],
                       [regPasswordsMatch, 'Passwords match'],
                     ] as const).map(([ok, text]) => (

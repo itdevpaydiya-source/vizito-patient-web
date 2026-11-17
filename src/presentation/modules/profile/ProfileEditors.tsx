@@ -1,3 +1,4 @@
+import { personNameInput } from '../../../utils/inputFilters';
 import ThemedSelect from '../../components/forms/ThemedSelect';
 ﻿import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Plus, X } from "lucide-react";
@@ -101,7 +102,7 @@ export function PersonalEditor({
             maxLength={120}
             aria-label="Full name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(personNameInput(e.target.value))}
           />
         </label>
         <div className="ph-grid">

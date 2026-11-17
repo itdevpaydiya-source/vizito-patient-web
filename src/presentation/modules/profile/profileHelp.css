@@ -634,3 +634,12 @@
 .ph-photo-inline { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #52729d; }
 .ph-med-section { border: 1px solid #e3edf5; border-radius: 8px; padding: 14px; background: #fbfdff; }
 .ph-med-section h3 { margin: 0; font-size: 14px; color: #123057; }
+
+/* Show/hide eye inside password fields (Change password). */
+.ph-stack label:has(.ph-pw-eye) { position: relative; }
+.ph-stack label:has(.ph-pw-eye) input { padding-right: 44px; }
+.ph-pw-eye { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; color: #64748b; cursor: pointer; }
+.ph-pw-eye:hover { background: #f1f5f9; color: #0f172a; }
+.ph-pw-eye:focus-visible { outline: 2px solid #c2410c; outline-offset: 1px; }
+.ph-pw-eye svg { width: 18px; height: 18px; }
+.ph-photo-hint { margin: 4px 0 0; font-size: 12px; color: #64748b; text-align: center; }

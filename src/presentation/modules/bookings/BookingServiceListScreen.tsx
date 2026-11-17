@@ -296,12 +296,15 @@ export default function BookingServiceListScreen() {
       );
     })
     .sort((a, b) => {
-      const rank = (s: BookingStatus) => (s === 'active' ? 0 : s === 'upcoming' ? 1 : 2);
-      const ra = rank(a.section), rb = rank(b.section);
-      if (ra !== rb) return ra - rb;
-      const x = `${dateOf(a) || ''} ${timeOf(a) || ''}`,
-        y = `${dateOf(b) || ''} ${timeOf(b) || ''}`;
-      return (a.section === 'upcoming' || a.section === 'active') ? x.localeCompare(y) : y.localeCompare(x);
+      // Real clock order: today and later days first (soonest first), then past days (latest first);
+      // within one day strictly by time, whatever the status (a cancelled 3:15 PM sits before 4:00 PM).
+      const mins = (t: string) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i); if (!m) return 0; let h = +m[1]; if (m[3]?.toUpperCase() === 'PM' && h < 12) h += 12; if (m[3]?.toUpperCase() === 'AM' && h === 12) h = 0; return h * 60 + +m[2]; };
+      const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+      const da = String(dateOf(a) || '').slice(0, 10), db = String(dateOf(b) || '').slice(0, 10);
+      const fa = da >= today, fb = db >= today;
+      if (fa !== fb) return fa ? -1 : 1;
+      if (da !== db) return fa ? da.localeCompare(db) : db.localeCompare(da);
+      return mins(timeOf(a) || '') - mins(timeOf(b) || '');
     });
   const changed = async (text: string) => {
     close();

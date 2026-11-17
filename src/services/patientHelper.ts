@@ -366,6 +366,8 @@ export interface PatientPrescription {
   // doctor sends this prescription directly to a pharmacy, or the patient's own pharmacy
   // request is accepted and fulfilled (see pharmacyOrderHelper.ts). null = never routed.
   pharmacy_status: string | null;
+  /** Doctor sent the tests to a lab: 'Sent' | 'Accepted' | 'Completed' | 'Cancelled'. */
+  lab_status?: string | null;
   pharmacy_partner_id: string | null;
   pharmacy_name?: string | null;
   pharmacy_address?: string | null;
@@ -388,7 +390,11 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
   const res = await apiClient.get(ENDPOINTS.PATIENTS.PRESCRIPTIONS);
   const list = res?.data?.data;
   if (!Array.isArray(list)) return [];
-  return list.map((p: any): PatientPrescription => ({
+  return list.map(toPatientPrescription);
+};
+
+/** One prescription from the API, in the shape the screens use. */
+export const toPatientPrescription = (p: any): PatientPrescription => ({
     id: String(p.id),
     prescription_number: p.prescription_number ?? null,
     patient_id: p.patient_id ? String(p.patient_id) : (p.patientId ? String(p.patientId) : null),
@@ -413,6 +419,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
     patient_age: p.patient_age != null ? Number(p.patient_age) : null,
     patient_sex: p.patient_sex ?? null,
     pharmacy_status: p.pharmacy_status ?? null,
+    lab_status: p.lab_status ?? null,
     pharmacy_partner_id: p.pharmacy_partner_id ?? null,
     pharmacy_name: p.pharmacy_name ?? p.pharmacy?.business_name ?? p.pharmacy?.name ?? p.pharmacy_details?.business_name ?? p.pharmacy_details?.name ?? null,
     pharmacy_address: (p.pharmacy_address ?? p.pharmacy?.address ?? p.pharmacy_details?.address)?.replace(/\bNear\s+Near\b/gi, 'Near') ?? null,
@@ -438,8 +445,7 @@ export const getPrescriptionsApi = async (): Promise<PatientPrescription[]> => {
       duration: m.duration ?? null,
       instructions: m.instructions ?? null,
     })) : [],
-  }));
-};
+  });
 
 // Profile photo: stored as a file (not Base64); the profile keeps its URL.
 export const uploadPatientPhotoApi = async (file: File): Promise<string> => {
@@ -454,4 +460,10 @@ export const photoUrl = (u?: string | null): string => {
   if (!u) return '';
   if (/^(https?:|data:|blob:)/.test(u)) return u;
   return `${String(apiClient.defaults.baseURL || '').replace(/\/$/, '')}${u.startsWith('/') ? '' : '/'}${u}`;
+};
+
+/** Public: a prescription the doctor shared by link (walk-in patients without the app). */
+export const getSharedPrescriptionApi = async (token: string): Promise<PatientPrescription & { share_expires_at: string }> => {
+  const res = await apiClient.get(`/prescriptions/shared/${encodeURIComponent(token)}`);
+  return { ...toPatientPrescription(res.data), share_expires_at: String(res.data?.share_expires_at || '') };
 };
