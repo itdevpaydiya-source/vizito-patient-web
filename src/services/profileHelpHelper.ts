@@ -1,10 +1,25 @@
-﻿import api from "./index";
+import api from "./index";
+const FRIENDLY_PROFILE_ERRORS: [RegExp, string][] = [
+  [/dateOfBirth must be a valid ISO 8601 date string/i, "Please enter a valid date of birth."],
+  [/fullName must be shorter than or equal to/i, "Full name must be 100 characters or fewer."],
+  [/fullName must be a string/i, "Please enter your full name."],
+  [/gender must be one of/i, "Please select a gender."],
+  [/phone must be a valid E\.164/i, "Enter a valid 10-digit Indian mobile number."],
+  [/email must be an email/i, "Enter a valid email address."],
+];
+export const friendlyProfileMessage = (msg: string): string => {
+  for (const [pattern, replacement] of FRIENDLY_PROFILE_ERRORS) {
+    if (pattern.test(msg)) return replacement;
+  }
+  return msg;
+};
 export const profileError = (
   e: any,
   fallback = "Could not complete that action.",
 ) => {
   const m = e?.response?.data?.message;
-  return Array.isArray(m) ? m.join(" ") : m || e?.message || fallback;
+  const raw = Array.isArray(m) ? m.map((item) => friendlyProfileMessage(String(item))).join(" ") : friendlyProfileMessage(String(m || e?.message || fallback));
+  return raw || fallback;
 };
 export interface PatientDevice {
   id: string;

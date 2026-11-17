@@ -142,14 +142,14 @@ export default function CancellationRefundPolicy({ service, className = '', comp
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
         {policy.points.map((pt, i) => {
           const Icon = pt.icon;
           return (
             <div key={i} className="bg-white/80 rounded-xl p-3 border border-slate-100 text-xs space-y-1">
               <div className="flex items-center gap-1.5 font-bold text-slate-800">
                 <Icon className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                <span className="truncate">{pt.title}</span>
+                <span>{pt.title}</span>
               </div>
               <p className="text-[11px] text-slate-500 leading-snug">{pt.desc}</p>
             </div>

@@ -10,3 +10,22 @@
 .bko-status{justify-content:flex-start}.bko-kind{font-size:11px;white-space:normal}.bko-row-main h4{font-size:16px}.bko-row-main p{font-size:12px}.bko-reference{font-size:11px}.bko-row-time strong{font-size:12px}.bko-row-time>span{font-size:11px}.bko-status-label{font-size:11px}.bko-details{font-size:12px}.bko-services button{font-size:12px}.bko-day>h3{font-size:12px}.bko-row{padding-top:20px;padding-bottom:20px}.bko-row-main{display:block}.bko-row-main>span{width:auto;max-width:none}.bko-heading{position:relative}
 @media(max-width:700px){.bko-row-main h4{font-size:15px}.bko-row-main p{font-size:12px}.bko-reference{font-size:10px}.bko-status-label{font-size:10px}.bko-row-time strong{font-size:11px}.bko-details{font-size:11px}.bko-kind{font-size:10px}.bko-services button{font-size:11px}}
 @media(max-width:420px){.bko-heading{padding-bottom:3px}.bko-heading h1{font-size:24px;max-width:60%}.bko-heading>.bko-new{position:absolute;right:0;top:27px;padding:9px 10px;font-size:10px;gap:5px}.bko-heading>.bko-new svg{width:13px;height:13px}.bko-heading p{margin-top:12px}}
+
+/* WCAG 2.2 AA (>=4.5:1) readable contrast on white cards (NEW-30) & Active status tab/badge (TC-44) */
+.bookings-clean{--bko-muted:#475c70}
+.bko-heading nav,.bko-heading p,.bko-list-heading>span,.bko-day>h3,.bko-more,.bko-empty p,.bko-inline-state,.bko-active-filters,.bko-footer>a,.bko-footer small{color:#475c70}
+.bko-status button{color:#4b5f73}
+.bko-status button>span{color:#3f5366;background:#e8eef4}
+.bko-services button{color:#3f5466}
+.bko-services button svg,.bko-services button>span{color:#4d6275}
+.bko-kind{color:#4a5f75}
+.bko-row-main h4{color:#152c44}
+.bko-row-main p,.bko-row-main .bko-place{color:#374c62}
+.bko-reference{color:#475c70}
+.bko-row-time strong{color:#233e57}
+.bko-row-time>span{color:#475c70}
+.bko-status-label{color:#445a6e}
+.bko-status-label.status-active{color:#05666c;font-weight:650}
+.bko-status-label.status-upcoming{color:#166558}
+.bko-status-label.status-completed{color:#3d5268}
+.bko-status-label.status-cancelled{color:#9e3330}

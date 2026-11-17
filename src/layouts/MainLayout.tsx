@@ -12,7 +12,7 @@ import {
 import { useRole } from '../store/role/RoleContext';
 import { useLanguage } from '../store/language/LanguageContext';
 import { useNotifications } from '../store/notifications/NotificationsContext';
-import { getProvidersApi } from '../services/patientHelper';
+import { getProvidersApi, getPatientProfileApi, photoUrl } from '../services/patientHelper';
 import { SERVICE_TILES, serviceRoute } from '../config/serviceTypes';
 import { fetchLabTestsApi, type LabTestDef } from '../services/labHelper';
 import { kindOf, providerRoute } from '../presentation/components/ProviderCard';
@@ -77,6 +77,16 @@ const MainLayout = () => {
   // Neutral fallback only — never a fabricated person's name. The real name comes from the session
   // (set at login and refreshed from /patients/me by the dashboard/profile screens).
   const displayName = loggedInUserName || 'Patient';
+  // The patient's own photo in the top bar; refreshed when it changes on the profile page (NEW-07).
+  const [topPhoto, setTopPhoto] = useState('');
+  useEffect(() => {
+    let live = true;
+    const load = () => { getPatientProfileApi().then((p) => { if (live) setTopPhoto(photoUrl(p?.profilePicture)); }).catch(() => { /* initials stay */ }); };
+    load();
+    window.addEventListener('vizito-profile-changed', load);
+    window.addEventListener('vizito-auth-changed', load);
+    return () => { live = false; window.removeEventListener('vizito-profile-changed', load); window.removeEventListener('vizito-auth-changed', load); };
+  }, []);
 
   const getInitials = (name: string) => {
     if (!name) return 'VI';
@@ -379,11 +389,15 @@ const MainLayout = () => {
                 className="flex items-center gap-2.5 cursor-pointer group hover:bg-slate-50 p-1.5 rounded-xl transition-all"
               >
                 <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0 ring-2 ring-white shadow-sm">
-                  <div className="w-full h-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">
-                      {getInitials(displayName)}
-                    </span>
-                  </div>
+                  {topPhoto ? (
+                    <img src={topPhoto} alt="" className="w-full h-full object-cover" onError={() => setTopPhoto('')} />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">
+                        {getInitials(displayName)}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="hidden sm:block text-right select-none">
                   <p className="text-sm font-bold text-slate-800 leading-none">

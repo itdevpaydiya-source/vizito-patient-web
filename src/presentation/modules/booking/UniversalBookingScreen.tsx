@@ -31,7 +31,7 @@ import {
 import { getMyUserId, getFamilyMembersApi, type PatientFamilyMember } from '../../../services/familyHelper';
 import { getProviderReviewsApi, type ProviderReviewSummary } from '../../../services/reviewHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
-import { canonicalSpecialty, specialtiesForQuery, specialtyHint, SYMPTOM_CHIPS } from '../../../utils/specialties';
+import { normalizeSpecialtyLabel, specialtiesForQuery, specialtyHint, specialtyKey, SYMPTOM_CHIPS } from '../../../utils/specialties';
 import { printBookingReceipt, downloadCalendarEntry, type BookingSummary } from '../../../utils/bookingReceipt';
 
 // Five-step booking flow: Provider -> Booking Details -> Payment -> Processing -> Confirmation.
@@ -146,18 +146,34 @@ export default function UniversalBookingScreen() {
   // Specialties a provider offers, in the catalogue's names: a doctor's own title, or every
   // department a hospital/clinic runs (so "Orthopedist" and "orthopaedics" are one filter).
   const specialtiesOf = React.useCallback((p: ProviderItem): string[] => {
-    const titles = p.org ? [...p.org.departments.map((d) => d.name), ...p.org.doctors.map((d) => d.specialization || '')] : [p.specialtyOrType || p.subtitle || ''];
-    return Array.from(new Set(titles.map((t) => canonicalSpecialty(t) || (t && !/^(doctor|hospital|clinic|verified partner)$/i.test(t) ? t.trim() : '')).filter(Boolean)));
+    const titles = p.org ? [...p.org.departments.map((d) => d.name), ...p.org.doctors.map((d) => d.specialization || '')] : [p.specialization || p.specialtyOrType || p.subtitle || ''];
+    const deduped = new Map<string, string>();
+    for (const raw of titles) {
+      if (!raw || /^(doctor|hospital|clinic|verified partner)$/i.test(raw.trim())) continue;
+      const label = normalizeSpecialtyLabel(raw);
+      const key = specialtyKey(label);
+      if (label && key && !deduped.has(key)) deduped.set(key, label);
+    }
+    return Array.from(deduped.values());
   }, []);
 
   const dynamicSpecializations = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    providers.forEach((p) => specialtiesOf(p).forEach((s) => counts.set(s, (counts.get(s) || 0) + 1)));
+    const counts = new Map<string, { name: string; count: number }>();
+    providers.forEach((p) =>
+      specialtiesOf(p).forEach((s) => {
+        const key = specialtyKey(s);
+        if (!key) return;
+        const cur = counts.get(key);
+        if (cur) cur.count += 1;
+        else counts.set(key, { name: s, count: 1 });
+      }),
+    );
     specializations.forEach((s) => {
-      const name = canonicalSpecialty(s.name) || s.name;
-      if (!counts.has(name)) counts.set(name, 0);
+      const label = normalizeSpecialtyLabel(s.name);
+      const key = specialtyKey(label);
+      if (label && key && !counts.has(key)) counts.set(key, { name: label, count: 0 });
     });
-    return Array.from(counts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [providers, specializations, specialtiesOf]);
 
   // What the search box means as specialties ("tooth pain" -> Dentist, "ortho" -> Orthopedic).
@@ -174,7 +190,7 @@ export default function UniversalBookingScreen() {
         const bySpecialty = queryMeansSpecialties.length > 0 && specialtiesOf(p).some((s) => queryMeansSpecialties.includes(s));
         if (!text.includes(q) && !bySpecialty) return false;
       }
-      if (filterSpecialization && !specialtiesOf(p).includes(filterSpecialization)) return false;
+      if (filterSpecialization && !specialtiesOf(p).some((s) => specialtyKey(s) === specialtyKey(filterSpecialization))) return false;
       return true;
     });
   }, [providers, providerSearch, filterSpecialization, queryMeansSpecialties, specialtiesOf]);

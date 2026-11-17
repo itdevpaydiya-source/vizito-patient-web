@@ -60,6 +60,18 @@ export function canonicalSpecialty(title?: string | null): string | null {
   return null;
 }
 
+/** Canonical specialty label when known, else trimmed single-spaced title (null when blank). */
+export function normalizeSpecialtyLabel(title?: string | null): string | null {
+  const clean = String(title ?? '').trim().replace(/\s+/g, ' ');
+  if (!clean) return null;
+  return canonicalSpecialty(clean) || clean;
+}
+
+/** Case- and whitespace-insensitive key for deduplicating and comparing specialties. */
+export function specialtyKey(title?: string | null): string {
+  return (normalizeSpecialtyLabel(title) || '').toLowerCase();
+}
+
 /** What a search box query means: specialties it names or describes (by title or by symptom). */
 export function specialtiesForQuery(query: string): string[] {
   const q = norm(query);

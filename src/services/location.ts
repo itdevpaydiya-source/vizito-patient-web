@@ -13,22 +13,46 @@ const AREA_KEY = 'vizito_search_area';
 const DENIED_KEY = 'vizito_location_denied';
 const listeners = new Set<() => void>();
 
-const read = (): SearchArea | null => {
-  try { const a = JSON.parse(sessionStorage.getItem(AREA_KEY) || 'null'); return a && Number.isFinite(a.lat) && Number.isFinite(a.lng) ? a : null; } catch { return null; }
+// Remembered per patient account on this device (like Swiggy/Zomato): after logout + login, or in a
+// new tab, the patient gets their own last location back. Another account never sees it, and with no
+// one logged in there is no location at all.
+const ownerKey = (): string => {
+  try {
+    const u = JSON.parse(localStorage.getItem('vizito_user') || 'null');
+    return u ? String(u.patient_id || u.mobile || u.email || '') : '';
+  } catch { return ''; }
 };
-let current: SearchArea | null = read();
+const valid = (a: any): a is SearchArea => !!a && Number.isFinite(a.lat) && Number.isFinite(a.lng);
+const load = (owner: string): SearchArea | null => {
+  if (!owner) return null;
+  try { const a = JSON.parse(localStorage.getItem(`${AREA_KEY}:${owner}`) || 'null'); return valid(a) ? a : null; } catch { return null; }
+};
+// Older builds kept one shared location for the tab; drop it so it can't leak to the next account.
+try { sessionStorage.removeItem(AREA_KEY); } catch { /* private mode */ }
+let currentOwner = ownerKey();
+let current: SearchArea | null = load(currentOwner);
 
-export const getSearchArea = () => current;
+export const getSearchArea = () => {
+  const owner = ownerKey();
+  if (owner !== currentOwner) { currentOwner = owner; current = load(owner); }
+  return current;
+};
 export const setSearchArea = (a: SearchArea | null) => {
-  current = a;
-  try { if (a) sessionStorage.setItem(AREA_KEY, JSON.stringify(a)); else sessionStorage.removeItem(AREA_KEY); } catch { /* private mode */ }
+  currentOwner = ownerKey();
+  current = currentOwner ? a : null;
+  try {
+    if (currentOwner) {
+      if (a) localStorage.setItem(`${AREA_KEY}:${currentOwner}`, JSON.stringify(a));
+      else localStorage.removeItem(`${AREA_KEY}:${currentOwner}`);
+    }
+  } catch { /* storage blocked */ }
   listeners.forEach((l) => l());
 };
 /** React hook: the area the patient is searching around (their location, or a place they chose). */
 export const useSearchArea = (): SearchArea | null => {
   const [, tick] = useState(0);
   useEffect(() => { const l = () => tick((n) => n + 1); listeners.add(l); return () => { listeners.delete(l); }; }, []);
-  return current;
+  return getSearchArea();
 };
 
 export const locationWasDenied = () => { try { return localStorage.getItem(DENIED_KEY) === '1'; } catch { return false; } };

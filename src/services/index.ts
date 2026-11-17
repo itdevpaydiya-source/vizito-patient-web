@@ -12,10 +12,19 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// Unauthenticated patient auth calls (login, register, OTP, Google, password reset) must never
+// send stale bearer tokens or force-reload /auth/login when a 401 comes back.
+const PUBLIC_PATIENT_AUTH_RE =
+  /\/patient\/auth\/(login|register(\/send-otp|\/verify-otp)?|send-otp|verify-otp|google|forgot-password(\/verify)?|reset-password|refresh-token)\/?$/;
+
 // Request Interceptor: Attach bearer token if it exists in localStorage
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     try {
+      if (PUBLIC_PATIENT_AUTH_RE.test(config.url || '')) {
+        return config;
+      }
+
       // Check for user object in localStorage
       const userString = localStorage.getItem('vizito_user');
       let token: string | null = null;
@@ -64,7 +73,8 @@ apiClient.interceptors.response.use(
       // instead of the page silently reloading out from under it.
       if (status === 401) {
         const hadAuthHeader = Boolean(error.config?.headers?.Authorization);
-        if (hadAuthHeader) {
+        const isPublicAuthCall = PUBLIC_PATIENT_AUTH_RE.test(error.config?.url || '');
+        if (hadAuthHeader && !isPublicAuthCall) {
           // Clear auth details on unauthorized response
           localStorage.removeItem('vizito_user');
           localStorage.removeItem('vizito_token');
