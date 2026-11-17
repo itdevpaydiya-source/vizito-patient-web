@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { FileText, Clock, AlertTriangle, CheckCircle2, ChevronRight, PhoneCall, Sparkles } from 'lucide-react';
+import { FileText, Clock, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
 import { hcEnquiriesMineApi, type HcEnquiry, type HcQuote } from '../../../../services/homecareHelper';
 import EnquiryTrackerModal from './EnquiryTrackerModal';
 import QuoteReviewModal from './QuoteReviewModal';
@@ -67,7 +67,6 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
           const st = STATUS_MAP[enq.status] || { label: enq.status, cls: 'bg-slate-100 text-slate-600 border-slate-200' };
           const latestQuote = enq.quote || (enq.quotes && enq.quotes.find((q: any) => q.status === 'SENT')) || (enq.quotes && enq.quotes[0]);
           const hasQuote = Boolean(latestQuote && (['QUOTED', 'QUOTE_SENT'].includes(enq.status) || latestQuote.status === 'SENT'));
-          const isOverdue = enq.is_callback_overdue;
 
           return (
             <div
@@ -99,20 +98,7 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
                       <span className="font-semibold text-slate-700">Patient:</span> {enq.patient_name}
                     </div>
                   )}
-                  {enq.callback_scheduled_at && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-700 font-semibold pt-1">
-                      <PhoneCall className="w-3.5 h-3.5" />
-                      <span>Callback: {new Date(enq.callback_scheduled_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  )}
                 </div>
-
-                {isOverdue && (
-                  <div className="mt-2.5 p-2 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 font-bold flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                    <span>Callback SLA escalated to agency manager</span>
-                  </div>
-                )}
 
                 {hasQuote && latestQuote && (
                   <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-950 font-bold">

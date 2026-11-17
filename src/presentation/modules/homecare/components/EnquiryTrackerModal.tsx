@@ -66,20 +66,14 @@ export default function EnquiryTrackerModal({
 <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {/* Status Alert Banner */}
           {enquiry.status === 'NEW' && (
-            <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
-              enquiry.callback_overdue
-                ? 'bg-amber-50 border-amber-200 text-amber-900'
-                : 'bg-teal-50 border-teal-200 text-teal-900'
-            }`}>
-              <PhoneCall className={`w-5 h-5 shrink-0 mt-0.5 ${enquiry.callback_overdue ? 'text-amber-600' : 'text-teal-600'}`} />
+            <div className="p-4 rounded-2xl border flex items-start gap-3 bg-teal-50 border-teal-200 text-teal-900">
+              <PhoneCall className="w-5 h-5 shrink-0 mt-0.5 text-teal-600" />
               <div>
                 <b className="block text-xs font-black uppercase tracking-wider">
-                  {enquiry.callback_overdue ? 'Call Priority Queue' : 'Care Manager Callback Due'}
+                  Care Manager Call
                 </b>
                 <p className="text-xs mt-0.5 leading-relaxed">
-                  {enquiry.callback_overdue
-                    ? `Our coordinator is following up on this enquiry urgently. We prioritize all incoming requests within 30 minutes.`
-                    : `A dedicated clinical coordinator will call your registered phone to discuss ${enquiry.patient?.name}'s medical condition before confirming visits.`}
+                  A dedicated clinical coordinator will call your registered phone to discuss {enquiry.patient?.name}'s medical condition before confirming visits.
                 </p>
               </div>
             </div>

@@ -262,7 +262,7 @@ export default function LongTermEnquiryModal({
           </div>
           <h2 className="text-xl sm:text-2xl font-black">Request a quote for long-term care</h2>
           <p className="text-slate-600 text-xs sm:text-sm mt-1 max-w-lg">
-            No instant automated matching. A clinical coordinator will call within 30 minutes to review needs and arrange a home assessment.
+            No instant automated matching. A clinical coordinator will call to review needs and arrange a home assessment.
           </p>
 
           <BookingForChip family={familyMembers} value={familyMemberId} onChange={setFamilyMemberId}/>{/* Stepper Indicator */}
@@ -738,7 +738,7 @@ export default function LongTermEnquiryModal({
                 <div>
                   <b className="block">Care Coordinator Call Commitment</b>
                   <p className="mt-0.5 text-amber-800 text-[11px] leading-relaxed">
-                    Once submitted, our clinical care manager calls you within <b>30 minutes</b> to assess patient acuity, calculate rates, and schedule the home visit before any payment is taken.
+                    Once submitted, our clinical care manager calls you to assess patient acuity, calculate rates, and schedule the home visit before any payment is taken.
                   </p>
                 </div>
               </div>

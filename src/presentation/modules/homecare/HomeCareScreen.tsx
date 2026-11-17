@@ -514,7 +514,7 @@ export default function HomeCareScreen() {
                 {
                   num: '02',
                   title: 'Care Manager Calls',
-                  text: 'Clinical triage call within 30 minutes to understand routine & medical background.',
+                  text: 'Clinical triage call to understand routine & medical background.',
                   icon: PhoneCall,
                 },
                 {
@@ -741,7 +741,7 @@ export default function HomeCareScreen() {
           onClose={() => setEnquiryModalOpen(false)}
           onSuccess={(enq) => {
             setEnquiryModalOpen(false);
-            setEnquiryFeedback(`Enquiry #${enq.enquiry_number} submitted! Our Care Manager will call within 30 minutes.`);
+            setEnquiryFeedback(`Enquiry #${enq.enquiry_number} submitted! Our Care Manager will call you.`);
             setTab('mine');
           }}
         />

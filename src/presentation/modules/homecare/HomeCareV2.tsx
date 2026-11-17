@@ -28,6 +28,7 @@ import {
   type HcPackage,
 } from './homeCareV2Data';
 import './HomeCareV2.css';
+import { isIndividualProvider } from './homeCareProviderLabel';
 
 const TABS = ['nursing', 'physio', 'caregiver'] as const;
 type Tab = typeof TABS[number];
@@ -912,6 +913,7 @@ function AgencyPage({ pkg, tab, pin, areaLabel, loading, error, onRetry, onBack,
                 <AgencyLogo service={s} />
                 <div className="hc2-agency-main">
                   <h3>{a.name}</h3>
+                  <p className="hc2-since" data-testid="hc-provider-type">{isIndividualProvider(a as any) ? 'Individual home care professional' : 'Home care agency'}</p>
                   {a.on_vizito_since && <p className="hc2-since">On Vizito since {monthYear(a.on_vizito_since)}</p>}
                   <div className="hc2-agency-sub">
                     {hasRating && <span className="hc2-rating">★ {Number(a.rating).toFixed(1)} <small>({a.ratings} reviews)</small></span>}

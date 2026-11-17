@@ -73,6 +73,10 @@ export interface MyBloodRequest {
   payment_preference?: string | null;
   admitted_hospital?: string | null;
   treating_doctor?: string | null;
+  ward_bed?: string | null;
+  doctor_phone?: string | null;
+  hb_g_dl?: number | null;
+  platelet_count?: number | null;
   planned_at?: string | null;
   timeline?: { code: string; label: string; at: string }[];
   reserved_until?: string | null;
@@ -112,9 +116,23 @@ export interface MyBloodRequest {
   payment_status: string;
   can_pay: boolean;
   can_cancel: boolean;
+  /** TC-12: sent before the doctor's requisition was ready; the bank can't accept until it is attached. */
+  awaiting_requisition?: boolean;
+  can_attach_requisition?: boolean;
+  family_member_id?: string | null;
   created_at: string;
   issued_at: string | null;
 }
+export const attachRequisitionApi = async (
+  id: string,
+  requisitionId: string,
+): Promise<MyBloodRequest> =>
+  (
+    await apiClient.post(
+      `/bloodbank/requests/mine/${encodeURIComponent(id)}/requisition`,
+      { requisition_id: requisitionId },
+    )
+  ).data;
 const key = () =>
   (
     globalThis.crypto?.randomUUID?.() ||

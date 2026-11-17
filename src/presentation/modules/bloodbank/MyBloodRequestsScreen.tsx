@@ -12,13 +12,66 @@ import {
   myBloodRequestsPageApi,
   newIdempotencyKey,
   payBloodRequestApi,
+  attachRequisitionApi,
+  myRequisitionsApi,
+  uploadRequisitionApi,
   type MyBloodRequest,
+  type Requisition,
 } from "../../../services/bloodbankHelper";
 
 import { BankMark, useBloodBankLogos } from "./BloodVisuals";
 import { componentLabel } from "./FindBloodScreen";
 import "./bloodbank.css";
 import VizitoPagination from "../../components/navigation/VizitoPagination";
+
+// TC-12: a request sent before the doctor's requisition was ready. Upload the form, or pick one a Vizito
+// doctor wrote; the blood bank can accept (and the patient can pay) only after it has checked it.
+const AttachRequisition = ({ r, busy, run, bank }: { r: MyBloodRequest; busy: boolean; run: (fn: () => Promise<unknown>, fallback: string) => Promise<void>; bank: string }) => {
+  const [doctorReqs, setDoctorReqs] = useState<Requisition[]>([]);
+  useEffect(() => {
+    let alive = true;
+    myRequisitionsApi(r.family_member_id || undefined)
+      .then((rows) => { if (alive) setDoctorReqs(rows.filter((x) => x.source === "DOCTOR")); })
+      .catch(() => { if (alive) setDoctorReqs([]); });
+    return () => { alive = false; };
+  }, [r.family_member_id]);
+  const upload = (file?: File) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+      void run(async () => { throw new Error("Upload a PDF, JPG or PNG up to 10 MB."); }, "Upload a PDF, JPG or PNG up to 10 MB.");
+      return;
+    }
+    void run(async () => {
+      const q = await uploadRequisitionApi(file, r.family_member_id || undefined);
+      await attachRequisitionApi(r.id, q.id);
+    }, "Could not add the requisition.");
+  };
+  return (
+    <section aria-label="Add the doctor's requisition" className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+      <p className="text-sm font-bold text-amber-900">Doctor’s requisition needed</p>
+      <p className="text-xs text-amber-900">
+        {bank} can’t accept this request until you add the doctor’s requisition. Nothing is reserved and nothing is charged until then. Add it within 3 days of sending, or the request is cancelled automatically.
+      </p>
+      <label className="bb-upload">
+        Upload requisition (PDF, JPG, PNG – max 10 MB)
+        <input type="file" className="bb-file-input" aria-label="Requisition file" accept="application/pdf,image/jpeg,image/png" disabled={busy}
+          onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {doctorReqs.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-slate-700">Or use one your Vizito doctor wrote:</p>
+          {doctorReqs.map((q) => (
+            <button key={q.id} type="button" disabled={busy} onClick={() => void run(() => attachRequisitionApi(r.id, q.id), "Could not add the requisition.")}
+              className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 disabled:opacity-50">
+              Dr. {q.doctor_name || "your doctor"} · {new Date(q.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            </button>
+          ))}
+        </div>
+      )}
+      {busy && <p role="status" className="text-xs">Adding…</p>}
+    </section>
+  );
+};
 
 // My blood requests: plain status, the processing charge (never a price for blood), pay online,
 // cancel before issue. No unit or donor details are ever shown here.
@@ -198,7 +251,10 @@ const MyBloodRequestsScreen = () => {
                       Emergency
                     </span>
                   )}
-                  <span className="bb-badge">
+                  <span
+                    className="bb-badge"
+                    style={r.awaiting_requisition && r.status === "SUBMITTED" ? { background: "#fff4e5", color: "#9a4b00" } : undefined}
+                  >
                     {(
                       {
                         SUBMITTED: "Submitted",
@@ -211,7 +267,7 @@ const MyBloodRequestsScreen = () => {
                         REJECTED: "Requisition rejected",
                         CANCELLED: "Cancelled",
                       } as Record<string, string>
-                    )[r.status] || r.status_label}
+                    )[r.awaiting_requisition && r.status === "SUBMITTED" ? "" : r.status] || r.status_label}
                   </span>
                   <span>{id === r.id ? "Close" : "Expand"}</span>
                 </span>
@@ -500,6 +556,22 @@ export const RequestSheet = ({
           </span>
         </div>
 
+        {(r.admitted_hospital || r.treating_doctor || r.ward_bed || r.doctor_phone || r.hb_g_dl != null || r.platelet_count != null) && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs">
+            {[
+              ["Hospital", [r.admitted_hospital, r.ward_bed].filter(Boolean).join(" · ")],
+              ["Doctor", [r.treating_doctor, r.doctor_phone].filter(Boolean).join(" · ")],
+              ["Haemoglobin", r.hb_g_dl != null ? `${r.hb_g_dl} g/dL` : ""],
+              ["Platelets", r.platelet_count != null ? `${r.platelet_count.toLocaleString("en-IN")} /µL` : ""],
+            ].filter(([, v]) => v).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="font-medium text-slate-800">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+
         {r.processing_charge && (
           <p className="text-sm">
             Processing charge: <b>{money(r.processing_charge.total)}</b>{" "}
@@ -559,6 +631,9 @@ export const RequestSheet = ({
               </button>
             </section>
           )}
+        {r.can_attach_requisition && (
+          <AttachRequisition r={r} busy={busy} run={run} bank={bank} />
+        )}
         {r.can_cancel && !askCancel && (
           <button onClick={() => setAskCancel(true)} className="bb-btn">
             Cancel request

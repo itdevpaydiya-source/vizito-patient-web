@@ -17,10 +17,6 @@
 
     /* Path mapping */
     "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
-    "paths": {
-      "vitest": ["../vizito-partner-main/node_modules/vitest"]
-    },
 
     /* Linting */
     "noUnusedLocals": false,
@@ -29,5 +25,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts"]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.test.ts", "src/**/*.spec.tsx", "src/**/*.test.tsx"]
 }

@@ -9,6 +9,7 @@ import {
   bloodGridApi,
   bloodQuoteApi,
   uploadRequisitionApi,
+  myRequisitionsApi,
   createBloodRequestApi,
   bloodError,
   newIdempotencyKey,
@@ -51,6 +52,7 @@ export default function RequestBloodScreen() {
     [urgency, setUrgency] = useState("Within 24 hours"),
     [hospital, setHospital] = useState(""),
     [doctor, setDoctor] = useState(""),
+    [clinical, setClinical] = useState({ ward_bed: "", doctor_phone: "", hb_g_dl: "", platelet_count: "" }),
     [planned, setPlanned] = useState(() => new Date(Date.now()+86400000).toLocaleDateString("en-CA")),
     [plannedTime, setPlannedTime] = useState("10:00"),
     [reason, setReason] = useState(""),
@@ -105,6 +107,17 @@ export default function RequestBloodScreen() {
       alive = false;
     };
   }, [retry]);
+  // TC-12: a requisition your Vizito doctor already wrote (from a consultation) can be used instead of
+  // uploading a file. Still a requisition — the server checks it belongs to this patient (usableBy).
+  const [doctorReqs, setDoctorReqs] = useState<Requisition[]>([]);
+  useEffect(() => {
+    if (who === "Other" || (who === "Family member" && !familyId)) { setDoctorReqs([]); return; }
+    let alive = true;
+    myRequisitionsApi(who === "Family member" ? familyId : undefined)
+      .then((rows) => { if (alive) setDoctorReqs(rows.filter((r) => r.source === "DOCTOR")); })
+      .catch(() => { if (alive) setDoctorReqs([]); });
+    return () => { alive = false; };
+  }, [who, familyId]);
   useEffect(() => {
     if (!bankId || !component) return;
     let alive = true;
@@ -182,12 +195,14 @@ export default function RequestBloodScreen() {
     e.preventDefault();
     if (
       !bankId ||
-      !requisition ||
       !quote ||
       (who === "Family member" && !familyId)
     ) {
+      // Say exactly what is missing instead of a generic message. The requisition can be added later (TC-12).
       setError(
-        "Choose a blood bank, patient and requisition, and wait for processing charges.",
+        !bankId ? "Choose a blood bank."
+          : who === "Family member" && !familyId ? "Choose the family member this blood is for."
+          : "Please wait while processing charges load.",
       );
       return;
     }
@@ -220,8 +235,14 @@ export default function RequestBloodScreen() {
           emergency_reason: urgency === "Emergency" ? reason : undefined,
           admitted_hospital: hospital,
           treating_doctor: doctor,
+          // Optional details that help the blood bank prioritise and reach the ward.
+          ward_bed: clinical.ward_bed.trim() || undefined,
+          doctor_phone: clinical.doctor_phone.trim() || undefined,
+          hb_g_dl: clinical.hb_g_dl.trim() ? Number(clinical.hb_g_dl) : undefined,
+          platelet_count: clinical.platelet_count.trim() ? Number(clinical.platelet_count) : undefined,
+          // Only a Planned request has a planned time (the date field always holds a default).
           planned_at:
-            planned
+            urgency === "Planned" && planned
               ? new Date(`${planned}T${plannedTime}:00+05:30`).toISOString()
               : undefined,
           payment_preference: preference,
@@ -267,8 +288,9 @@ export default function RequestBloodScreen() {
             <p>{created.request_number}</p>
           </div>
           <p>
-            {created.bloodbank_name} will review the doctor’s requisition and
-            contact you about matching.
+            {created.awaiting_requisition
+              ? <>Add the doctor’s requisition from <b>My blood requests</b> as soon as you have it. {created.bloodbank_name} can accept the request only after checking it.</>
+              : <>{created.bloodbank_name} will review the doctor’s requisition and contact you about matching.</>}
           </p>
           <p>
             Payment is due only when blood is matched and ready.{" "}
@@ -477,6 +499,57 @@ export default function RequestBloodScreen() {
                       maxLength={120}
                     />
                   </label>
+                  <label>
+                    Doctor’s phone <small>(optional)</small>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      aria-label="Doctor's phone"
+                      placeholder="+91 98xxx xxxxx"
+                      value={clinical.doctor_phone}
+                      onChange={(e) => setClinical({ ...clinical, doctor_phone: e.target.value })}
+                      pattern="\+?[0-9 \-]{7,20}"
+                      maxLength={20}
+                    />
+                  </label>
+                  <label>
+                    Ward / bed <small>(optional)</small>
+                    <input
+                      aria-label="Ward or bed"
+                      placeholder="e.g. ICU-2, Bed 7"
+                      value={clinical.ward_bed}
+                      onChange={(e) => setClinical({ ...clinical, ward_bed: e.target.value })}
+                      maxLength={60}
+                    />
+                  </label>
+                  <label>
+                    Latest haemoglobin, g/dL <small>(optional)</small>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min={1}
+                      max={25}
+                      aria-label="Latest haemoglobin in g/dL"
+                      placeholder="e.g. 6.8"
+                      value={clinical.hb_g_dl}
+                      onChange={(e) => setClinical({ ...clinical, hb_g_dl: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Platelet count per µL <small>(optional)</small>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      step={1}
+                      min={0}
+                      max={2000000}
+                      aria-label="Platelet count per microlitre"
+                      placeholder="e.g. 42000"
+                      value={clinical.platelet_count}
+                      onChange={(e) => setClinical({ ...clinical, platelet_count: e.target.value })}
+                    />
+                  </label>
                 </div>
                 <label>Number of units</label>
                 <div className="bb-chips">
@@ -544,7 +617,35 @@ export default function RequestBloodScreen() {
                     </label>
                   </>
                 )}
-                <h3>Upload doctor’s requisition form (required)</h3>
+                <h3>Doctor’s requisition</h3>
+                <p className="bb-muted">
+                  The blood bank needs a doctor’s requisition before it can accept
+                  the request. Upload the hospital’s form
+                  {doctorReqs.length > 0 ? ", or use one your Vizito doctor wrote" : ""}.
+                  Don’t have it yet? You can send the request now and add it
+                  later from My blood requests.
+                </p>
+                {doctorReqs.length > 0 && (
+                  <div className="bb-stack" role="radiogroup" aria-label="Requisitions from your Vizito doctor">
+                    {doctorReqs.map((r) => (
+                      <label key={r.id} className="bb-radio">
+                        <input
+                          type="radio"
+                          name="doctor-requisition"
+                          checked={requisition?.id === r.id}
+                          onChange={() => { setError(""); setRequisition({ ...r, size_bytes: 0 }); }}
+                        />
+                        <span>
+                          From Dr. {r.doctor_name || "your doctor"}
+                          <small className="bb-muted" style={{ display: "block" }}>
+                            {[r.requested_group, r.component_code ? componentLabel(r.component_code) : null, r.quantity ? `${r.quantity} unit${r.quantity === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ")}
+                            {" · "}{new Date(r.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <label className="bb-upload">
                   <FileUp size={20} /> Upload file (PDF, JPG, PNG – max 10 MB)
                   <input
@@ -560,7 +661,7 @@ export default function RequestBloodScreen() {
                   />
                 </label>
                 {busy && <p role="status">Uploading…</p>}
-                {requisition && (
+                {requisition && requisition.source === "UPLOAD" && (
                   <div
                     className="bb-requisition-file"
                     aria-label="Uploaded requisition"
@@ -663,10 +764,18 @@ export default function RequestBloodScreen() {
                 conditions. Blood is issued after requisition verification and
                 cross-matching.
               </p>
+              {!requisition && !busy && (
+                <p className="bb-info bb-note" role="note">
+                  No requisition added. You can still send the request, but the
+                  blood bank can’t accept it, reserve blood or take payment until
+                  you add the doctor’s requisition. Add it within 3 days, or the
+                  request is cancelled automatically.
+                </p>
+              )}
               <button
                 className="bb-btn bb-primary"
                 style={{ width: "100%" }}
-                disabled={busy || !requisition || !quote || !bank}
+                disabled={busy || !quote || !bank}
               >
                 Review request{" "}
                 {quote?.total != null ? `· Approx. ${money(quote.total)}` : ""}{" "}
@@ -683,7 +792,7 @@ export default function RequestBloodScreen() {
               <p>
                 {urgency} · {hospital} · {doctor}
               </p>
-              <p>Requisition: {requisition?.file_name}</p>
+              <p>Requisition: {!requisition ? <b>Not added yet: add it later from My blood requests. The blood bank can accept only after checking it.</b> : requisition.source === "DOCTOR" ? `Written by Dr. ${requisition.doctor_name || "your doctor"} on Vizito` : requisition.file_name}</p>
               <p>
                 Approximate processing charge:{" "}
                 <b>{money(quote?.total ?? null)}</b>. Registration fee: Not

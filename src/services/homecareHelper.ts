@@ -123,7 +123,7 @@ export interface HcEnquiry {
   start_date?: string; duration_days?: number; mobility?: string; mobility_label?: string;
   conditions?: string | null; needs?: string; language?: string | null; preferred_gender?: string;
   address?: string; pincode?: string; landmark?: string | null;
-  callback_due_at?: string; callback_scheduled_at?: string; callback_overdue?: boolean; is_callback_overdue?: boolean; called_at?: string | null; call_note?: string;
+  called_at?: string | null; call_note?: string;
   assessment_at?: string | null; assessed_at?: string | null; assessed_by?: string | null; assessment_note?: string | null;
   risk?: {
     braden: { score: number; band: string; alert: boolean } | null;

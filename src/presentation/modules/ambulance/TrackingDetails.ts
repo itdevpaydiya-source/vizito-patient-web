@@ -9,9 +9,13 @@ export function destinationAddress(value: string | null | undefined): string {
   return address && /\p{L}/u.test(address) ? address : 'Not specified';
 }
 
-export const trackingTitle = (status: string, label: string) => ({ REQUESTED: 'Awaiting your ambulance', ASSIGNED: 'Your ambulance is assigned', EN_ROUTE: 'Ambulance on the way', AT_PICKUP: 'Ambulance at pickup', ON_BOARD: 'Patient onboard', COMPLETED: 'Trip completed', CANCELLED: 'Trip cancelled' } as Record<string, string>)[status] || label;
-export const trackingSubtitle = (status: string) => ({ REQUESTED: 'Your request is awaiting driver acceptance.', ASSIGNED: 'A driver and ambulance have been assigned to your trip.', EN_ROUTE: 'Your ambulance is on the way to your location.', AT_PICKUP: 'Your ambulance has arrived at the pickup location.', ON_BOARD: 'The patient is onboard and the trip is in progress.', COMPLETED: 'Your ambulance trip is complete.', CANCELLED: 'This ambulance trip has been cancelled.' } as Record<string, string>)[status] || '';
-export const timelineTime = (at: string) => new Date(at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+export const trackingTitle = (status: string, label: string) => ({ REQUESTED: 'Awaiting your ambulance', ACCEPTED: 'Ambulance accepted', ASSIGNED: 'Your ambulance is assigned', EN_ROUTE: 'Ambulance on the way', AT_PICKUP: 'Ambulance at pickup', ON_BOARD: 'Patient onboard', COMPLETED: 'Trip completed', CANCELLED: 'Trip cancelled' } as Record<string, string>)[status] || label;
+export const trackingSubtitle = (status: string) => ({ REQUESTED: 'Your request is awaiting driver acceptance.', ACCEPTED: 'The operator accepted your request and is assigning a vehicle.', ASSIGNED: 'A driver and ambulance have been assigned to your trip.', EN_ROUTE: 'Your ambulance is on the way to your location.', AT_PICKUP: 'Your ambulance has arrived at the pickup location.', ON_BOARD: 'The patient is onboard and the trip is in progress.', COMPLETED: 'Your ambulance trip is complete.', CANCELLED: 'This ambulance trip has been cancelled.' } as Record<string, string>)[status] || '';
+/** Compact trip progress for the urgent request card (same order as the track page milestones). */
+export const TRIP_STEPS = ['Accepted', 'On the way', 'At pickup', 'On board', 'Completed'] as const;
+/** Index into TRIP_STEPS for a trip status; -1 when the trip is not on the progress path (searching, cancelled). */
+export const tripStepIndex = (status: string) => ({ ACCEPTED: 0, ASSIGNED: 0, EN_ROUTE: 1, AT_PICKUP: 2, ON_BOARD: 3, COMPLETED: 4 } as Record<string, number>)[status] ?? -1;
+export const timelineTime =(at: string) => new Date(at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
 export function timelineDescription(code: string, at: string | undefined, trip: MyTrip, location: DriverLocation | null): string {
   if (!at) return ['COMPLETED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(trip.status) ? 'Not recorded for this trip.' : 'Awaiting this update.';
   switch (code) {

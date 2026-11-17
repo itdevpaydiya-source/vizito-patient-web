@@ -18,6 +18,7 @@ import { ReferralNote } from './HomeCareCare';
 import LongTermEnquiryModal from './components/LongTermEnquiryModal';
 import { labError, rupees } from '../../../services/labHelper';
 import { validatePinCode, validateUpiId } from '../../../utils/validators/india';
+import { providerLabel } from './homeCareProviderLabel';
 
 // Book nursing, physiotherapy or a caregiver from a registered home care agency: find by pincode,
 // compare (price, rating, what's included, team), then choose who it's for, how many visits and on
@@ -204,14 +205,28 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
                   <div className="flex justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-black text-slate-900 flex items-center gap-2">{x.name}<FavoriteButton partnerId={String(x.agency.id)} name={x.agency.name} className="w-7 h-7" /></p>
-                      <p className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />{x.agency.name}{x.agency.registration_number ? ` · Reg. ${x.agency.registration_number}` : ''}{x.agency.vizito_verified ? <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800">Vizito verified</span> : null}</p>
+                      <p className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        {x.agency.name}
+                        {x.agency.registration_number ? ` · Reg. ${x.agency.registration_number}` : ''}
+                        {((x.agency as any).mode === 'INDIVIDUAL' || (x.agency as any).homecare_mode === 'INDIVIDUAL') ? (
+                          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px]">Individual professional</span>
+                        ) : (
+                          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[10px]">Home care agency</span>
+                        )}
+                        {x.agency.vizito_verified ? <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800">Vizito verified</span> : null}
+                      </p>
                     </div>
                     <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900 tabular-nums">{rupees(x.price)}</p><p className="text-[11px] text-slate-500">{x.kind === 'VISIT' ? 'per visit' : `per ${x.shift_hours}-hour shift`}</p></div>
                   </div>
                   {x.description && <p className="text-xs text-slate-600">{x.description}</p>}
                   <p className="text-[11px] text-slate-600 flex flex-wrap gap-x-3 gap-y-1">
                     <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{x.kind === 'VISIT' ? `${x.duration_minutes} min visit · ${x.agency.hours}` : x.shift_hours === 12 ? '8 AM–8 PM or 8 PM–8 AM' : 'Round the clock, live-in'}</span>
-                    <span className="inline-flex items-center gap-1"><Users className="w-3.5 h-3.5" />{x.professionals} {x.category === 'NURSING' ? 'nurse' : x.category === 'PHYSIOTHERAPY' ? 'physiotherapist' : 'caregiver'}{x.professionals === 1 ? '' : 's'} (credentials checked by the agency){x.avg_experience ? ` · avg ${x.avg_experience} yrs` : ''}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" />
+                      <span>{providerLabel(x as any)}</span>
+                      {x.avg_experience ? ` · avg ${x.avg_experience} yrs` : ''}
+                    </span>
                     {x.agency.rating ? <span className="inline-flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-500" />{x.agency.rating} ({x.agency.ratings})</span> : <span className="text-slate-400">New on Vizito</span>}
                   </p>
                   {open === x.id && x.includes && <p className="text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2"><b>Includes: </b>{x.includes}</p>}
