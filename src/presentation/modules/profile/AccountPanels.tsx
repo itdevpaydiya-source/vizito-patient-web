@@ -1,6 +1,6 @@
 import ThemedSelect from '../../components/forms/ThemedSelect';
 ﻿import { useEffect, useState, type FormEvent } from "react";
-import { Bell, Lock } from "lucide-react";
+import { Bell, Lock, Eye, EyeOff } from "lucide-react";
 import {
   devicesApi,
   revokeDeviceApi,
@@ -63,7 +63,7 @@ export function NotificationCard() {
         </tbody>
       </table>
       <p className="ph-muted" style={{ marginTop: 12 }}>
-        SMS and email alerts are coming soon.
+        These alerts are about your care, reports and payments, so they always reach you in the Vizito app and can’t be turned off. Sign-in codes come by SMS or email.
       </p>
     </section>
   );
@@ -80,6 +80,8 @@ export function PasswordEditor({
     [confirm, setConfirm] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  // Show/hide per field, so a typed password can be checked before saving.
+  const [show, setShow] = useState<Record<string, boolean>>({});
   const score = PASSWORD_RULES.filter((r) => r.test(password)).length;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -109,24 +111,26 @@ export function PasswordEditor({
           Current password
           <input
             required
-            type="password"
+            type={show["Current password"] ? "text" : "password"}
             autoComplete="current-password"
             aria-label="Current password"
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
           />
+          <button type="button" className="ph-pw-eye" aria-label={show["Current password"] ? "Hide current password" : "Show current password"} aria-pressed={!!show["Current password"]} onClick={() => setShow((v) => ({ ...v, ["Current password"]: !v["Current password"] }))}>{show["Current password"] ? <EyeOff /> : <Eye />}</button>
         </label>
         <label>
           New password
           <input
             required
-            type="password"
+            type={show["New password"] ? "text" : "password"}
             autoComplete="new-password"
             aria-label="New password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             maxLength={100}
           />
+          <button type="button" className="ph-pw-eye" aria-label={show["New password"] ? "Hide new password" : "Show new password"} aria-pressed={!!show["New password"]} onClick={() => setShow((v) => ({ ...v, ["New password"]: !v["New password"] }))}>{show["New password"] ? <EyeOff /> : <Eye />}</button>
         </label>
         <div
           className="ph-meter"
@@ -149,12 +153,13 @@ export function PasswordEditor({
           Confirm new password
           <input
             required
-            type="password"
+            type={show["Confirm new password"] ? "text" : "password"}
             autoComplete="new-password"
             aria-label="Confirm new password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
+          <button type="button" className="ph-pw-eye" aria-label={show["Confirm new password"] ? "Hide confirm new password" : "Show confirm new password"} aria-pressed={!!show["Confirm new password"]} onClick={() => setShow((v) => ({ ...v, ["Confirm new password"]: !v["Confirm new password"] }))}>{show["Confirm new password"] ? <EyeOff /> : <Eye />}</button>
         </label>
         {error && (
           <p className="ph-error" role="alert">

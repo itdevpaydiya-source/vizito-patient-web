@@ -88,6 +88,26 @@ export const openMyLabReportPdf = async (id: string, version?: number) => {
 };
 export interface ReportCheck { valid: boolean; status: 'CURRENT' | 'REPLACED'; report_number: string; version: number; current_version: number | null; laboratory: string | null; issued_at: string | null }
 export const verifyLabReportApi = async (token: string): Promise<ReportCheck> => (await apiClient.get(`/lab-orders/verify/${encodeURIComponent(token)}`)).data;
+export interface PrescriptionCheck { valid: boolean; status: 'ISSUED' | 'NOT_ISSUED'; prescription_number: string; issued_at: string | null; doctor_name: string | null; doctor_registration_number: string | null; clinic_name: string | null }
+export const verifyPrescriptionApi = async (number: string, code: string): Promise<PrescriptionCheck> => (await apiClient.get(`/prescriptions/verify/${encodeURIComponent(number)}/${encodeURIComponent(code)}`)).data;
+
+export interface SharedLabReportCheck {
+  valid: boolean;
+  lab_name: string;
+  report_number: string;
+  issued_at: string;
+  patient_name?: string;
+}
+
+export const fetchSharedLabReportApi = async (token: string): Promise<SharedLabReportCheck> =>
+  (await apiClient.get(`/lab-results/shared/${encodeURIComponent(token)}`)).data;
+
+export const openSharedLabReportPdf = async (token: string) => {
+  const r = await apiClient.get(`/lab-results/shared/${encodeURIComponent(token)}/pdf`, { responseType: 'blob' });
+  const blob = new Blob([r.data], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+};
 
 // ── Home Care H1: doctor home visits ──
 export interface HomeVisitDoctor { doctor_partner_id: string; name: string; qualification: string | null; specialization: string | null; experience: number | null; fee: number; visit_minutes: number; pincodes: string[]; slots?: string[] }

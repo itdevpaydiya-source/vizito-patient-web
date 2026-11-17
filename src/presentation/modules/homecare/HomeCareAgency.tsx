@@ -39,6 +39,31 @@ const PAGE = 6;
 
 const CAT_LABEL: Record<HcCategory, string> = { NURSING: 'Nursing', PHYSIOTHERAPY: 'Physiotherapy', CAREGIVER: 'Caregivers' };
 
+export function getServiceImage(service: { category?: string; name?: string; kind?: string }): string {
+  const name = (service.name || '').toLowerCase();
+  const cat = (service.category || '').toUpperCase();
+
+  if (name.includes('inject') || name.includes('iv') || name.includes('blood') || name.includes('sample') || name.includes('infusion')) {
+    return '/images/healthcare/banners/home-collection.webp';
+  }
+  if (name.includes('wound') || name.includes('dressing') || name.includes('bandage') || name.includes('suture') || name.includes('first aid')) {
+    return '/images/healthcare/pharmacy/first-aid.webp';
+  }
+  if (cat === 'PHYSIOTHERAPY' || name.includes('physio') || name.includes('rehab') || name.includes('therapy') || name.includes('exercise')) {
+    return '/images/healthcare/departments/orthopedics.webp';
+  }
+  if (cat === 'CAREGIVER' || name.includes('elder') || name.includes('attendant') || name.includes('caregiver') || name.includes('companion')) {
+    return '/images/healthcare/placeholders/caregiver-female.webp';
+  }
+  if (cat === 'DOCTOR' || name.includes('doctor') || name.includes('physician') || name.includes('consult')) {
+    return '/images/healthcare/services/doctor.webp';
+  }
+  if (name.includes('device') || name.includes('monitor') || name.includes('equipment') || name.includes('oxygen')) {
+    return '/images/healthcare/pharmacy/devices.webp';
+  }
+  return '/images/healthcare/services/homecare.webp';
+}
+
 export default function HomeCareAgencyBook({ category, onBooked, referral, prefill, onCategory }: { category: HcCategory; onBooked: (o: HcOrder) => void; referral?: HcReferral | null; prefill?: HcOrder | null; onCategory?: (c: HcCategory) => void }) {
   const [urlParams, setUrlParams] = useSearchParams();
   const area=useSearchArea(),[providerPins,setProviderPins]=useState<ProviderItem[]>([]);
@@ -53,6 +78,9 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   }, [wantAgency]);
   const setUrl = (k: string, v: string) => setUrlParams((p) => { const n = new URLSearchParams(p); if (v) n.set(k, v); else n.delete(k); return n; }, { replace: true });
   const [pin, setPin] = useState(() => { try { return prefill?.pincode || localStorage.getItem('vizito_hc_pin') || ''; } catch { return prefill?.pincode || ''; } });
+  const [editingPin, setEditingPin] = useState(false);
+  const [tempPin, setTempPin] = useState(pin);
+  useEffect(() => { setTempPin(pin); }, [pin]);
   const [all, setAll] = useState<HcService[] | null>(null); // all care types at this PIN
   const list = useMemo(() => (all ? all.filter((s) => s.category === category) : null), [all, category]);
   const [err, setErr] = useState<string | null>(null);
@@ -106,21 +134,26 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
     }
   }, [prefill, list, pick]);
 
-  // First visit: use the pincode of the patient's saved address, so services show straight away.
+  // First visit: use the pincode of the search area or patient's saved address
   useEffect(() => {
-    if (pin) return;
+    if (area?.pincode && validatePinCode(area.pincode).ok) {
+      setPin(area.pincode);
+      return;
+    }
     getAddressesApi().then((a) => {
       const p = a.map((x) => String(x.pincode || '')).find((x) => /^[1-9]\d{5}$/.test(x));
       if (!p) return;
       setPin(p);
     }).catch(() => undefined);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [area?.pincode]); // eslint-disable-line react-hooks/exhaustive-deps
   const words = q.trim().toLowerCase();
   const matchWords = (x: HcService) => !words || `${x.name} ${x.agency.name} ${x.description || ''} ${x.includes || ''}`.toLowerCase().includes(words);
   const matchAgency = (x: HcService) => !wantAgency || String(x.agency.id) === String(wantAgency);
   const rows = useMemo(() => (list || [])
     .filter((x) => (kind === 'ALL' || x.kind === kind) && matchWords(x) && matchAgency(x))
     .sort((a,b)=> (area&&sort==='NEAREST'?(distance(a)-distance(b))||0:0) || (sort === 'RATING' ? (b.agency.rating || 0) - (a.agency.rating || 0) : 0) || a.price - b.price), [list, kind, q, sort, wantAgency,area,providerPins]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visitCount = useMemo(() => (list || []).filter((x) => x.kind === 'VISIT' && matchWords(x) && matchAgency(x)).length, [list, words, wantAgency]);
+  const shiftCount = useMemo(() => (list || []).filter((x) => x.kind === 'SHIFT' && matchWords(x) && matchAgency(x)).length, [list, words, wantAgency]);
   // The same search in the other care types at this PIN ("Physiotherapy (2)").
   const elsewhere = (['NURSING', 'PHYSIOTHERAPY', 'CAREGIVER'] as HcCategory[]).filter((c) => c !== category)
     .map((c) => ({ c, n: (all || []).filter((x) => x.category === c && matchWords(x) && matchAgency(x)).length })).filter((e) => e.n > 0);
@@ -138,127 +171,400 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   return (
     <div className="space-y-4">
       {referral && <ReferralNote r={referral} />}
-      <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <section className={`${card} space-y-4 lg:sticky lg:top-4`} aria-label="Search and filter home care">
-        <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-teal-800">{intro.title}</p>
-          <h2 className="text-lg font-black text-slate-900 mt-0.5">Find care near you</h2>
-          <p className="text-sm text-slate-600 mt-1">{intro.text}</p>
-        </div>
-        <div className="grid gap-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-bold text-slate-700">Where do you need care?</span>
-            <span className="relative block"><MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input aria-label="Your pincode" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} onBlur={() => { if (pin) { const p = validatePinCode(pin); if (!p.ok) setErr(p.message); } }} placeholder="6-digit PIN code" className={`${field} pl-9`} /></span>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-bold text-slate-700">Looking for a specific agency or service?</span>
-            <span className="relative block"><Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" /><input aria-label="Search services or agencies" value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} placeholder="Search by agency or service name" className={`${field} pl-9`} />{q && <button type="button" aria-label="Clear search" onClick={() => { setQ(''); setShown(PAGE); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}</span>
-          </label>
-          <button type="button" onClick={() => find(undefined, true)} className="px-5 py-2.5 rounded-xl bg-[#B45F28] hover:bg-[#984A1D] text-white text-sm font-bold shadow-sm motion-safe:transition-colors motion-reduce:transition-none">Apply filters</button>
-        </div>
-        <p className="text-xs text-slate-500">We’ll show services from agencies that cover this PIN code.</p>
-        {err && <p role="alert" className="text-sm font-semibold text-rose-700">{err}</p>}
-      </section>
-      {list && (
-        <section aria-label="Services near you" className={`${card} min-w-0 space-y-3`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-black text-slate-900">{CAT_LABEL[category]} near {pin}</h3>
-              <p className="text-xs text-slate-500 mt-0.5" aria-live="polite">{rows.length} {rows.length === 1 ? 'option' : 'options'}{chips.length ? ' matching your filters' : ''} · live agencies that serve this PIN code</p>
+      {/* Modern Header Banner with Service Context & Active PIN Badge (Glassmorphic) */}
+      <section className="relative overflow-hidden rounded-2xl border border-white/80 bg-gradient-to-r from-amber-50/85 via-white/75 to-slate-50/60 backdrop-blur-xl p-4 sm:p-5 shadow-[0_8px_30px_rgb(0,0,0,0.03)] ring-1 ring-white/60" aria-label="Home care service header">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                {CAT_LABEL[category]} at Home
+              </span>
+              <span className="text-xs text-slate-500 font-medium" aria-live="polite">
+                {rows.length} {rows.length === 1 ? 'service available' : 'services available'}
+              </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              {(['ALL', 'VISIT', 'SHIFT'] as const).map((k) => <button key={k} aria-pressed={kind === k} onClick={() => { setKind(k); setShown(PAGE); }} className={`px-3 py-1.5 rounded-full border font-bold ${kind === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>{k === 'ALL' ? 'All care' : k === 'VISIT' ? 'Visits' : '12 / 24-hour care'}</button>)}
-              <label className="sr-only" htmlFor="home-care-sort">Sort results</label><ThemedSelect id="home-care-sort" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as any)} className="rounded-lg border border-slate-200 px-2 py-1.5 font-bold text-slate-700"><option value="NEAREST" disabled={!area}>Nearest</option><option value="PRICE">Lowest price</option><option value="RATING">Best rated</option></ThemedSelect>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+              {intro.title}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
+              {intro.text}
+            </p>
+          </div>
+
+          {/* Quick PIN Code Coverage Badge with Inline Editor */}
+          <div className="shrink-0 self-start sm:self-center">
+            {editingPin ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const p = validatePinCode(tempPin);
+                  if (!p.ok) {
+                    setErr(p.message);
+                    return;
+                  }
+                  setPin(tempPin);
+                  setEditingPin(false);
+                  find(undefined, true);
+                }}
+                className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-amber-300"
+              >
+                <div className="relative">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    aria-label="Your pincode"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={tempPin}
+                    onChange={(e) => setTempPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="6-digit PIN"
+                    className="w-28 pl-7 pr-2 py-1 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-800 outline-none focus:border-amber-600"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-2.5 py-1 rounded-lg bg-[#B45F28] hover:bg-[#984A1D] text-white text-xs font-bold transition"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempPin(pin);
+                    setEditingPin(false);
+                  }}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                  aria-label="Cancel editing pincode"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingPin(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white hover:border-slate-300 text-slate-700 text-xs font-semibold transition group shadow-xs"
+                title="Change PIN code to see agencies covering your area"
+              >
+                <MapPin className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+                <span>Covering PIN: <strong className="font-bold text-slate-900">{pin || 'Set PIN'}</strong></span>
+                <span className="text-[11px] text-amber-700 font-bold underline underline-offset-2 ml-1">Change</span>
+              </button>
+            )}
+          </div>
+        </div>
+        {err && <p role="alert" className="mt-2 text-xs font-semibold text-rose-700">{err}</p>}
+      </section>
+
+      {/* Modern Horizontal Search & Filter Toolbar (Glassmorphic) */}
+      <section className="rounded-2xl border border-white/80 bg-white/75 backdrop-blur-xl p-3 sm:p-4 shadow-[0_8px_30px_rgb(0,0,0,0.03)] ring-1 ring-white/60 space-y-3" aria-label="Search and filter options">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Live Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              aria-label="Search services or agencies"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setShown(PAGE);
+              }}
+              placeholder={`Search ${CAT_LABEL[category].toLowerCase()} (e.g. ${category === 'NURSING' ? 'IV, injection, dressing' : category === 'PHYSIOTHERAPY' ? 'stroke, back pain, rehab' : 'bathing, feeding, attendant'})...`}
+              className="w-full rounded-xl border border-slate-200/80 bg-white/80 backdrop-blur-sm pl-9 pr-8 py-2 text-xs sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition shadow-inner"
+            />
+            {q && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQ('');
+                  setShown(PAGE);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Pills & Sort Dropdown */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-xl bg-slate-100/60 backdrop-blur-sm p-1 text-xs font-semibold text-slate-700 border border-slate-200/50">
+              {(['ALL', 'VISIT', 'SHIFT'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={kind === k}
+                  onClick={() => {
+                    setKind(k);
+                    setShown(PAGE);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    kind === k
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {k === 'ALL' ? `All (${(list || []).length})` : k === 'VISIT' ? `Visits (${visitCount})` : `12/24h Shifts (${shiftCount})`}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs">
+              <label htmlFor="home-care-sort" className="sr-only">Sort results</label>
+              <ThemedSelect
+                id="home-care-sort"
+                aria-label="Sort"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as any)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-amber-500"
+              >
+                <option value="NEAREST" disabled={!area}>Nearest</option>
+                <option value="PRICE">Lowest price</option>
+                <option value="RATING">Best rated</option>
+              </ThemedSelect>
             </div>
           </div>
-          {chips.length > 0 && (
-            <div role="group" className="flex flex-wrap items-center gap-2" aria-label="Active filters">
-              {chips.map((c) => <button key={c.label} type="button" onClick={c.clear} aria-label={`Remove filter ${c.label}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-200 text-xs font-bold text-teal-900">{c.label} <X className="w-3 h-3" /></button>)}
-              <button type="button" onClick={clearAll} className="text-xs font-bold text-slate-600 underline underline-offset-2">Clear all</button>
-            </div>
-          )}
+        </div>
+
+        {/* Active Filter Chips */}
+        {chips.length > 0 && (
+          <div role="group" className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100" aria-label="Active filters">
+            <span className="text-[11px] font-bold text-slate-500">Active filters:</span>
+            {chips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                onClick={c.clear}
+                aria-label={`Remove filter ${c.label}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900 hover:bg-amber-100 transition"
+              >
+                {c.label} <X className="w-3 h-3" />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-xs font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 ml-1"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Services Results List */}
+      {list && (
+        <section aria-label="Services near you" className="space-y-3.5">
           {!rows.length ? (
-            <div role="status" aria-label="No results" className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center space-y-2">
-              {wantAgency && (coverage === 'gone' || agencyServesPin === false) ? (<>
-                <p className="text-sm font-bold text-slate-800">{coverage === 'gone' ? 'This agency isn’t available on Vizito right now' : `${agencyName} doesn’t serve PIN code ${pin}`}</p>
-                <p className="text-xs text-slate-500">{coverage !== 'gone' && coverage && coverage.pincodes.length ? `It covers ${coverage.pincodes.slice(0, 6).join(', ')}${coverage.pincodes.length > 6 ? '…' : ''}. If the care is for one of those addresses, change the PIN code above.` : 'Agencies serving your area are shown when you remove it.'}</p>
-                <button type="button" onClick={() => setUrl('agency', '')} className="text-xs font-bold text-teal-800 underline underline-offset-2">Show agencies that serve {pin}</button>
-              </>) : elsewhere.length > 0 ? (<>
-                <p className="text-sm font-bold text-slate-800">{wantAgency ? `${agencyName} doesn’t offer ${CAT_LABEL[category].toLowerCase()} at ${pin}` : words ? `No ${CAT_LABEL[category].toLowerCase()} matches “${q.trim()}” here` : `No ${CAT_LABEL[category].toLowerCase()} at ${pin} yet`}</p>
-                <p className="text-xs text-slate-500">Found in other care types:</p>
-                <div className="flex flex-wrap justify-center gap-2">{elsewhere.map((e) => <button key={e.c} type="button" onClick={() => onCategory?.(e.c)} className="px-3 py-1.5 rounded-full border border-teal-700 text-teal-800 text-xs font-bold">{CAT_LABEL[e.c]} ({e.n})</button>)}</div>
-              </>) : (all || []).length === 0 ? (<>
-                <p className="text-sm font-bold text-slate-800">No home care agencies serve PIN code {pin} yet</p>
-                <p className="text-xs text-slate-500">Check the PIN code of the care address, or try a nearby one.</p>
-              </>) : (<>
-                <p className="text-sm font-bold text-slate-800">{words ? `No agency or service matches “${q.trim()}” at ${pin}` : 'No options match these filters'}</p>
-                <p className="text-xs text-slate-500">Check the spelling, or clear the filters to see everything that serves {pin}.</p>
-                <button type="button" onClick={clearAll} className="text-xs font-bold text-teal-800 underline underline-offset-2">Clear filters</button>
-              </>)}
+            <div role="status" aria-label="No results" className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center space-y-3">
+              {wantAgency && (coverage === 'gone' || agencyServesPin === false) ? (
+                <>
+                  <p className="text-base font-bold text-slate-800">
+                    {coverage === 'gone' ? 'This agency isn’t available on Vizito right now' : `${agencyName} doesn’t serve PIN code ${pin}`}
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    {coverage !== 'gone' && coverage && coverage.pincodes.length
+                      ? `It covers ${coverage.pincodes.slice(0, 6).join(', ')}${coverage.pincodes.length > 6 ? '…' : ''}. If the care is for one of those addresses, change the PIN code above.`
+                      : 'Agencies serving your area are shown when you remove it.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setUrl('agency', '')}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 underline underline-offset-2 hover:text-amber-900"
+                  >
+                    Show all agencies that serve {pin}
+                  </button>
+                </>
+              ) : elsewhere.length > 0 ? (
+                <>
+                  <p className="text-base font-bold text-slate-800">
+                    {wantAgency
+                      ? `${agencyName} doesn’t offer ${CAT_LABEL[category].toLowerCase()} at ${pin}`
+                      : words
+                      ? `No ${CAT_LABEL[category].toLowerCase()} matches “${q.trim()}” at ${pin}`
+                      : `No ${CAT_LABEL[category].toLowerCase()} at ${pin} yet`}
+                  </p>
+                  <p className="text-xs text-slate-500">Found in other care categories near you:</p>
+                  <div className="flex flex-wrap justify-center gap-2 pt-1">
+                    {elsewhere.map((e) => (
+                      <button
+                        key={e.c}
+                        type="button"
+                        onClick={() => onCategory?.(e.c)}
+                        className="px-3.5 py-1.5 rounded-full border border-amber-600 bg-white text-amber-800 text-xs font-bold hover:bg-amber-50 transition shadow-xs"
+                      >
+                        {CAT_LABEL[e.c]} ({e.n})
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (all || []).length === 0 ? (
+                <>
+                  <p className="text-base font-bold text-slate-800">No home care agencies serve PIN code {pin} yet</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Check the PIN code of your care address or try a nearby PIN code.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-base font-bold text-slate-800">
+                    {words ? `No agency or service matches “${q.trim()}” at ${pin}` : 'No options match these filters'}
+                  </p>
+                  <p className="text-xs text-slate-500">Try adjusting your search terms or clearing the filters.</p>
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-800 underline underline-offset-2 hover:text-amber-900"
+                  >
+                    Clear all filters
+                  </button>
+                </>
+              )}
             </div>
           ) : (
-            <ul className="space-y-3" aria-label="Services">
+            <ul className="space-y-3.5" aria-label="Services">
               {rows.slice(0, shown).map((x) => (
-                <li key={x.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:p-4">
-                  <img src={x.category === 'PHYSIOTHERAPY' ? '/images/healthcare/services/physiotherapy.svg' : '/images/healthcare/services/homecare.webp'} alt="" aria-hidden="true" className="h-28 w-full shrink-0 rounded-xl bg-slate-50 object-cover sm:h-28 sm:w-28" />
+                <li
+                  key={x.id}
+                  className="group relative flex flex-col md:flex-row items-stretch md:items-start gap-4 sm:gap-5 rounded-2xl border border-white/80 bg-white/80 backdrop-blur-xl p-4 sm:p-5 shadow-[0_8px_30px_rgb(0,0,0,0.03)] ring-1 ring-white/60 hover:bg-white/95 hover:border-amber-300/80 hover:shadow-xl hover:shadow-amber-950/5 transition-all duration-300 hover:-translate-y-0.5"
+                >
+                  {/* Distinct Service Thumbnail */}
+                  <div className="relative w-full md:w-36 h-36 md:h-32 shrink-0 overflow-hidden rounded-xl bg-slate-100 border border-white/60 shadow-xs">
+                    <img
+                      src={getServiceImage(x)}
+                      alt={x.name}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <span className="absolute bottom-2 left-2 px-2.5 py-0.5 rounded-full bg-slate-900/75 backdrop-blur-md text-[10px] font-bold text-white uppercase tracking-wider border border-white/20 shadow-xs">
+                      {x.kind === 'VISIT' ? 'Visit' : `${x.shift_hours}h Shift`}
+                    </span>
+                  </div>
+
+                  {/* Body Content */}
                   <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-black text-slate-900 flex items-center gap-2">{x.name}<FavoriteButton partnerId={String(x.agency.id)} name={x.agency.name} className="w-7 h-7" /></p>
-                      <p className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {x.agency.vizito_verified ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          Vizito verified
+                        </span>
+                      ) : null}
+                      {((x.agency as any).mode === 'INDIVIDUAL' || (x.agency as any).homecare_mode === 'INDIVIDUAL') ? (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-semibold">Individual professional</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold">Home care agency</span>
+                      )}
+                      <span className="text-xs font-semibold text-slate-700">
                         {x.agency.name}
-                        {x.agency.registration_number ? ` · Reg. ${x.agency.registration_number}` : ''}
-                        {((x.agency as any).mode === 'INDIVIDUAL' || (x.agency as any).homecare_mode === 'INDIVIDUAL') ? (
-                          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px]">Individual professional</span>
-                        ) : (
-                          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-[10px]">Home care agency</span>
+                      </span>
+                      {x.agency.registration_number && (
+                        <span className="text-[11px] text-slate-400">
+                          · Reg. {x.agency.registration_number}
+                        </span>
+                      )}
+                      {x.agency.rating ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
+                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          {x.agency.rating} <span className="text-slate-400 font-normal text-[11px]">({x.agency.ratings})</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-medium">New on Vizito</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
+                        {x.name}
+                      </h3>
+                      <FavoriteButton partnerId={String(x.agency.id)} name={x.agency.name} className="w-7 h-7" />
+                    </div>
+                  {/* Description */}
+                    {x.description && (
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {x.description}
+                      </p>
+                    )}
+
+                    {/* Specifications */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/70 backdrop-blur-sm text-slate-700 border border-slate-200/60 font-medium shadow-xs">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {x.kind === 'VISIT' ? `${x.duration_minutes} min visit · ${x.agency.hours}` : x.shift_hours === 12 ? '8 AM–8 PM or 8 PM–8 AM' : 'Round the clock, live-in'}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/70 backdrop-blur-sm text-slate-700 border border-slate-200/60 font-medium shadow-xs">
+                        <Users className="w-3.5 h-3.5 text-slate-400" />
+                        {providerLabel(x as any)}{x.avg_experience ? ` (avg ${x.avg_experience} yrs exp)` : ''}
+                      </span>
+                    </div>
+
+                    {/* Collapsible What's Included */}
+                    {x.includes && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setOpen(open === x.id ? null : x.id)}
+                          className="text-xs font-semibold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
+                        >
+                          <Info className="w-3.5 h-3.5 text-amber-700" />
+                          {open === x.id ? 'Hide details' : "What’s included in this visit"}
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open === x.id ? 'rotate-180' : ''}`} />
+                        </button>
+                        {open === x.id && (
+                          <div className="mt-2 rounded-xl bg-amber-50/70 backdrop-blur-sm border border-amber-200/80 p-3 text-xs text-slate-700 animate-in fade-in shadow-xs">
+                            <strong className="text-slate-900 font-bold">Includes: </strong>{x.includes}
+                          </div>
                         )}
-                        {x.agency.vizito_verified ? <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800">Vizito verified</span> : null}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Pricing & CTAs */}
+                  <div className="w-full md:w-44 shrink-0 flex flex-row md:flex-col items-center md:items-end justify-between self-stretch pt-3 md:pt-0 border-t md:border-t-0 border-slate-100 gap-3">
+                    <div className="md:text-right">
+                      <p className="text-2xl font-black text-slate-900 tabular-nums tracking-tight">
+                        {rupees(x.price)}
+                      </p>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {x.kind === 'VISIT' ? 'per visit' : `per ${x.shift_hours}-hr shift`}
                       </p>
                     </div>
-                    <div className="text-right shrink-0"><p className="text-lg font-black text-slate-900 tabular-nums">{rupees(x.price)}</p><p className="text-[11px] text-slate-500">{x.kind === 'VISIT' ? 'per visit' : `per ${x.shift_hours}-hour shift`}</p></div>
-                  </div>
-                  {x.description && <p className="text-xs text-slate-600">{x.description}</p>}
-                  <p className="text-[11px] text-slate-600 flex flex-wrap gap-x-3 gap-y-1">
-                    <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{x.kind === 'VISIT' ? `${x.duration_minutes} min visit · ${x.agency.hours}` : x.shift_hours === 12 ? '8 AM–8 PM or 8 PM–8 AM' : 'Round the clock, live-in'}</span>
-                    <span className="inline-flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{providerLabel(x as any)}</span>
-                      {x.avg_experience ? ` · avg ${x.avg_experience} yrs` : ''}
-                    </span>
-                    {x.agency.rating ? <span className="inline-flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-500" />{x.agency.rating} ({x.agency.ratings})</span> : <span className="text-slate-400">New on Vizito</span>}
-                  </p>
-                  {open === x.id && x.includes && <p className="text-xs text-slate-700 bg-slate-50 rounded-lg px-3 py-2"><b>Includes: </b>{x.includes}</p>}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    {x.includes ? <button type="button" onClick={() => setOpen(open === x.id ? null : x.id)} className="text-xs font-bold text-slate-600 inline-flex items-center gap-0.5">What’s included <ChevronDown className={`w-3.5 h-3.5 ${open === x.id ? 'rotate-180' : ''}`} /></button> : <span />}
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEnquireService(x)}
-                        data-testid="request-quote-btn"
-                        className="px-3 py-2 rounded-xl border border-teal-700 text-teal-800 text-xs font-bold hover:bg-teal-50 transition"
-                      >
-                        Ask about this service
-                      </button>
+
+                    <div className="flex flex-row md:flex-col items-center gap-2 w-auto md:w-full">
                       <button
                         type="button"
                         onClick={() => setPick(x)}
                         data-testid="book-service-btn"
-                        className="px-4 py-2 rounded-xl bg-[#B45F28] text-white text-xs font-bold hover:bg-[#984A1D] transition shadow-sm"
+                        className="px-4 py-2.5 rounded-xl bg-[#B45F28] hover:bg-[#984A1D] text-white text-xs sm:text-sm font-bold shadow-sm hover:shadow active:scale-[0.98] transition-all text-center w-full whitespace-nowrap"
                       >
                         Request this visit
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setEnquireService(x)}
+                        data-testid="request-quote-btn"
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-amber-700 hover:bg-amber-50 text-slate-700 hover:text-amber-800 text-xs font-semibold transition text-center w-full whitespace-nowrap"
+                      >
+                        Ask about this service
+                      </button>
                     </div>
                   </div>
-                </div></li>
+                </li>
               ))}
             </ul>
           )}
-          {rows.length > shown && <button onClick={() => setShown(shown + PAGE)} className="w-full py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">Show {Math.min(PAGE, rows.length - shown)} more ({rows.length - shown} left)</button>}
+          {rows.length > shown && (
+            <button
+              onClick={() => setShown(shown + PAGE)}
+              className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition shadow-xs"
+            >
+              Show {Math.min(PAGE, rows.length - shown)} more ({rows.length - shown} left)
+            </button>
+          )}
         </section>
       )}
-      </div>
 
       {enquirySuccess && (
         <div className="fixed bottom-6 right-6 left-6 sm:left-auto z-50 max-w-sm bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
@@ -447,7 +753,24 @@ function BookPanel({ s, pincode, examples, onBack, onBooked, referral, prefill }
         <input aria-label="Area" value={addr.area} onChange={(e) => setAddr({ ...addr, area: e.target.value.slice(0, 60) })} placeholder="Area / locality" className={field} />
         <input aria-label="Landmark" value={addr.landmark} onChange={(e) => setAddr({ ...addr, landmark: e.target.value.slice(0, 60) })} placeholder="Landmark (helps them find you)" className={field} />
         <input id="field-addr-city" aria-label="City" value={addr.city} onChange={(e) => setAddr({ ...addr, city: e.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 40) })} placeholder="City" className={`${field} transition-all duration-300 ${highlightField === 'city' ? 'ring-4 ring-amber-400 border-amber-500' : ''}`} />
-        <HomePinField value={homePin} onChange={setHomePin} who="care professional" />
+        <HomePinField
+          value={homePin}
+          onChange={setHomePin}
+          who="care professional"
+          onAddressResolved={(resolved) => {
+            setAddr((cur) => ({
+              ...cur,
+              line: resolved.line || cur.line,
+              area: resolved.area || cur.area,
+              city: resolved.city || cur.city,
+              landmark: resolved.landmark || cur.landmark,
+            }));
+            if (resolved.pin !== undefined) {
+              setHomePin(resolved.pin);
+            }
+          }}
+          currentAddress={addr}
+        />
       </fieldset>
 
       <label className="block text-xs font-black text-slate-700">What care is needed?

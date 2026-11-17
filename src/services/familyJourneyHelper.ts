@@ -10,7 +10,7 @@ export interface FamilyCard {
  blood_group:string|null;recent_bookings_count:number;upcoming_bookings_count:number;recent_window_days:number;
 }
 export interface FamilyDetail extends FamilyCard {health:HealthProfile|null;bookings:FamilyBookings}
-export interface FamilyInput {relationship:FamilyRelationship;full_name?:string;first_name?:string;last_name?:string;date_of_birth?:string;gender?:string;phone?:string;health?:HealthProfileInput}
+export interface FamilyInput {relationship:FamilyRelationship;full_name?:string;first_name?:string;last_name?:string;date_of_birth?:string;gender?:string;phone?:string;profile_picture?:string;health?:HealthProfileInput}
 export interface RemovePreview {can_remove:boolean;reason:string|null;upcoming_bookings:FamilyBooking[]}
 const base=(id:number)=>`/users/${id}/family-members`;
 // A watch-mode reload is temporary. Retry unavailable services five times, a minute apart.

@@ -10,10 +10,14 @@ export interface TimelinePage{items:Array<(RxRecord&{record_type:'prescription'}
 export interface Vital{recorded_at:string;prescription_id:string;height_cm:number|null;weight_kg:number|null;bmi:number|null;temperature:number|null;pulse:number|null;systolic_bp:number|null;diastolic_bp:number|null;respiratory_rate:number|null;spo2:number|null;blood_sugar:number|null}
 export interface RecordsSummary{subject:Subject;latest_report:{order_id:string;order_number:string;lab_name:string|null;released_at:string}|null;active_medicines:{name:string;strength:string|null;frequency:string|null;start_date:string;end_date:string;prescription_id:string}[];next_follow_up:{date:string;doctor_name:string|null;prescription_id:string}|null;allergies:{no_known_allergies:boolean;items:{allergen:string;severity:string|null;reaction:string|null}[];source:string};vitals:Vital[]}
 export interface ShareLink{id:string;expires_at:string;revoked_at:string|null;view_count:number;last_viewed_at:string|null;created_at:string;active:boolean}
+export interface VisitClaim{patient_record_id:string;patient_name:string|null;clinic_name:string|null;doctor_name:string|null;visit_count:number;latest_visit_date:string|null}
 export interface NewShare{id:string;url:string;expires_at:string}
 export interface PublicRecord{record_type:RecordType;expires_at:string;has_file:boolean;document?:DocumentRecord;prescription?:{prescription_number:string;date:string;diagnosis_summary:string|null;general_advice:string|null;followup_date:string|null;doctor_name:string|null;patient_name:string|null;medicines:{name:string;strength:string|null;frequency:string|null;duration_days:number|null;instructions:string|null}[]};lab_report?:{order_number:string;lab_name:string|null;patient_name:string|null;released_at:string;results:{component_name?:string|null;test_name:string;value:string;unit:string|null;flag:string|null;reference_range:string|null}[]}}
 const publicApi=axios.create({baseURL:import.meta.env.VITE_API_URL||'http://localhost:3000',timeout:30000,headers:{Accept:'application/json'}});
 export const recordsApi={
+ visitClaims:async():Promise<{phone_verified:boolean;claims:VisitClaim[]}> =>(await api.get('/patient-records/visit-claims')).data,
+ claimVisits:async(patient_record_id:string):Promise<{success:boolean;linked_visits:number}> =>(await api.post('/patient-records/visit-claims/claim',{patient_record_id,confirm_name:true})).data,
+ dismissVisits:async(patient_record_id:string)=>(await api.post('/patient-records/visit-claims/dismiss',{patient_record_id})).data,
  subjects:async():Promise<Subject[]> =>(await api.get('/patient-records/subjects')).data,
  list:async(subject:string):Promise<RecordList> =>(await api.get('/patient-records',{params:{subject}})).data,
  timeline:async(params:{subject:string;record_type?:string;q?:string;date_from?:string;date_to?:string;page:number;page_size:10|20}):Promise<TimelinePage> =>(await api.get('/patient-records/timeline',{params})).data,
@@ -29,6 +33,7 @@ export const recordsApi={
 };
 export const recordError=(e:unknown)=>{const x=e as {response?:{data?:{message?:string|string[]}};message?:string};const m=x.response?.data?.message||x.message||'Please try again.';return Array.isArray(m)?m.join(' '):m;};
 export const recordStamp=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v)?recordDate(v):new Date(v).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
-export const recordDate=(v:string)=>new Date(v.slice(0,10)+'T12:00:00Z').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric'});
+export // A date-only value is a calendar day; a full timestamp is an instant and must be read in IST (00:24 IST is still the previous day in UTC).
+const recordDate=(v:string)=>new Date(/^\d{4}-\d{2}-\d{2}$/.test(v)?v+'T12:00:00Z':v).toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',year:'numeric'});
 export function openRecordBlob(blob:Blob,name?:string,download=false){const url=URL.createObjectURL(blob);if(download){const a=document.createElement('a');a.href=url;a.download=name||'document';a.click();}else window.open(url,'_blank','noopener');window.setTimeout(()=>URL.revokeObjectURL(url),60000);}
 export const docTypes={PRESCRIPTION:'Prescription',LAB_REPORT:'Lab report',XRAY:'X-ray',SCAN_REPORT:'Scan report (CT/MRI/USG)',DISCHARGE_SUMMARY:'Discharge summary',VACCINATION:'Vaccination record',OTHER:'Other'};

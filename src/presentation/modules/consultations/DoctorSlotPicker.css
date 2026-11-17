@@ -4,3 +4,16 @@
 @media(max-width:600px){.ds-summary,.ds-dates-panel,.ds-times-panel{padding:16px}.ds-summary{gap:15px}.ds-identity{grid-column:1/-1}.ds-identity>img,.ds-identity>div:first-child:not(:last-child){width:58px;height:65px}.ds-place{border:0;padding:0}.ds-place p{font-size:11px}.ds-price{border-left:1px solid #e5edf5;padding-left:12px}.ds-price strong{font-size:22px}.ds-change{grid-column:1/-1;justify-self:end;font-size:12px}.ds-next-row{flex-wrap:wrap;gap:10px;margin-bottom:18px}.ds-next{width:100%;flex-basis:100%;padding:12px;font-size:12px}.ds-calendar-toggle{margin-left:auto;padding:8px 12px;font-size:12px}.ds-groups{grid-template-columns:1fr;gap:18px}.ds-group{padding:0;background:none}.ds-slots{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.ds-slots button{font-size:10px;padding:10px 2px}.ds-times-panel>header h2{font-size:15px}.ds-times-panel>header>span{font-size:11px}.ds-state{padding:20px 10px}.ds-state button{font-size:12px}.dj-book:has(.ds-picker) .dj-book-actions{flex-wrap:wrap;padding:12px}.dj-book-actions .ds-selected{width:100%;font-size:12px}.dj-book:has(.ds-picker) .dj-book-actions>button{flex:1}.ds-ist{font-size:11px}.ds-date-strip>button{flex-basis:68px}.ds-calendar-toggle svg{width:16px}}
 
 .dj-book:has(.ds-picker)>p{display:none}.dj-book:has(.ds-picker)>.dj-stepper{background:transparent;border:0;margin:16px 0;padding:12px}.dj-book:has(.ds-picker)>h1{font-size:26px;margin-top:15px}.dj-book:has(.ds-picker) .ds-identity>div:last-child{width:auto;height:auto;border-radius:0}.ds-date-strip{scroll-padding-inline:3px}@media(max-width:600px){.ds-identity>.media-image{width:58px;height:65px}.dj-book:has(.ds-picker)>h1{font-size:23px}.ds-next{font-size:11px;padding:12px 9px;gap:7px}}
+
+/* TC-66: bookable days must stand out at a glance (bigger text, green tint + dot); days off recede. */
+.ds-date-strip>button{min-height:96px;gap:6px;padding:12px 6px}
+.ds-date-strip small{font-size:12px}
+.ds-date-strip strong{font-size:14px;color:#0f2a44}
+.ds-date-strip span{font-size:12px;font-weight:600}
+.ds-date-strip>button.available,.ds-date-strip>button.few{background:#f1fbf7;border-color:#9fdcc6;position:relative}
+.ds-date-strip>button.available::after,.ds-date-strip>button.few::after{content:"";position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;background:#16a37a}
+.ds-date-strip>button.few::after{background:#d98a00}
+.ds-date-strip>button.unavailable{opacity:.6;border-style:dashed}
+.ds-date-strip>button.unavailable strong{color:#6881a3;font-weight:500}
+.ds-date-strip>button:not(:disabled):hover{border-color:#16a37a}
+@media(max-width:600px){.ds-date-strip>button{flex-basis:72px;min-height:92px}}

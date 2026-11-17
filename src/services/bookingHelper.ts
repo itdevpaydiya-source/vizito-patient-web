@@ -231,6 +231,12 @@ export const getOfferedModesApi = async (doctorPartnerId: string, date: string):
   return Array.isArray(res?.data?.hours) ? res.data.hours : [];
 };
 
+/** Visit types the doctor offers over the next 30 days (IN_PERSON / VIDEO / HOME_VISIT), before a date is chosen. */
+export const getUpcomingModesApi = async (doctorPartnerId: string): Promise<string[]> => {
+  const res = await apiClient.get('/doctor/availability/offered-modes', { params: { doctor: doctorPartnerId } });
+  return Array.isArray(res?.data?.modes) ? res.data.modes : [];
+};
+
 export const getProviderSlotsWithPauseApi = async (
   doctorPartnerId: string, date: string, facilityId?: number, hospitalPartnerId?: string, consultationType?: string,
 ): Promise<{ slots: AvailableSlot[]; paused: (import('./types').ProviderPause & { by: 'doctor' | 'hospital' }) | null }> => {

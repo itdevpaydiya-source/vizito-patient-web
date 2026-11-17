@@ -19,11 +19,16 @@ export default function ProfilePhoto({ name, current, onSaved }: { name: string;
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  const choose = (f: File | undefined) => {
+  const choose = async (picked: File | undefined) => {
     if (input.current) input.current.value = '';
-    if (!f) return;
-    if (!TYPES.includes(f.type)) { setError('Choose a JPG, PNG or WEBP photo.'); return; }
-    if (f.size > MAX_BYTES) { setError(`This photo is ${(f.size / 1024 / 1024).toFixed(1)} MB. Choose one under 2 MB.`); return; }
+    if (!picked) return;
+    if (!TYPES.includes(picked.type)) { setError('Choose a JPG, PNG or WEBP photo.'); return; }
+    // Phone photos are often 4–10 MB: shrink them here (max 1024 px, JPEG) instead of rejecting them.
+    let f: File = picked;
+    if (f.size > MAX_BYTES) {
+      try { f = await shrinkPhoto(picked); } catch { /* fall through to the size message */ }
+      if (f.size > MAX_BYTES) { setError(`This photo is ${(picked.size / 1024 / 1024).toFixed(1)} MB and couldn’t be made smaller. Choose another photo.`); return; }
+    }
     setError('');
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -59,7 +64,7 @@ export default function ProfilePhoto({ name, current, onSaved }: { name: string;
   };
 
   return (
-    <div className="ph-photo">
+    <div className="ph-photo" title="JPG, PNG or WEBP. Large photos are resized automatically.">
       <div className="ph-photo-avatar">
         <MediaImage kind="professional" name={name || 'Your profile'} src={photoUrl(current)} className="ph-avatar" />
         <button type="button" className="ph-photo-camera" aria-label={current ? 'Change profile photo' : 'Add profile photo'} onClick={() => input.current?.click()}>
@@ -68,6 +73,7 @@ export default function ProfilePhoto({ name, current, onSaved }: { name: string;
         <input ref={input} type="file" accept={TYPES.join(',')} hidden onChange={(e) => choose(e.target.files?.[0])} aria-hidden="true" tabIndex={-1} />
       </div>
       {current && <button type="button" className="ph-photo-remove" onClick={() => setConfirmRemove(true)}>Remove photo</button>}
+      <p className="ph-photo-hint">JPG, PNG or WEBP. Large photos are resized automatically.</p>
       {error && !file && <p className="ph-photo-error" role="alert">{error}</p>}
 
       {file && (
@@ -102,4 +108,18 @@ export default function ProfilePhoto({ name, current, onSaved }: { name: string;
       )}
     </div>
   );
+}
+
+/** Downscale a large photo to at most 1024 px on the long side, saved as JPEG (≈200–400 KB). */
+export async function shrinkPhoto(file: File): Promise<File> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob>((ok, bad) => c.toBlob((b) => (b ? ok(b) : bad(new Error('encode'))), 'image/jpeg', 0.85));
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } finally { URL.revokeObjectURL(url); }
 }
