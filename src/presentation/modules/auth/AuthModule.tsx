@@ -468,18 +468,30 @@ export default function AuthModule({
 
   // Errors show under their own field after the first tap on the step's button (NEW-01, TC-08).
   const [showRegErrors, setShowRegErrors] = useState(false);
-  type RegField = 'contact' | 'terms' | 'name' | 'phone' | 'dob' | 'password' | 'confirm';
+  const [regServerErr, setRegServerErr] = useState<{ phone?: string; email?: string }>({});
+  type RegField = 'contact' | 'terms' | 'name' | 'phone' | 'email' | 'dob' | 'password' | 'confirm';
   const regErrors: Partial<Record<RegField, string>> = {};
-  if (regChannel === 'mobile' && !/^[6-9]\d{9}$/.test(regContactClean))
+  // Mobile or email: at least one is required. The one entered here gets the only code;
+  // the other one is optional on step 3 (verify it later from Profile).
+  if (!regContactClean)
+    regErrors.contact = 'Enter a mobile number or an email address. At least one is required.';
+  else if (regChannel === 'mobile' && !/^[6-9]\d{9}$/.test(regContactClean))
     regErrors.contact = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.';
-  if (regChannel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(regContactClean))
+  else if (regChannel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(regContactClean))
     regErrors.contact = 'Enter a valid email address, like name@gmail.com.';
   if (!regAgreedTerms) regErrors.terms = 'Accept the Terms of Service and Privacy Policy to continue.';
   // Same rule as the server: letters, spaces, dots, apostrophes and hyphens only (TC-04, TC-06).
   if (regFullName.trim().length < 2) regErrors.name = 'Enter your full name.';
   else if (!/^[A-Za-z][A-Za-z .'-]*$/.test(regFullName.trim())) regErrors.name = 'Use letters only (spaces, dots and hyphens are fine).';
-  if (regChannel === 'email' && !/^[6-9]\d{9}$/.test(regMobileClean))
-    regErrors.phone = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9.';
+  // Optional second contact: checked only when something was typed.
+  const regEmailExtra = regChannel === 'mobile' ? regEmail.trim().toLowerCase() : '';
+  if (regChannel === 'email' && regMobileClean && !/^[6-9]\d{9}$/.test(regMobileClean))
+    regErrors.phone = 'Enter a valid 10-digit mobile number starting with 6, 7, 8 or 9, or leave it empty.';
+  if (regEmailExtra && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(regEmailExtra))
+    regErrors.email = 'Enter a valid email address, like name@gmail.com, or leave it empty.';
+  // A duplicate found by the server for the optional contact shows under that field.
+  if (regServerErr.phone && !regErrors.phone) regErrors.phone = regServerErr.phone;
+  if (regServerErr.email && !regErrors.email) regErrors.email = regServerErr.email;
   if (!regDob) regErrors.dob = 'Enter your date of birth.';
   else if (regDob > new Date().toISOString().slice(0, 10)) regErrors.dob = 'Date of birth cannot be in the future.';
   if (!regPassword) regErrors.password = 'Create a password.';
@@ -525,6 +537,7 @@ export default function AuthModule({
     setRegToken('');
     setDevOtpHint('');
     setRegOtpCode(['', '', '', '', '', '']);
+    setRegServerErr({});
     setErrorMessage('');
     setSuccessMessage('');
   };
@@ -557,13 +570,14 @@ export default function AuthModule({
   const handleRegisterVerifyAndSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    if (firstRegError(['name', 'phone', 'dob', 'password', 'confirm'])) return;
+    if (firstRegError(['name', 'phone', 'email', 'dob', 'password', 'confirm'])) return;
     setBusy(true);
+    const email = regChannel === 'email' ? regContactClean : regEmailExtra || undefined;
+    const phone = regMobileClean || undefined;
     try {
-      const email = regChannel === 'email' ? regContactClean : undefined;
       const regRes = await registerPatientApi({
         full_name: regFullName.trim(),
-        phone: regMobileClean,
+        phone,
         email,
         password: regPassword,
         registration_token: regToken,
@@ -571,19 +585,29 @@ export default function AuthModule({
         gender: regGender,
       });
       const token = regRes?.token || regRes?.access_token || regRes?.data?.access_token;
-      const loginRes = token ? null : await loginPatientApi({ phone: regMobileClean, password: regPassword });
+      const loginRes = token ? null : await loginPatientApi(phone ? { phone, password: regPassword } : { email, password: regPassword });
       // The dashboard shows "Welcome to Vizito, <name>! Your account is ready." once (TC-22).
       try { sessionStorage.setItem('vizito_welcome', '1'); } catch { /* storage blocked: skip the banner */ }
       onLoginSuccess({
         patient_id: regRes?.patient_id || regRes?.data?.patient_id || loginRes?.patient_id || 'new-patient',
         email: email || '',
-        mobile: regMobileClean,
+        mobile: phone || '',
         fullName: regFullName.trim(),
         token: token || loginRes?.token || loginRes?.access_token,
       });
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Registration failed. Please try again.';
-      if (/token|verification/i.test(String(msg))) {
+      const text = Array.isArray(msg) ? msg.join(' ') : String(msg);
+      if (/already exists/i.test(text) && /phone/i.test(text) && regChannel === 'email') {
+        // The optional mobile belongs to another patient account: say so under that field.
+        setRegServerErr({ phone: 'This mobile number already has a Vizito account. Log in with it, or leave this empty.' });
+        setShowRegErrors(true);
+        document.getElementById('reg-phone')?.focus();
+      } else if (/already exists/i.test(text) && /email/i.test(text) && regChannel === 'mobile') {
+        setRegServerErr({ email: 'This email already has a Vizito account. Log in with it, or leave this empty.' });
+        setShowRegErrors(true);
+        document.getElementById('reg-email')?.focus();
+      } else if (/token|verification/i.test(text)) {
         // The 15-minute proof ran out or was used: verify again from step 1.
         restartRegistration();
         setErrorMessage('Your verification expired. Please verify your mobile or email again.');
@@ -1380,7 +1404,7 @@ export default function AuthModule({
                         role="radio"
                         aria-checked={regChannel === ch}
                         className={`auth-v2-seg-btn ${regChannel === ch ? 'is-active' : ''}`}
-                        onClick={() => { setRegChannel(ch); setRegContact(''); setShowRegErrors(false); }}
+                        onClick={() => { setRegChannel(ch); setRegContact(''); setShowRegErrors(false); setRegServerErr({}); }}
                       >
                         {ch === 'mobile' ? <Smartphone size={16} /> : <Mail size={16} />}
                         {ch === 'mobile' ? 'Mobile' : 'Email'}
@@ -1400,6 +1424,8 @@ export default function AuthModule({
                       )}
                       <input
                         id="reg-contact"
+                        aria-describedby="reg-contact-hint"
+                        aria-invalid={Boolean(regErr('contact'))}
                         type={regChannel === 'mobile' ? 'tel' : 'email'}
                         inputMode={regChannel === 'mobile' ? 'numeric' : 'email'}
                         autoComplete={regChannel === 'mobile' ? 'tel-national' : 'email'}
@@ -1409,7 +1435,11 @@ export default function AuthModule({
                         className="auth-v2-input"
                       />
                     </div>
-                    {regErr('contact') && <p className="auth-v2-field-error" role="alert">{regErr('contact')}</p>}
+                    {regErr('contact') ? (
+                      <p className="auth-v2-field-error" role="alert">{regErr('contact')}</p>
+                    ) : (
+                      <p className="auth-v2-hint" id="reg-contact-hint">Phone or email — at least one is required. You can add the other later.</p>
+                    )}
                     {regChannel === 'email' && suggestEmailFix(regContact) && (
                       <p className="auth-v2-hint">
                         Did you mean{' '}
@@ -1515,12 +1545,32 @@ export default function AuthModule({
 
                   {regChannel === 'email' && (
                     <div className="auth-v2-field">
-                      <label className="auth-v2-label" htmlFor="reg-phone">Mobile number <span className="auth-v2-req">*</span></label>
+                      <label className="auth-v2-label" htmlFor="reg-phone">Mobile number <span className="auth-v2-optional">(optional)</span></label>
                       <div className={`auth-v2-input-wrap ${regErr('phone') ? 'has-error' : ''}`}>
                         <div className="auth-v2-phone-prefix"><span>🇮🇳 +91</span></div>
-                        <input id="reg-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={regPhone} onChange={(e) => setRegPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} className="auth-v2-input" />
+                        <input id="reg-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={regPhone} onChange={(e) => { setRegPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setRegServerErr({}); }} className="auth-v2-input" aria-invalid={Boolean(regErr('phone'))} />
                       </div>
-                      {regErr('phone') ? <p className="auth-v2-field-error" role="alert">{regErr('phone')}</p> : <p className="auth-v2-hint">So doctors, hospitals and delivery staff can reach you.</p>}
+                      {regErr('phone') ? <p className="auth-v2-field-error" role="alert">{regErr('phone')}</p> : <p className="auth-v2-hint">Phone or email — at least one is required. Your email is verified; add a mobile so doctors, hospitals and delivery staff can reach you.</p>}
+                    </div>
+                  )}
+
+                  {regChannel === 'mobile' && (
+                    <div className="auth-v2-field">
+                      <label className="auth-v2-label" htmlFor="reg-email">Email address <span className="auth-v2-optional">(optional)</span></label>
+                      <div className={`auth-v2-input-wrap ${regErr('email') ? 'has-error' : ''}`}>
+                        <div className="auth-v2-input-icon"><Mail size={18} /></div>
+                        <input id="reg-email" type="email" inputMode="email" autoComplete="email" placeholder="name@gmail.com" value={regEmail} onChange={(e) => { setRegEmail(e.target.value); setRegServerErr({}); }} className="auth-v2-input" aria-invalid={Boolean(regErr('email'))} />
+                      </div>
+                      {regErr('email') ? <p className="auth-v2-field-error" role="alert">{regErr('email')}</p> : <p className="auth-v2-hint">Phone or email — at least one is required. Your mobile is verified; add an email for receipts and reports.</p>}
+                      {!regErr('email') && suggestEmailFix(regEmail.trim()) && (
+                        <p className="auth-v2-hint">
+                          Did you mean{' '}
+                          <button type="button" className="auth-v2-link" onClick={() => setRegEmail(suggestEmailFix(regEmail.trim()) as string)}>
+                            {suggestEmailFix(regEmail.trim())}
+                          </button>
+                          ?
+                        </p>
+                      )}
                     </div>
                   )}
 

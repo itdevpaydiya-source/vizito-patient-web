@@ -11,7 +11,8 @@ import { labDocumentLabel, receiptFilename, saveLabDocumentFile as saveConfirmat
 import { getPharmacyRequestsApi } from '../../../services/pharmacyOrderHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import ShareBooking from '../../components/ShareBooking';
-import { addressOf, canCancel, canReschedule, dateLabel, dateOf, permissionsOf, placeOf, refOf, statusText, timeRange, typeOf, type Booking } from './bookingsPresentation';
+import { homeVisitView, FIND_ANOTHER_DOCTOR, VISIT_CODE_HINT } from '../consultations/homeVisitStatus';
+import { addressOf, canCancel, canReschedule, dateLabel, dateOf, permissionsOf, placeOf, refOf, statusClass, statusText, timeRange, typeOf, type Booking } from './bookingsPresentation';
 
 function WheelchairIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13" cy="3" r="1.5" fill="currentColor"/><path d="M13 6v7h6l2 6M13 9h5M9 8a7 7 0 1 0 7 11"/></svg>; }
 export function KindIcon({ booking }: { booking: Booking }) {
@@ -20,7 +21,7 @@ export function KindIcon({ booking }: { booking: Booking }) {
   return <span aria-hidden="true" className={`bk-kind bk-${cls}`}><Icon /></span>;
 }
 export function Status({ booking }: { booking: Booking }) {
-  return <span className={`bk-status bk-${booking.section}`}>{statusText(booking)}</span>;
+  return <span className={`bk-status bk-${statusClass(booking)}`}>{statusText(booking)}</span>;
 }
 const money = (value: number | string | null | undefined) => value != null && Number.isFinite(Number(value)) ? `₹${Number(value).toFixed(2)}` : null;
 export function paymentOf(b: Booking) {
@@ -65,7 +66,7 @@ export default function BookingDetailsContent({ booking: b, hideActions, onResch
   const type = typeOf(b), doctor = type === 'Doctor', hospital = type === 'Hospital', pharmacy = !!b.pharmacy;
   const navigate = useNavigate(), baskets = usePharmacyBaskets();
   const [instructions, setInstructions] = useState(false), [prep, setPrep] = useState<LabPublic | null>(null), [prepBusy, setPrepBusy] = useState(false), [prepError, setPrepError] = useState(''), [ordering, setOrdering] = useState(false), [documentBusy,setDocumentBusy] = useState(false);
-  const provider = b.provider, place = provider?.place, payment = paymentOf(b), permissions = permissionsOf(b);
+  const provider = b.provider, place = provider?.place, payment = paymentOf(b), permissions = permissionsOf(b), hv = b.homeVisit ? homeVisitView(b.homeVisit) : null;
   const doctorName = formatDoctorName(provider?.doctor?.name || b.doctorName);
   const name = doctor ? doctorName : hospital ? b.business?.name : pharmacy ? b.pharmacyProvider?.business_name : b.rental ? b.rental.product?.name : b.homeCare ? b.homeCare.service_name : b.labOrder?.lab_name;
   const image = doctor ? provider?.doctor?.photo_url : pharmacy ? b.pharmacyProvider?.image_url : b.rental ? b.rental.product?.primary_image_url : provider?.image_url;
@@ -137,6 +138,9 @@ export default function BookingDetailsContent({ booking: b, hideActions, onResch
       {hospital && <><Fact icon={<Building2/>} label="Department">{b.department}</Fact><Fact icon={<Stethoscope/>} label="Doctor">{doctorName}</Fact></>}
       <Fact icon={<CalendarDays/>} label={pharmacy ? 'Order date' : b.rental ? 'Rental dates' : 'Date & time'}>{b.rental ? <>{dateLabel(b.rental.start_date)}<br/>– {dateLabel(b.rental.end_date)}</> : <>{dateLabel(dateOf(b))}{timeRange(b) && <><br/>{timeRange(b)}</>}</>}</Fact>
       {doctor && <Fact icon={<ClipboardList/>} label="Consultation type">{b.appointmentType === 'VIDEO_CALL' ? 'Video consultation' : b.appointmentType === 'HOME_VISIT' ? 'Home visit' : b.appointmentType ? 'In-clinic visit' : null}</Fact>}
+      {hv && <Fact icon={<ClipboardList/>} label="Request status">{hv.label}{hv.detail && <><br/>{b.homeVisit?.status === 'DECLINED' ? `Reason: ${hv.detail}` : hv.detail}</>}</Fact>}
+      {hv?.code && <Fact icon={<ShieldCheck/>} label="Visit code"><strong>{hv.code}</strong><br/>{VISIT_CODE_HINT}</Fact>}
+      {hv?.money && <Fact icon={<CreditCard/>} label="Payment">{hv.money}</Fact>}
       {b.labOrder && <Fact icon={<ClipboardList/>} label="Collection type">{b.labOrder.visit_type === 'HOME' ? 'Home collection' : 'Visit centre'}</Fact>}
       <Fact icon={<ClipboardList/>} label={pharmacy || b.rental ? 'Order ID' : 'Booking ID'}>{refOf(b)}</Fact>
       {pharmacy && b.pharmacy?.fulfillment_type === 'DELIVERY' && <Fact icon={<MapPin/>} label="Delivery address">{b.deliveryAddress}</Fact>}
@@ -148,6 +152,7 @@ export default function BookingDetailsContent({ booking: b, hideActions, onResch
     {!hideActions && <>
       <ShareBooking title="My booking on Vizito" lines={[`Booking ID: ${refOf(b)}`,placeOf(b),[dateLabel(dateOf(b)),timeRange(b)].filter(Boolean).join(', ')].filter(Boolean) as string[]}/>
       <div className="bk-detail-actions">
+        {hv?.findAnother && <Link className="bk-button" to={FIND_ANOTHER_DOCTOR}>Find another doctor</Link>}
         {canReschedule(b) && <button className="bk-button" onClick={onReschedule}>Reschedule</button>}
         {canCancel(b) && <button className="bk-button bk-danger" onClick={onCancel}>Cancel</button>}
         {(doctor || hospital) && b.provider?.payment && <button className="bk-button" onClick={()=>{try{printBookingDocument(b);}catch(e){onError((e as Error).message);}}}>View receipt</button>}

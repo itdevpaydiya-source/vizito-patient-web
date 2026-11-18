@@ -22,6 +22,9 @@ import VerifyPrescriptionScreen from '../presentation/modules/labs/VerifyPrescri
 import SharedPrescriptionScreen from '../presentation/modules/labs/SharedPrescriptionScreen';
 import SharedLabReportScreen from '../presentation/modules/labs/SharedLabReportScreen';
 import HomeCareScreen from '../presentation/modules/homecare/HomeCareScreen';
+import HomeVisitBookingPage from '../presentation/modules/homecare/HomeVisitBookingPage';
+import HomeCareSearch from '../presentation/modules/homecare/HomeCareSearch.tsx';
+import TrackDoctorPage from '../presentation/modules/homecare/TrackDoctorPage';
 import FindBloodScreen from '../presentation/modules/bloodbank/FindBloodScreen';
 import RequestBloodScreen from '../presentation/modules/bloodbank/RequestBloodScreen';
 import MyBloodRequestsScreen from '../presentation/modules/bloodbank/MyBloodRequestsScreen';
@@ -205,6 +208,9 @@ const AppNavigator = () => {
         <Route path="/lab-tests/booked/:orderId" element={<LabBookingConfirmation />} />
         <Route path="/lab-bookings" element={<LabBookingsScreen />} />
         <Route path="/home-care" element={<HomeCareScreen />} />
+        <Route path="/home-care/doctor/:doctorId" element={<HomeVisitBookingPage />} />
+        <Route path="/home-care/search" element={<HomeCareSearch />} />
+        <Route path="/home-care/track/:visitId" element={<TrackDoctorPage />} />
         {/* Blood Bank */}
         <Route path="/find-blood" element={<FindBloodScreen />} />
         <Route path="/request-blood" element={<RequestBloodScreen />} />

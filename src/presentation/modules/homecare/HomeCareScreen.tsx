@@ -1,29 +1,25 @@
 import BookingForChip,{useBookingFamily} from '../family/BookingForChip';
-import { payOnline, PaymentCancelled, type PaidOnline } from '../../../services/razorpayCheckout';
 import LocationBar from '../../components/location/LocationBar';
-import HomeCareV2 from './HomeCareV2';
+import HomeCareHome from './HomeCareHome';
 import {Toast} from '../../components/motion/Motion';
 import { useCallback, useEffect, useState } from 'react';
-import HomePinField from '../../components/location/HomePinField';
-import { paidLabel, refundText, refundWillText, TestPaymentNote } from '../../../config/payments';
-import CancellationRefundPolicy from '../../components/CancellationRefundPolicy';
+import { paidLabel } from '../../../config/payments';
 import HomeCareAgencyBook, { BookedNote } from './HomeCareAgency';
 import { DoctorReferrals, referralTab } from './HomeCareCare';
 import type { HcReferral } from '../../../services/homecareHelper';
 import HomeCareVisits from './HomeCareVisits';
 import LongTermEnquiryModal from './components/LongTermEnquiryModal';
 import { TAB_OF, hcCoverageApi, type HcCategory, type HcOrder, type HcEnquiry } from '../../../services/homecareHelper';
-import { getAddressesApi } from '../../../services/patientHelper';
+import { getAddressesApi, type PatientAddress } from '../../../services/patientHelper';
+import ServiceLocationDialog from '../../components/location/ServiceLocationDialog';
 import { useSearchArea } from '../../../services/location';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Check,
   Home,
   Sun,
   Moon,
   Search,
   Stethoscope,
-  KeyRound,
   CheckCircle2,
   MapPin,
   AlertTriangle,
@@ -43,33 +39,24 @@ import {
   Shield,
   Sparkles,
 } from 'lucide-react';
-import { homeVisitDoctorsApi, homeVisitOfferApi, bookHomeVisitApi, myHomeVisitsApi, cancelHomeVisitApi, labError, rupees, type HomeVisitDoctor, type MyHomeVisit } from '../../../services/labHelper';
-import { validatePinCode, validateUpiId } from '../../../utils/validators/india';
+import { homeVisitDoctorsApi, homeVisitAreaSummary, myHomeVisitsApi, cancelHomeVisitApi, labError, rupees, type HomeVisitDoctor, type MyHomeVisit } from '../../../services/labHelper';
+import { homeVisitView, FIND_ANOTHER_DOCTOR, VISIT_CODE_HINT, type HomeVisitTone } from '../consultations/homeVisitStatus';
+import { validatePinCode } from '../../../utils/validators/india';
 
 // Home care: nurses, physiotherapists and caregivers from registered agencies, a doctor's home visit,
 // and everything booked — who is coming, visit codes, what was done at each visit.
-const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-const days = () => Array.from({ length: 7 }, (_, i) => {
-  const d = new Date(Date.now() + i * 86400000);
-  return {
-    iso: iso(d),
-    label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }),
-  };
-});
 const label12 = (t: string) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 const dayLong = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long' });
-const STATUS: Record<string, { label: string; cls: string }> = {
-  SCHEDULED: { label: 'Booked', cls: 'bg-sky-50 text-sky-800 border-sky-200' },
-  ON_THE_WAY: { label: 'Doctor on the way', cls: 'bg-indigo-50 text-indigo-800 border-indigo-200' },
-  ARRIVED: { label: 'Doctor with you', cls: 'bg-violet-50 text-violet-800 border-violet-200' },
-  IN_CONSULTATION: { label: 'In consultation', cls: 'bg-violet-50 text-violet-800 border-violet-200' },
-  COMPLETED: { label: 'Completed', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-  FAILED: { label: 'Visit did not happen', cls: 'bg-rose-50 text-rose-800 border-rose-200' },
-  CANCELLED: { label: 'Cancelled', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-  NO_SHOW: { label: 'Missed', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+const TONE: Record<HomeVisitTone, string> = {
+  amber: 'bg-amber-50 text-amber-900 border-amber-200',
+  sky: 'bg-sky-50 text-sky-800 border-sky-200',
+  indigo: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  violet: 'bg-violet-50 text-violet-800 border-violet-200',
+  emerald: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  rose: 'bg-rose-50 text-rose-800 border-rose-200',
+  slate: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 const card = 'rounded-2xl border border-white/80 bg-white/75 backdrop-blur-xl p-5 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.03)] ring-1 ring-white/60';
-const field = 'w-full rounded-xl border border-slate-200/80 bg-white/80 backdrop-blur-sm px-3.5 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:bg-white focus:border-amber-600 focus:ring-4 focus:ring-amber-600/10 transition shadow-inner';
 
 type HcTab = 'nursing' | 'physio' | 'caregiver' | 'doctor' | 'mine';
 type HcTrack = 'single' | 'longterm';
@@ -147,6 +134,35 @@ export default function HomeCareScreen() {
   };
 
   if (params.get('tab') === 'mine') return <HomeCareVisits onBookAgain={handleBookAgain} doctorVisits={<Mine/>}/>;
+
+  // Booking a service picked in Home care › search: a focused page (no banner), back to the results.
+  if (params.get('service') && CATEGORY[tab]) {
+    return (
+      <div className="mx-auto w-full max-w-[1240px] space-y-4 pb-12">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[13px] text-slate-600">
+          <a href="/home-care" onClick={(e) => { e.preventDefault(); setParams({}, { replace: false }); }} className="font-semibold text-orange-700">Home care</a><span aria-hidden>›</span>
+          <button type="button" onClick={() => window.history.back()} className="font-semibold text-orange-700">Search results</button><span aria-hidden>›</span><span>Book</span>
+        </nav>
+        {booked
+          ? <BookedNote o={booked} onOpen={() => { setBooked(null); setParams({ tab: 'mine', open: booked.id }, { replace: true }); }} />
+          : <HomeCareAgencyBook key={`${tab}-search`} category={CATEGORY[tab]} onCategory={(c) => setTab(TAB_OF[c] as HcTab)} onBooked={(o) => setBooked(o)} />}
+      </div>
+    );
+  }
+
+  // No care type chosen yet: the search-first Home care home (approved design 18 Nov). Every old
+  // link (?tab=, ?track=longterm, ?agency=, ?q=) still opens the screens below.
+  if (!rawTab && !rawTrack && !params.get('agency') && !params.get('q') && !referral && !rebookOrder && !booked) {
+    return (
+      <>
+        <HomeCareHome
+          onLongTerm={() => switchTrack('longterm')}
+          top={<DoctorReferrals onBook={(r) => { setBooked(null); setTrack('single'); setParams({ tab: referralTab(r) as HcTab }, { replace: true }); setReferral(r); }} />}
+        />
+        {enquiryFeedback && <Toast onClose={() => setEnquiryFeedback(null)}>{enquiryFeedback}</Toast>}
+      </>
+    );
+  }
 
   return (
     <div className="relative w-full space-y-6 pb-12">
@@ -781,7 +797,7 @@ export default function HomeCareScreen() {
               prefill={rebookOrder && rebookOrder.category === CATEGORY[tab] ? rebookOrder : null}
             />
           ) : (
-            <Book onBooked={() => setParams({ tab: 'mine', view: 'doctor' }, { replace: true })} />
+            <Book />
           )}
         </div>
       )}
@@ -807,537 +823,181 @@ export default function HomeCareScreen() {
   );
 }
 
-function Book({ onBooked }: { onBooked: () => void }) {
+/**
+ * Home care › Doctor at home: the patient says WHERE the doctor should come (a saved address, their
+ * current location or any area) and sees the doctors who visit there. PIN codes stay behind the scenes:
+ * they are only how a doctor's coverage areas are matched.
+ */
+type VisitPlace = { key: string; label: string; detail: string; pincode: string; kind: 'saved' | 'area' };
+function Book() {
   const [familyMemberId, setFamilyMemberId] = useState('');
   const { family: bookingFamily, error: familyError } = useBookingFamily(setFamilyMemberId);
   const searchArea = useSearchArea();
-  const [pincode, setPincode] = useState('');
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [saved, setSaved] = useState<PatientAddress[] | null>(null);
+  const [place, setPlace] = useState<VisitPlace | null>(null);
+  const [picking, setPicking] = useState(false);
   const [doctors, setDoctors] = useState<HomeVisitDoctor[] | null>(null);
-  const [doc, setDoc] = useState<HomeVisitDoctor | null>(null);
-  const [date, setDate] = useState(() => days()[0].iso);
-  const [slots, setSlots] = useState<string[] | null>(null);
-  const [time, setTime] = useState('');
-  const [addr, setAddr] = useState({ line: '', area: '', landmark: '', city: '' });
-  const [visitPin, setVisitPin] = useState<{ lat: number; lng: number } | null>(null);
-  const [reason, setReason] = useState('');
-  const [pay, setPay] = useState<'UPI' | 'CASH'>('UPI');
+  const [sort, setSort] = useState<'soonest' | 'fee'>('soonest');
   const [err, setErr] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<Awaited<ReturnType<typeof bookHomeVisitApi>> | null>(null);
+  const [retry, setRetry] = useState(0);
 
-  // Auto-fill from saved addresses or search area on mount
+  const savedPlace = (a: PatientAddress): VisitPlace => ({
+    key: `saved:${a.addressId}`, kind: 'saved', pincode: a.pincode || '',
+    label: a.addressType === 'HOME' ? 'Home' : a.addressType === 'WORK' ? 'Work' : a.label || 'Saved address',
+    detail: [a.addressLine2 || a.addressLine1, a.city].filter(Boolean).join(', '),
+  });
+  const areaPlace = (a: NonNullable<typeof searchArea>): VisitPlace => ({ key: `area:${a.lat},${a.lng}`, kind: 'area', pincode: a.pincode || '', label: a.source === 'gps' ? 'Current location' : a.label.split(',')[0], detail: a.label });
+
+  // Start from where the patient is: their default saved address, else the location set at the top of the page.
   useEffect(() => {
-    let alive = true;
-    getAddressesApi()
-      .then((list) => {
-        if (!alive) return;
-        const valid = (p?: string | null) => p && validatePinCode(p).ok;
-        const d = list.find((a) => a.isDefault && valid(a.pincode)) || list.find((a) => valid(a.pincode));
-        if (d && d.pincode) {
-          setPincode((cur) => cur || d.pincode || '');
-          setAddr((cur) => ({
-            line: cur.line || d.addressLine1 || '',
-            area: cur.area || d.addressLine2 || '',
-            landmark: cur.landmark || d.landmark || '',
-            city: cur.city || d.city || '',
-          }));
-          if (d.pin) setVisitPin((cur) => cur || d.pin || null);
-          setSearching(true);
-          homeVisitDoctorsApi(d.pincode)
-            .then((res) => { if (alive) setDoctors(res); })
-            .catch(() => {})
-            .finally(() => { if (alive) setSearching(false); });
-        } else if (searchArea?.pincode && valid(searchArea.pincode)) {
-          setPincode((cur) => cur || searchArea.pincode || '');
-          if (searchArea.city) setAddr((cur) => ({ ...cur, city: cur.city || searchArea.city || '' }));
-          if (searchArea.lat && searchArea.lng) setVisitPin((cur) => cur || { lat: searchArea.lat, lng: searchArea.lng });
-          setSearching(true);
-          homeVisitDoctorsApi(searchArea.pincode)
-            .then((res) => { if (alive) setDoctors(res); })
-            .catch(() => {})
-            .finally(() => { if (alive) setSearching(false); });
-        }
-      })
-      .catch(() => {});
+    getAddressesApi().then((list) => {
+      const ok = list.filter((a) => a.pincode && validatePinCode(a.pincode).ok);
+      setSaved(ok);
+      const back = params.get('pincode');
+      const d = (back && ok.find((a) => a.pincode === back)) || ok.find((a) => a.isDefault) || ok[0];
+      setPlace((cur) => cur || (d ? savedPlace(d) : searchArea ? areaPlace(searchArea) : null));
+    }).catch(() => { setSaved([]); setPlace((cur) => cur || (searchArea ? areaPlace(searchArea) : null)); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A location chosen in the bar at the top of the page is used straight away (unless a saved address is picked).
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- follow the location bar
+  useEffect(() => { if (searchArea && place?.kind !== 'saved') setPlace(areaPlace(searchArea)); }, [searchArea]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!place) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a place without a usable area can't be searched
+    if (!validatePinCode(place.pincode).ok) { setDoctors(null); setErr(`We couldn’t work out the exact area for “${place.detail || place.label}”. Choose a nearby locality or one of your saved addresses.`); return; }
+    let alive = true; setErr(null); setDoctors(null); setSearching(true);
+    homeVisitDoctorsApi(place.pincode)
+      .then((res) => { if (alive) setDoctors(res); })
+      .catch((e) => { if (alive) setErr(labError(e, 'Could not load doctors for this location.')); })
+      .finally(() => { if (alive) setSearching(false); });
     return () => { alive = false; };
-  }, []);
+  }, [place, retry]);
 
-  const search = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const pinRes = validatePinCode(pincode);
-    if (!pinRes.ok) { setErr(pinRes.message); return; }
-    setErr(null); setDoc(null); setDoctors(null); setSearching(true);
-    try {
-      setDoctors(await homeVisitDoctorsApi(pincode));
-    } catch (e2) {
-      setErr(labError(e2, 'Could not find doctors for this PIN code.'));
-    } finally {
-      setSearching(false);
-    }
+  // Picking a doctor opens the booking on its own page (same flow as Find doctors › Home visit).
+  const open = (d: HomeVisitDoctor) => {
+    const q = new URLSearchParams({ pincode: place?.pincode || '' });
+    if (familyMemberId) q.set('family_member_id', familyMemberId);
+    navigate(`/home-care/doctor/${encodeURIComponent(d.doctor_partner_id)}?${q}`);
   };
-
-  useEffect(() => {
-    if (!doc) return;
-    setSlots(null); setTime('');
-    homeVisitOfferApi(doc.doctor_partner_id, date)
-      .then((o) => setSlots(o.slots || []))
-      .catch((e) => setErr(labError(e, 'Could not load visit times.')));
-  }, [doc, date]);
-
-  const book = async () => {
-    if (!doc || !time) return;
-    if (addr.line.trim().length < 5 || addr.city.trim().length < 2) {
-      setErr('Enter your house/flat, street and city.');
-      return;
-    }
-    if (reason.trim().length < 5) {
-      setErr('Tell the doctor briefly why you need a home visit.');
-      return;
-    }
-    setBusy(true); setErr(null);
-    let payment: PaidOnline | undefined;
-    if (pay === 'UPI') {
-      try {
-        payment = await payOnline({
-          amount: Number(doc.fee),
-          purpose: 'home_visit',
-          description: `Home visit by ${doc.name}`,
-        });
-      } catch (e) {
-        setErr(
-          e instanceof PaymentCancelled
-            ? e.message
-            : `${(e as Error)?.message || 'The payment failed.'} You can try again or choose to pay later.`
-        );
-        setBusy(false);
-        return;
-      }
-    }
-    try {
-      setDone(
-        await bookHomeVisitApi({
-          family_member_id: familyMemberId || undefined,
-          doctor_partner_id: doc.doctor_partner_id,
-          visit_date: date,
-          visit_time: time,
-          reason: reason.trim(),
-          address: {
-            ...(visitPin ? { pin: visitPin } : {}),
-            line: addr.line.trim(),
-            area: addr.area.trim() || undefined,
-            landmark: addr.landmark.trim() || undefined,
-            city: addr.city.trim(),
-            pincode,
-          },
-          payment_mode: pay,
-          payment,
-        })
-      );
-    } catch (e) {
-      setErr(
-        `${labError(e, 'Could not book. Please try again.')}${
-          payment ? ' Your payment is being refunded (5–7 working days).' : ''
-        }`
-      );
-    } finally {
-      setBusy(false);
-    }
+  const nextLabel = (d: HomeVisitDoctor) => {
+    const n = d.next_slot;
+    if (!n) return null;
+    const ist = (o = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + o * 86400000));
+    const day = n.date === ist() ? 'Today' : n.date === ist(1) ? 'Tomorrow' : new Date(`${n.date}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const [h, m] = n.time.split(':').map(Number);
+    return `${day}, ${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
   };
-
-  if (done) {
-    return (
-      <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className={`${card} text-center space-y-3`}>
-        <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-        <h2 className="text-xl font-black text-slate-900">Home visit booked successfully</h2>
-        <p className="text-xs font-semibold text-slate-600">
-          {done.patient?.family_member_id
-            ? `Booking for ${done.patient.name} (${done.patient.relationship})`
-            : `Booking for ${done.patient?.name || 'yourself'}`}
-        </p>
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 max-w-md mx-auto text-left space-y-1.5">
-          <p className="text-base font-black text-slate-900">{done.doctor_name}</p>
-          <p className="text-xs font-bold text-slate-700">{dayLong(done.visit_date)} at {label12(done.visit_time)}</p>
-          <p className="text-xs text-slate-600">{done.address}</p>
-          <p className="text-xs font-bold text-teal-800 pt-1">
-            {rupees(done.fee)} · {done.payment_status === 'PAID' ? paidLabel() : 'Pay the doctor at the visit'}
-          </p>
-        </div>
-        <div className="mx-auto max-w-xs rounded-2xl border-2 border-teal-600 bg-teal-50 px-5 py-4" aria-label="Visit code">
-          <p className="text-xs font-bold text-teal-900 flex items-center justify-center gap-1.5">
-            <KeyRound className="w-4 h-4" /> Secure visit code
-          </p>
-          <p className="text-3xl font-black tracking-[0.3em] text-teal-900 tabular-nums my-1">{done.visit_code}</p>
-          <p className="text-[11px] text-teal-800 leading-snug">
-            Share this code only with the doctor at your doorstep to verify their identity. Never share it over the phone.
-          </p>
-        </div>
-        <button onClick={onBooked} className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold shadow-sm transition">
-          View my home visits
-        </button>
-      </div>
-    );
-  }
+  const soon = (d: HomeVisitDoctor) => (d.next_slot ? `${d.next_slot.date} ${d.next_slot.time}` : '9');
+  const shown = doctors ? [...doctors].sort((a, b) => (sort === 'fee' ? a.fee - b.fee : soon(a).localeCompare(soon(b)) || a.fee - b.fee)) : null;
+  const chip = (on: boolean) => `inline-flex min-w-0 max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition ${on ? 'border-orange-600 bg-orange-50 ring-1 ring-orange-600 text-slate-900' : 'border-slate-200 bg-white hover:border-orange-300 text-slate-700'}`;
+  const where = place ? place.detail || place.label : '';
 
   return (
     <div className="space-y-4">
       <BookingForChip family={bookingFamily} value={familyMemberId} onChange={setFamilyMemberId} />
       {familyError && <p role="alert" className="text-xs font-semibold text-rose-700">{familyError}</p>}
 
-      {/* Step 1: Destination Pincode and Doctor Selection */}
-      <form onSubmit={search} className={`${card} space-y-3.5`} aria-label="Find a doctor">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-              <span>1. Where should the doctor come?</span>
-            </h2>
-            <p className="text-xs text-slate-500">
-              Enter your 6-digit delivery PIN code to see doctors available for doorstep visits.
-            </p>
-          </div>
-          {pincode && validatePinCode(pincode).ok && (
-            <span className="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 rounded-full px-2.5 py-0.5">
-              PIN {pincode}
-            </span>
-          )}
+      <section className={`${card} space-y-4`} aria-label="Find a doctor for a home visit">
+        <div>
+          <h2 className="text-base font-black text-slate-900">Where should the doctor come?</h2>
+          <p className="text-xs text-slate-500">Choose the patient’s address. We show doctors who make home visits there.</p>
         </div>
-
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <input
-              aria-label="Your pincode"
-              inputMode="numeric"
-              maxLength={6}
-              value={pincode}
-              onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="Enter 6-digit PIN code (e.g. 500034)"
-              className={field}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={searching}
-            className="px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold inline-flex items-center gap-1.5 transition disabled:opacity-60 shrink-0"
-          >
-            {searching ? <Clock className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            <span>{searching ? 'Finding…' : 'Find doctors'}</span>
+        <div role="radiogroup" aria-label="Visit location" className="flex flex-wrap gap-2">
+          {saved === null && <span className="text-xs text-slate-400">Loading your addresses…</span>}
+          {(saved || []).slice(0, 4).map((a) => {
+            const p = savedPlace(a); const on = place?.key === p.key;
+            return (
+              <button key={p.key} type="button" role="radio" aria-checked={on} onClick={() => setPlace(p)} className={chip(on)}>
+                <Home className="h-4 w-4 shrink-0 text-orange-700" />
+                <span className="min-w-0"><b className="block font-bold">{p.label}{a.isDefault ? ' · Default' : ''}</b><span className="block truncate text-slate-500">{p.detail}</span></span>
+              </button>
+            );
+          })}
+          {place?.kind === 'area' && (
+            <button type="button" role="radio" aria-checked className={chip(true)}>
+              <MapPin className="h-4 w-4 shrink-0 text-orange-700" />
+              <span className="min-w-0"><b className="block font-bold">{place.label}</b><span className="block truncate text-slate-500">{place.detail}</span></span>
+            </button>
+          )}
+          <button type="button" onClick={() => setPicking(true)} className="inline-flex items-center gap-2 rounded-xl border border-dashed border-orange-400 bg-white px-3 py-2 text-xs font-bold text-orange-800 hover:bg-orange-50">
+            <Search className="h-4 w-4" /> {saved?.length || place ? 'Another area or current location' : 'Choose area or use current location'}
           </button>
         </div>
-
-        {doctors && !doctors.length && !searching && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 space-y-1">
-            <p className="font-bold">No doctor visits available in PIN {pincode} yet.</p>
-            <p className="text-amber-800">
-              Try a nearby area PIN code, or check Nursing / Physiotherapy or In-clinic consultation.
-            </p>
-          </div>
+        {saved !== null && !place && (
+          <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">Tell us where the patient is: use your current location or search your area (for example “Kondapur”).</p>
         )}
 
-        {doctors && doctors.length > 0 && (
-          <div className="space-y-2 pt-1">
-            <p className="text-xs font-black text-slate-700">Doctors available for home visits ({doctors.length}):</p>
-            <ul className="space-y-2" aria-label="Doctors who visit">
-              {doctors.map((d) => {
-                const selected = doc?.doctor_partner_id === d.doctor_partner_id;
-                return (
+        {place && !err && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold text-slate-700" role="status">
+                {searching ? 'Finding doctors…' : `${shown?.length ?? 0} doctor${shown?.length === 1 ? '' : 's'} visit ${where}`}
+              </p>
+              {shown && shown.length > 1 && (
+                <label className="flex items-center gap-2 text-xs text-slate-600">Sort
+                  <select value={sort} onChange={(e) => setSort(e.target.value as 'soonest' | 'fee')} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold">
+                    <option value="soonest">Soonest available</option><option value="fee">Lowest fee</option>
+                  </select>
+                </label>
+              )}
+            </div>
+            {searching && <div className="space-y-2" aria-busy="true">{[0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />)}</div>}
+            {shown && !shown.length && !searching && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900 space-y-2">
+                <p className="font-bold">No doctor makes home visits in {where} yet.</p>
+                <p className="text-amber-800">Try a nearby area, or consult a doctor by video.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setPicking(true)} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-bold">Try another area</button>
+                  <button type="button" onClick={() => navigate('/find-doctors?mode=video')} className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-bold">Video consultation</button>
+                </div>
+              </div>
+            )}
+            {shown && shown.length > 0 && (
+              <ul className="space-y-2" aria-label="Doctors who visit">
+                {shown.map((d) => (
                   <li key={d.doctor_partner_id}>
-                    <button
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => setDoc(d)}
-                      className={`w-full text-left rounded-2xl border p-3.5 transition-all duration-200 backdrop-blur-md ${
-                        selected
-                          ? 'border-amber-600 ring-2 ring-amber-600/20 bg-amber-50/70 shadow-sm'
-                          : 'border-white/80 bg-white/70 hover:border-amber-300 hover:bg-white/90 shadow-xs'
-                      }`}
-                    >
+                    <button type="button" aria-label={`Book a home visit with ${d.name}`} onClick={() => open(d)}
+                      className="w-full text-left rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-orange-300 hover:shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1 min-w-0">
                           <span className="font-black text-slate-900 flex items-center gap-1.5 text-sm">
-                            <Stethoscope className="w-4 h-4 text-teal-700 shrink-0" />
-                            <span className="truncate">{d.name}</span>
+                            <Stethoscope className="w-4 h-4 text-teal-700 shrink-0" /><span className="truncate">{d.name}</span>
                           </span>
-                          <span className="block text-xs text-slate-600">
-                            {[d.qualification, d.specialization, d.experience ? `${d.experience} yrs exp` : null]
-                              .filter(Boolean)
-                              .join(' · ')}
+                          <span className="block text-xs text-slate-600">{[d.qualification, d.specialization, d.experience ? `${d.experience} yrs exp` : null].filter(Boolean).join(' · ')}</span>
+                          <span className="flex items-start gap-1 text-[11px] text-slate-600"><MapPin className="w-3 h-3 mt-0.5 shrink-0 text-slate-500" /><span>Visits {homeVisitAreaSummary(d, place?.pincode)}</span></span>
+                          <span className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 rounded-md px-2 py-0.5"><Clock className="w-3 h-3 text-slate-500" />About {d.visit_minutes} min visit</span>
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-md px-2 py-0.5 ${d.next_slot ? 'text-teal-800 bg-teal-50' : 'text-slate-500 bg-slate-100'}`}><CalendarCheck className="w-3 h-3" />{d.next_slot ? `Next available: ${nextLabel(d)}` : 'No free times in the next 14 days'}</span>
                           </span>
-                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 rounded-md px-2 py-0.5">
-                              <Clock className="w-3 h-3 text-slate-500" />
-                              <span>Visit duration ~{d.visit_minutes} min</span>
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 rounded-md px-2 py-0.5">
-                              <ShieldCheck className="w-3 h-3" /> Verified Doctor
-                            </span>
-                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-base font-black text-slate-900 tabular-nums block">{rupees(d.fee)}</span>
+                        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                          <span className="text-base font-black text-slate-900 tabular-nums">{rupees(d.fee)}</span>
                           <span className="text-[11px] font-semibold text-slate-500">per visit</span>
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-lg bg-orange-700 px-3 py-1.5 text-xs font-bold text-white">Book visit <ArrowRight className="h-3.5 w-3.5" /></span>
                         </div>
                       </div>
                     </button>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
           </div>
         )}
-      </form>
-
-      {/* Step 2: Date & Slot Selection */}
-      {doc && (
-        <section aria-label="Time" className={`${card} space-y-3.5`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-black text-slate-900">2. Select visit date &amp; time</h2>
-              <p className="text-xs text-slate-500">Selected doctor: <b>{doc.name}</b> (~{doc.visit_minutes} min)</p>
-            </div>
+        {err && (
+          <div role="alert" className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3 flex flex-wrap items-center gap-2">
+            <span className="flex-1">{err}</span>
+            {validatePinCode(place?.pincode || '').ok
+              ? <button type="button" onClick={() => setRetry((n) => n + 1)} className="underline">Retry</button>
+              : <button type="button" onClick={() => setPicking(true)} className="underline">Choose another area</button>}
           </div>
-
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Visit date">
-            {days().map((d) => (
-              <button
-                key={d.iso}
-                type="button"
-                aria-pressed={date === d.iso}
-                onClick={() => setDate(d.iso)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all duration-200 backdrop-blur-sm ${
-                  date === d.iso
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                    : 'bg-white/70 text-slate-700 border-white/80 hover:bg-white hover:border-slate-300 shadow-xs'
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-
-          {!slots ? (
-            <p className="text-xs text-slate-400 py-2">Checking available slot windows…</p>
-          ) : !slots.length ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-              {date === days()[0].iso ? (
-                <p>
-                  No more slots available today (requires at least 2 hours advance notice). Please select <b>Tomorrow</b> or an upcoming date.
-                </p>
-              ) : (
-                <p>{doc.name} has no home-visit time free on this day. Please choose another date.</p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <p className="text-xs font-black text-slate-700">Available time windows:</p>
-              <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2" role="group" aria-label="Visit time">
-                {slots.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    aria-pressed={time === t}
-                    onClick={() => setTime(t)}
-                    className={`px-2.5 py-2 rounded-xl border text-xs font-bold tabular-nums transition-all duration-200 text-center backdrop-blur-sm ${
-                      time === t
-                        ? 'bg-amber-800 text-white border-amber-800 shadow-md ring-2 ring-amber-800/20'
-                        : 'bg-white/80 text-slate-700 border-white/80 hover:border-amber-400 hover:bg-white shadow-xs'
-                    }`}
-                  >
-                    {label12(t)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Step 3: Address, Reason and Payment */}
-      {doc && time && (
-        <section aria-label="Address and payment" className={`${card} space-y-4`}>
-          <div>
-            <h2 className="text-sm font-black text-slate-900">3. Visit destination, reason &amp; payment</h2>
-            <p className="text-xs text-slate-500">
-              Doctor will arrive at this address on {dayLong(date)} at {label12(time)}.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-black text-slate-700 mb-1">
-                House / flat no. and street address *
-              </label>
-              <input
-                aria-label="House / flat and street"
-                value={addr.line}
-                onChange={(e) => setAddr({ ...addr, line: e.target.value.slice(0, 120) })}
-                placeholder="e.g. Flat 302, Green Heights, Street 4"
-                className={field}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-slate-700 mb-1">
-                Area / locality
-              </label>
-              <input
-                aria-label="Area"
-                value={addr.area}
-                onChange={(e) => setAddr({ ...addr, area: e.target.value.slice(0, 60) })}
-                placeholder="e.g. Madhapur / Kondapur"
-                className={field}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-slate-700 mb-1">
-                Landmark (optional)
-              </label>
-              <input
-                aria-label="Landmark (optional)"
-                value={addr.landmark}
-                onChange={(e) => setAddr({ ...addr, landmark: e.target.value.slice(0, 60) })}
-                placeholder="e.g. Near Apollo Pharmacy"
-                className={field}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-slate-700 mb-1">
-                City *
-              </label>
-              <input
-                aria-label="City"
-                value={addr.city}
-                onChange={(e) =>
-                  setAddr({
-                    ...addr,
-                    city: e.target.value.replace(/[^A-Za-z .-]/g, '').slice(0, 40),
-                  })
-                }
-                placeholder="e.g. Hyderabad"
-                className={field}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-black text-slate-700 mb-1">
-                PIN code *
-              </label>
-              <div className="flex items-center px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-800">
-                <MapPin className="w-4 h-4 text-orange-700 mr-1.5" />
-                <span>{pincode}</span>
-              </div>
-            </div>
-
-            {/* Smart Home Pin Field with 1-Tap Saved Addresses, GPS & Map Auto-Fill */}
-            <HomePinField
-              value={visitPin}
-              onChange={setVisitPin}
-              who="doctor"
-              onAddressResolved={(resolved) => {
-                setAddr((cur) => ({
-                  line: resolved.line || cur.line,
-                  area: resolved.area || cur.area,
-                  city: resolved.city || cur.city,
-                  landmark: resolved.landmark || cur.landmark,
-                }));
-                if (resolved.pin !== undefined) {
-                  setVisitPin(resolved.pin);
-                }
-                if (resolved.pincode && resolved.pincode !== pincode && validatePinCode(resolved.pincode).ok) {
-                  setPincode(resolved.pincode);
-                  homeVisitDoctorsApi(resolved.pincode).then(setDoctors).catch(() => {});
-                }
-              }}
-              currentAddress={addr}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black text-slate-700 mb-1">
-              Why do you need a home visit? *
-            </label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value.slice(0, 300))}
-              rows={2}
-              placeholder="e.g. Father, 78, fever for 3 days and too weak to travel to clinic"
-              className={field}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <p className="text-xs font-black text-slate-700">Payment method</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Payment">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={pay === 'UPI'}
-                onClick={() => setPay('UPI')}
-                className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-                  pay === 'UPI'
-                    ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
-                }`}
-              >
-                <div>
-                  <span className="block text-xs font-black">Pay online now</span>
-                  <span className={`block text-[11px] ${pay === 'UPI' ? 'text-slate-300' : 'text-slate-500'}`}>
-                    UPI, Cards, Net Banking
-                  </span>
-                </div>
-                {pay === 'UPI' && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-              </button>
-
-              <button
-                type="button"
-                role="radio"
-                aria-checked={pay === 'CASH'}
-                onClick={() => setPay('CASH')}
-                className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-                  pay === 'CASH'
-                    ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
-                }`}
-              >
-                <div>
-                  <span className="block text-xs font-black">Pay the doctor</span>
-                  <span className={`block text-[11px] ${pay === 'CASH' ? 'text-slate-300' : 'text-slate-500'}`}>
-                    Cash or UPI upon arrival
-                  </span>
-                </div>
-                {pay === 'CASH' && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-              </button>
-            </div>
-          </div>
-
-          <CancellationRefundPolicy service="homecare" className="mt-2" />
-
-          {err && (
-            <p role="alert" className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">
-              {err}
-            </p>
-          )}
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={book}
-            className="w-full py-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-black shadow-sm transition disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {busy && <Clock className="w-4 h-4 animate-spin" />}
-            <span>
-              {busy ? 'Booking visit…' : pay === 'UPI' ? `Pay ${rupees(doc.fee)} & book visit` : `Confirm home visit · ${rupees(doc.fee)}`}
-            </span>
-          </button>
-        </section>
-      )}
-
-      {err && !(doc && time) && (
-        <p role="alert" className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">
-          {err}
-        </p>
-      )}
+        )}
+        <p className="text-[11px] text-slate-500">Not for emergencies. For chest pain, breathlessness, fainting or heavy bleeding, call 108.</p>
+      </section>
+      {picking && <ServiceLocationDialog onClose={() => setPicking(false)} onApply={(a) => { setPicking(false); if (a) setPlace(areaPlace(a)); }} />}
     </div>
   );
 }
@@ -1360,28 +1020,30 @@ function Mine() {
     <div className="space-y-3">
       {msg && <p role="status" className="text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">{msg}</p>}
       <ul className="space-y-3" aria-label="My home visits">
-        {rows.map((v) => { const s = STATUS[v.status] || STATUS.SCHEDULED; return (
-          <li key={v.id} className={`${card} space-y-2`}>
+        {rows.map((v) => { const s = homeVisitView(v); const cls = TONE[s.tone]; const ended = s.findAnother; return (
+          <li key={v.id} className={`${card} space-y-2 ${ended ? 'border-l-4 border-l-rose-400' : s.tone === 'amber' ? 'border-l-4 border-l-amber-400' : ''}`} data-home-visit-id={v.id}>
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-900">{dayLong(v.visit_date)}, {label12(v.visit_time)}</p>
                 <p className="text-xs text-slate-600 mt-0.5">{v.address} · {v.pincode}</p>
                 {v.reason && <p className="text-xs text-slate-500 mt-0.5">Reason: {v.reason}</p>}
+                {v.booking_number && <p className="text-[11px] text-slate-500 mt-0.5">Booking {v.booking_number}</p>}
               </div>
-              <div className="text-right shrink-0">
-                <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border ${s.cls}`}>{s.label}</span>
-                <p className="text-xs font-bold tabular-nums mt-1">{rupees(v.fee)} · {v.payment_status === 'PAID' ? paidLabel() : v.payment_status === 'REFUNDED' ? 'Refunded' : 'Pay the doctor'}</p>
+              <div className="text-right shrink-0 max-w-[45%]">
+                <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border ${cls}`}>{s.label}</span>
+                <p className="text-xs font-bold tabular-nums mt-1">{ended && s.money?.includes('₹') ? s.money : `${rupees(v.fee)} · ${ended ? s.money : v.payment_status === 'PAID' ? (v.paid_at_visit || String(v.payment_mode || '').toUpperCase() === 'CASH' ? 'Paid to the doctor' : paidLabel()) : v.payment_status === 'REFUNDED' ? 'Refunded' : 'Pay the doctor'}`}</p>
               </div>
             </div>
-            {v.visit_code && (
-              <p className="flex items-center gap-3" aria-label="Visit code"><span className="text-2xl font-black tracking-[0.3em] text-teal-900 tabular-nums">{v.visit_code}</span><span className="text-[11px] text-teal-900">Visit code: give it to the doctor at your door.</span></p>
+            {s.detail && <p className={`text-xs font-semibold ${s.tone === 'amber' ? 'text-amber-800' : s.tone === 'rose' ? 'text-rose-700' : 'text-slate-600'}`}>{s.tone === 'rose' && v.status === 'DECLINED' ? `Reason: ${s.detail}` : s.detail}</p>}
+            {s.code && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Visit code"><span className="text-2xl font-black tracking-[0.3em] text-teal-900 tabular-nums">{s.code}</span><span className="text-[11px] text-teal-900">{VISIT_CODE_HINT}.</span></p>
             )}
-            {v.status === 'FAILED' && v.failed_reason && <p className="text-xs font-semibold text-rose-700">Doctor: {v.failed_reason}</p>}
-            {v.status === 'CANCELLED' && v.cancellation_reason && <p className="text-xs text-slate-600">Cancelled{v.cancelled_by && v.cancelled_by !== 'PATIENT' ? ' by the doctor' : ''}: {v.cancellation_reason}</p>}
-            {v.status === 'COMPLETED' && <p className="text-xs text-slate-600">Your prescription is in Medical Records.</p>}
-            {['SCHEDULED', 'FAILED'].includes(v.status) && (cancelling === v.id ? (
-              <div className="flex gap-2 items-center"><span className="text-xs text-slate-700">Cancel this visit?{v.payment_status === 'PAID' ? ' Your payment will be refunded.' : ''}</span><button onClick={() => cancel(v)} className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold">Yes, cancel</button><button onClick={() => setCancelling(null)} className="text-xs font-bold text-slate-600">Keep</button></div>
-            ) : <button onClick={() => setCancelling(v.id)} className="text-xs font-bold text-rose-700 hover:underline">Cancel visit</button>)}
+            {v.status === 'ON_THE_WAY' && <a href={`/home-care/track/${encodeURIComponent(v.id)}`} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-orange-700 px-3.5 text-xs font-bold text-white hover:bg-orange-800"><MapPin className="h-4 w-4" />Track doctor live</a>}
+            {v.status === 'COMPLETED' && <p className="text-xs text-slate-600">Your prescription is in <a href="/my-records" className="font-bold underline">Medical Records</a>.</p>}
+            {ended && <a href={FIND_ANOTHER_DOCTOR} className="inline-block text-xs font-bold text-teal-800 hover:underline">Find another doctor</a>}
+            {s.canCancel && (cancelling === v.id ? (
+              <div className="flex flex-wrap gap-2 items-center"><span className="text-xs text-slate-700">{v.status === 'REQUESTED' ? 'Cancel this request?' : 'Cancel this visit?'}{v.payment_status === 'PAID' ? ' Your payment will be refunded.' : ''}</span><button onClick={() => cancel(v)} className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold">Yes, cancel</button><button onClick={() => setCancelling(null)} className="text-xs font-bold text-slate-600">Keep</button></div>
+            ) : <button onClick={() => setCancelling(v.id)} className="text-xs font-bold text-rose-700 hover:underline">{v.status === 'REQUESTED' ? 'Cancel request' : 'Cancel visit'}</button>)}
           </li>
         ); })}
       </ul>

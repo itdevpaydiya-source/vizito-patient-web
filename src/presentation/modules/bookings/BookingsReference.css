@@ -52,6 +52,8 @@
 .status-upcoming{background:#d8fff0;color:#006e42}
 .status-completed{background:#e5f0ff;color:#0753d6}
 .status-cancelled{background:#ffe6ed;color:#be1b3a}
+/* Doctor home visit waiting for the doctor to confirm (same amber as pending payment). */
+.status-requested{background:#fff6da;color:#8a5300}
 .service-next>.booking-pill{align-self:center}
 .service-view-all{display:flex;align-items:center;justify-content:center;gap:5px;color:var(--service-color);background:var(--service-tint);border-radius:4px;padding:8px 5px;font-size:14px;font-weight:650;text-decoration:none}
 .service-view-all svg{width:14px;height:14px}

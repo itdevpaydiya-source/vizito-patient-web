@@ -1,11 +1,11 @@
 import {useEffect,useRef,useState,useCallback} from 'react';
 import {getDashboardApi,type DashboardData} from '../../../services/dashboardHelper';
-import {myLabOrdersApi,type MyLabOrder} from '../../../services/labHelper';
+import {myLabOrdersApi,myHomeVisitsApi,type MyLabOrder} from '../../../services/labHelper';
 import {getMyOrdersApi} from '../../../services/pharmacyOrderHelper';
 import {getProviderDetailApi} from '../../../services/bookingHelper';
 import {getAddressesApi} from '../../../services/patientHelper';
 import {equipmentService} from '../equipment/equipmentService';
-import {statusOf,typeOf,commerceStatus,type Booking,type BookingType} from './bookingsPresentation';
+import {statusOf,typeOf,commerceStatus,withHomeVisits,type Booking,type BookingType} from './bookingsPresentation';
 export const bookingTypes:BookingType[]=['Doctor','Lab Test','Home Care','Hospital','Pharmacy','Equipment'];
 export type BookingGroup={state:'loading'|'ready'|'error';bookings:Booking[]};
 export type BookingGroups=Record<BookingType,BookingGroup>;
@@ -22,7 +22,7 @@ export function useBookingGroups(){
   const dashboard=(clinical||!only||only==='Lab Test')?getDashboardApi():null;
   setGroups(old=>({...old,...Object.fromEntries(keys.map(t=>[t,{state:'loading',bookings:[]}]))}));
   const save=(type:BookingType,group:BookingGroup)=>{if(generation===epoch.current&&versions.current[type]===attempts[type])setGroups(old=>({...old,[type]:group}));};
-  if(clinical)void dashboard!.then(data=>{const rows=dashboardBookings(data);for(const type of ['Doctor','Hospital','Home Care'] as const)save(type,{state:'ready',bookings:rows.filter(b=>typeOf(b)===type)});}).catch(()=>{for(const type of ['Doctor','Hospital','Home Care'] as const)save(type,{state:'error',bookings:[]});});
+  if(clinical)void Promise.all([dashboard!,myHomeVisitsApi().catch(()=>[])]).then(([data,homeVisits])=>{const rows=withHomeVisits(dashboardBookings(data),homeVisits);for(const type of ['Doctor','Hospital','Home Care'] as const)save(type,{state:'ready',bookings:rows.filter(b=>typeOf(b)===type)});}).catch(()=>{for(const type of ['Doctor','Hospital','Home Care'] as const)save(type,{state:'error',bookings:[]});});
   if(!only||only==='Lab Test')void Promise.all([myLabOrdersApi(),dashboard!]).then(([orders,data])=>{const clinical=dashboardBookings(data);save('Lab Test',{state:'ready',bookings:orders.map(order=>{const booking=clinical.find(b=>b.labOrder?.id===order.id);return booking?{...booking,lab:order}:labBooking(order);})});}).catch(()=>save('Lab Test',{state:'error',bookings:[]}));
   if(!only||only==='Pharmacy')void Promise.all([getMyOrdersApi(),getAddressesApi()]).then(async([orders,addresses])=>{
     const providers=new Map(await Promise.all([...new Set(orders.map(o=>o.pharmacy_partner_id))].map(async id=>[id,await getProviderDetailApi(id)] as const)));

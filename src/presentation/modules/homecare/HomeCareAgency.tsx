@@ -125,6 +125,14 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
     if (validatePinCode(pin).ok) find();
   }, [pin]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // From Home care › search: open the booking for exactly the service the patient chose.
+  const wantService = urlParams.get('service');
+  useEffect(() => {
+    if (!wantService || !list || pick) return;
+    const match = list.find((s) => String(s.id) === wantService);
+    if (match) setPick(match); else setUrl('service', ''); // gone from this area: show the list instead
+  }, [wantService, list]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (prefill && list && !pick) {
       const match = list.find((s) => s.agency.id === prefill.agency_id && s.name === prefill.service_name)
@@ -167,7 +175,7 @@ export default function HomeCareAgencyBook({ category, onBooked, referral, prefi
   ];
   const intro = INTRO[category];
 
-  if (pick) return <BookPanel s={pick} pincode={pin} examples={intro.examples} onBack={() => setPick(null)} onBooked={onBooked} referral={referral} prefill={prefill} />;
+  if (pick) return <BookPanel s={pick} pincode={pin} examples={intro.examples} onBack={() => { setPick(null); if (wantService) setUrl('service', ''); }} onBooked={onBooked} referral={referral} prefill={prefill} />;
   return (
     <div className="space-y-4">
       {referral && <ReferralNote r={referral} />}

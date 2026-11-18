@@ -4,7 +4,8 @@ import type { PatientOrder } from '../../../services/types';
 import type { ProviderDetail } from '../../../services/bookingHelper';
 import type { RentalBookingOrder } from '../equipment/equipmentService';
 import type { DashboardBooking } from '../../../services/dashboardHelper';
-import type { MyLabOrder, MyLabOrderDetail } from '../../../services/labHelper';
+import type { MyLabOrder, MyLabOrderDetail, MyHomeVisit } from '../../../services/labHelper';
+import { homeVisitView } from '../consultations/homeVisitStatus';
 import type { HcOrder } from '../../../services/homecareHelper';
 import { formatDoctorName } from '../../../utils/doctorLabel';
 import { calendarEscape } from '../labs/labConfirmationDetails';
@@ -21,6 +22,8 @@ export type Booking = Partial<DashboardBooking> & {
   section: BookingStatus;
   lab?: MyLabOrder | MyLabOrderDetail;
   care?: HcOrder;
+  /** Doctor home visit request/visit for a HOME_VISIT booking (from /home-visits/mine). */
+  homeVisit?: MyHomeVisit;
 };
 export const typeOf = (b: Booking): BookingType =>
   b.pharmacy ? 'Pharmacy' : b.rental ? 'Equipment' : b.labOrder ? 'Lab Test' : b.homeCare ? 'Home Care' : b.business?.type === 'Hospital' ? 'Hospital' : 'Doctor';
@@ -89,6 +92,9 @@ export const timeOf = (b: Booking) =>
       b.timeSlot,
   );
 export function endOf(b: Booking): string | null {
+  // A doctor home visit lasts the doctor's set visit length (the appointment row keeps a 15-minute slot).
+  const hv = b.homeVisit, hvStart = /^(\d{1,2}):(\d{2})/.exec(clock(hv?.visit_time) || '');
+  if (hv?.visit_minutes && hvStart) { const end = Number(hvStart[1]) * 60 + Number(hvStart[2]) + hv.visit_minutes; if (end < 24 * 60) return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`; }
   const careEnd = clock(careVisit(b)?.end_time);
   if (careEnd) return careEnd;
   const explicit = b.timeSlot?.split(/\s*[–-]\s*/)[1];
@@ -142,6 +148,7 @@ export const refOf = (b: Booking) =>
 export const permissionsOf = (b: Booking) =>
   b.visit || b.lab || b.labOrder || b.care || b.homeCare;
 export const canCancel = (b: Booking) => {
+  if (b.homeVisit && !homeVisitView(b.homeVisit).canCancel) return false;
   if (['Doctor','Hospital'].includes(typeOf(b))) return b.visit?.can_cancel === true;
   if (b.pharmacy) return ['CREATED','AWAITING_PAYMENT','PAID'].includes(b.pharmacy.status);
   if (b.rental) return ['NEW','ACCEPTED'].includes(b.rental.status) && !b.rental.delivery_address?.return_schedule
@@ -158,7 +165,13 @@ export const commerceStatus = (status: string): BookingStatus =>
       : /^(PROCESSING|READY_FOR_PICKUP|OUT_FOR_DELIVERY|ACTIVE|IN_PROGRESS)$/i.test(status)
         ? 'active'
         : 'upcoming';
+/** Status class: a home visit waiting for the doctor reads amber, everything else by section. */
+export const statusClass = (b: Booking) => (b.homeVisit?.status === 'REQUESTED' ? 'requested' : b.section);
+/** Attach each doctor home visit to its booking so cards and details show the request status. */
+export const withHomeVisits = <T extends Booking>(rows: T[], visits: MyHomeVisit[]): T[] =>
+  visits.length ? rows.map((b) => { const homeVisit = b.kind === 'HOME_VISIT' ? visits.find((v) => v.booking_id === b.id) : undefined; return homeVisit ? { ...b, homeVisit } : b; }) : rows;
 export const statusText = (b: Booking) => {
+  if (b.homeVisit) return homeVisitView(b.homeVisit).label;
   if (b.section === 'cancelled') return 'Cancelled';
   if (b.section === 'completed') return 'Completed';
   if (b.section === 'active') {

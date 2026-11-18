@@ -285,6 +285,10 @@
   background: #ffdfe7;
   color: #e0002b;
 }
+.bk-requested {
+  background: #fff6da;
+  color: #8a5300;
+}
 .bk-row-actions {
   display: flex;
   gap: 8px;

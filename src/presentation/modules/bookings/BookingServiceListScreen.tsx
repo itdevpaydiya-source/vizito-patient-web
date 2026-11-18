@@ -25,6 +25,7 @@ import {
   myLabOrderApi,
   cancelMyLabOrderApi,
   cancelHomeVisitApi,
+  myHomeVisitsApi,
   myLabReportApi,
   openMyLabReportPdf,
   labError,
@@ -63,6 +64,7 @@ import {
   timeRange,
   titleOf,
   typeOf,
+  withHomeVisits,
   type Booking,
   type BookingStatus,
   type BookingType,
@@ -128,13 +130,14 @@ export default function BookingServiceListScreen() {
     setLoading(true);
     setError(false);
     try {
-      const [data, labs, care, pharmacy, rentals, addresses] = await Promise.all([
+      const [data, labs, care, pharmacy, rentals, addresses, homeVisits] = await Promise.all([
         getDashboardApi(),
         myLabOrdersApi(),
         hcMineApi(),
         getMyOrdersApi(),
         equipmentService.getBookingOrders(),
         getAddressesApi(),
+        myHomeVisitsApi().catch(() => []),
       ]);
       const activeIds = new Set(data.active.map((b) => b.id));
       const unique = new Map(
@@ -143,13 +146,13 @@ export default function BookingServiceListScreen() {
           b,
         ]),
       );
-      const clinical: Booking[] = Array.from(unique.values()).map((b) => ({
+      const clinical: Booking[] = withHomeVisits(Array.from(unique.values()).map((b) => ({
         dashboard: b,
         ...b,
         section: statusOf(b, activeIds.has(b.id)),
         lab: labs.find((o) => o.id === b.labOrder?.id),
         care: care.find((o) => o.id === b.homeCare?.id),
-      }));
+      })), homeVisits);
       const providerIds = [...new Set(pharmacy.map(o => o.pharmacy_partner_id))];
       const pharmacyProviders = new Map(await Promise.all(providerIds.map(async id => [id, await getProviderDetailApi(id)] as const)));
       const list: Booking[] = [...clinical,

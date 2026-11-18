@@ -110,11 +110,24 @@ export const openSharedLabReportPdf = async (token: string) => {
 };
 
 // ── Home Care H1: doctor home visits ──
-export interface HomeVisitDoctor { doctor_partner_id: string; name: string; qualification: string | null; specialization: string | null; experience: number | null; fee: number; visit_minutes: number; pincodes: string[]; slots?: string[] }
+export interface HomeVisitArea { name: string; pincode: string }
+export interface HomeVisitDoctor { doctor_partner_id: string; name: string; qualification: string | null; specialization: string | null; experience: number | null; fee: number; visit_minutes: number; pincodes: string[]; areas?: HomeVisitArea[]; slots?: string[]; next_slot?: { date: string; time: string; count: number } | null }
+/** "Kondapur · 500084" when the doctor named the area, else just the PIN code. */
+export const homeVisitAreaLabels = (d: Pick<HomeVisitDoctor, 'pincodes' | 'areas'>): string[] =>
+  d.areas?.length ? d.areas.map(a => (a.name?.trim() ? `${a.name.trim()} · ${a.pincode}` : a.pincode)) : d.pincodes;
+/** For patients: area NAMES, never a list of PIN codes ("Kondapur, Gachibowli +2 more" or "4 areas, including yours"). */
+export const homeVisitAreaSummary = (d: Pick<HomeVisitDoctor, 'pincodes' | 'areas'>, yourPin?: string): string => {
+  const names = Array.from(new Set((d.areas || []).map(a => a.name?.trim()).filter(Boolean) as string[]));
+  if (names.length) return names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3} more` : names.join(', ');
+  const n = d.pincodes.length;
+  return yourPin && d.pincodes.includes(yourPin) ? (n > 1 ? `${n} areas, including yours` : 'Your area') : `${n} area${n === 1 ? '' : 's'}`;
+};
 export interface MyHomeVisit {
   id: string; booking_id: string; booking_number: string | null; doctor_partner_id: string; visit_date: string; visit_time: string; visit_minutes: number;
   address: string; pincode: string; reason: string | null; fee: number; payment_status: string | null; status: string; field_status: string;
   failed_reason: string | null; visit_code: string | null; cancellation_reason: string | null; cancelled_by: string | null;
+  expires_at?: string | null; confirmed_at?: string | null; patient_name?: string | null; landmark?: string | null; doctor_name?: string | null; on_the_way_at?: string | null;
+  payment_mode?: string | null; paid_at_visit?: boolean;
 }
 export const homeVisitDoctorsApi = async (pincode: string): Promise<HomeVisitDoctor[]> => (await apiClient.get('/home-visits/doctors', { params: { pincode } })).data;
 export const homeVisitOfferApi = async (doctorId: string, date: string): Promise<HomeVisitDoctor> => (await apiClient.get(`/home-visits/doctors/${encodeURIComponent(doctorId)}`, { params: { date } })).data;
@@ -122,7 +135,10 @@ export const bookHomeVisitApi = async (body: {
   doctor_partner_id: string; visit_date: string; visit_time: string; reason: string; family_member_id?: string;
   address: { line: string; area?: string; landmark?: string; city: string; pincode: string; pin?: { lat: number; lng: number } };
   payment_mode: 'UPI' | 'CASH'; payment?: { payment_method: 'UPI'; upi_id?: string; razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string };
-}) => (await apiClient.post('/home-visits', body)).data as { patient: {name:string;relationship:string|null;family_member_id:string|null}; home_visit_id: string; booking_id: string; doctor_name: string; visit_date: string; visit_time: string; address: string; fee: number; payment_status: string; visit_code: string };
+}) => (await apiClient.post('/home-visits', body)).data as { patient: {name:string;relationship:string|null;family_member_id:string|null}; home_visit_id: string; booking_id: string; booking_number?: string | null; doctor_name: string; visit_date: string; visit_time: string; address: string; pincode?: string; fee: number; payment_status: string; status?: string; expires_at?: string | null; visit_code: string | null };
+/** Checks a request before paying (area covered, time still free, address, reason). Nothing is saved or charged. */
+export const checkHomeVisitApi = async (body: Omit<Parameters<typeof bookHomeVisitApi>[0], 'payment_mode' | 'payment'>) =>
+  (await apiClient.post('/home-visits/check', body)).data as { ok: boolean; fee: number; doctor_name: string };
 export const myHomeVisitsApi = async (): Promise<MyHomeVisit[]> => (await apiClient.get('/home-visits/mine')).data;
 export const cancelHomeVisitApi = async (bookingId: string, reason: string) => (await apiClient.post(`/bookings/patient/${encodeURIComponent(bookingId)}/cancel`, { reason })).data;
 

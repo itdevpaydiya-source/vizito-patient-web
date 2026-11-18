@@ -976,3 +976,9 @@ form:has(#reg-name) .auth-v2-step-head {
 form:has(#reg-name) .auth-v2-card-desc {
   margin-bottom: 14px;
 }
+
+/* "(optional)" next to a field label */
+.auth-v2-optional {
+  font-weight: 500;
+  color: #64748b;
+}

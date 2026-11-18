@@ -3,7 +3,8 @@ import apiClient from "./index";
 
 export interface PatientRegisterPayload {
   full_name: string;
-  phone: string;
+  // Mobile or email: at least one is required (the verified one is bound to registration_token).
+  phone?: string;
   email?: string;
   password: string;
   // Backend-issued proof that the phone/email was OTP-verified (from registerVerifyOtpApi).

@@ -1,0 +1,39 @@
+/* Doctor home visit booking — extends the approved doctor booking journey (dj-/ds- classes). */
+.hv-book .hv-avatar{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#e9fbf7;color:#00968a;flex-shrink:0}
+.hv-book .hv-avatar svg{width:28px;height:28px}
+.hv-book .hv-doc-row{grid-template-columns:minmax(220px,1.3fr) minmax(180px,1.2fr) minmax(140px,.6fr)}
+.hv-book .ds-place p{align-items:flex-start}
+.hv-book .ds-date-strip .hv-more{display:grid;place-items:center;align-content:center;gap:6px;color:#d64f09;border-style:dashed}
+.hv-book .ds-date-strip .hv-more svg{width:16px;height:16px}
+.hv-book .ds-selected{display:flex;align-items:center;gap:10px;margin-right:auto;font-size:12px;color:#0a1948}
+.hv-book .ds-selected small{display:block;color:#6f83a4;font-weight:400}
+.hv-book .dj-book-actions{gap:10px}
+.hv-book .dj-book-actions>.ds-selected+button{margin-left:auto}
+.hv-addresses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.hv-addresses>button{display:flex;align-items:flex-start;gap:10px;text-align:left;border:1px solid #dce7f2;border-radius:9px;padding:13px;background:#fff;color:#173b68}
+.hv-addresses>button svg{color:#e66114;margin-top:2px}
+.hv-addresses>button span{display:grid;gap:3px}
+.hv-addresses>button small{font-size:11px;color:#5e769a;line-height:1.5}
+.hv-addresses>button em{font-style:normal;font-size:11px;color:#9f3f1e}
+.hv-addresses>button[aria-checked=true]{border-color:#f26708;background:#fff7f0;box-shadow:0 0 0 1px #f26708}
+.hv-addresses>button:disabled{background:#f6f8fb;opacity:1}
+.hv-form{margin-top:6px}
+.hv-form label{display:grid;gap:6px}
+.hv-form input{width:100%}
+.hv-pin{grid-column:1/-1}
+.hv-err{display:block;color:#b42318;font-size:11px;font-weight:600;margin-top:4px}
+.hv-invalid input,.hv-invalid textarea{border-color:#e07a5f!important;background:#fffaf8}
+.hv-summary .hv-doc{display:flex;gap:10px;align-items:center;margin:12px 0}
+.hv-summary .hv-doc>span{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:#e9fbf7;color:#00968a}
+.hv-summary .hv-doc div{display:grid}
+.hv-summary .hv-doc small{color:#5e769a;font-size:11px}
+.hv-summary dl{margin:0}
+.hv-summary dl>div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #edf2f8;font-size:12px}
+.hv-summary dt{color:#6f83a4}
+.hv-summary dd{margin:0;text-align:right;font-weight:600;overflow-wrap:anywhere}
+.hv-book .dj-error button{margin-left:10px;text-decoration:underline;font-weight:700}
+.hv-confirm .hv-next{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0;margin:6px 0 14px}
+.hv-confirm .hv-next li{border:1px solid #e2eaf3;border-radius:9px;padding:12px;display:grid;gap:4px;font-size:12px;counter-increment:hv}
+.hv-confirm .hv-next span{color:#5e769a}
+@media(max-width:900px){.hv-book .hv-doc-row{grid-template-columns:1fr 1fr}.hv-book .hv-doc-row .ds-identity{grid-column:1/-1}}
+@media(max-width:600px){.hv-addresses{grid-template-columns:1fr}.hv-book .hv-doc-row{grid-template-columns:1fr}.hv-book .ds-price{border-left:0;padding-left:0}.hv-confirm .hv-next{grid-template-columns:1fr}.hv-book .dj-book-actions{flex-wrap:wrap}.hv-book .dj-book-actions>button{flex:1}.hv-book .ds-selected{width:100%}}
