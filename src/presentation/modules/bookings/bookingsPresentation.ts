@@ -180,6 +180,9 @@ export const statusText = (b: Booking) => {
     if (s === 'CHECKED_IN' || s === 'ARRIVED') return 'Checked in';
     return 'Active';
   }
+  // The visit time has passed but the clinic never closed it: don't promise it is still ahead.
+  const d = dateOf(b), t = timeOf(b);
+  if (d && Date.parse(`${d}T${t || '23:59'}:00+05:30`) + 60 * 60 * 1000 < Date.now()) return 'Visit time passed';
   return 'Upcoming';
 };
 

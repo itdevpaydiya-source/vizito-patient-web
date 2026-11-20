@@ -4,7 +4,9 @@ import {formatTime} from '../../../utils/dateFormat';
 export function upcomingDashboardBookings(bookings:DashboardBooking[],name:string,now=Date.now()){
  return [...new Map(bookings.map(b=>[b.id,b])).values()].map(b=>{
   const view=bookingView({...b,doctorName:b.doctorName||b.provider?.doctor?.name||null},name),date=b.homeCare?.next_visit?.date||view.date,start=b.homeCare?.next_visit?.start_time||view.time;
-  const end=b.homeCare?.next_visit?.end_time||b.endTime;
+  const rawEnd=b.homeCare?.next_visit?.end_time||b.endTime;
+  // Some bookings send the end as a full ISO timestamp: show it as an IST clock time, never raw.
+  const end=rawEnd&&/T\d/.test(rawEnd)?new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(rawEnd)):rawEnd;
   // A date without a recorded time remains upcoming through that IST day; no time is displayed.
   const at=date?Date.parse(date.slice(0,10)+'T'+(start?start.slice(0,8).padEnd(8,':00'):'23:59:59')+'+05:30'):NaN;
   const href=b.labOrder?'/lab-bookings?open='+encodeURIComponent(b.labOrder.id):b.homeCare?'/home-care?tab=mine&open='+encodeURIComponent(b.homeCare.id):'/appointments?type='+(b.business?.type==='Hospital'?'Hospital':'Doctor')+'&open='+encodeURIComponent(b.id);

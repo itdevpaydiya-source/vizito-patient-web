@@ -3,6 +3,8 @@ import { FileText, Clock, CheckCircle2, ChevronRight, Sparkles } from 'lucide-re
 import { hcEnquiriesMineApi, type HcEnquiry, type HcQuote } from '../../../../services/homecareHelper';
 import EnquiryTrackerModal from './EnquiryTrackerModal';
 import QuoteReviewModal from './QuoteReviewModal';
+import VizitoPagination from '../../../components/navigation/VizitoPagination';
+import { useVizitoPagination } from '../../../components/navigation/useVizitoPagination';
 
 interface EnquiriesListProps {
   onQuoteAccepted?: () => void;
@@ -25,6 +27,7 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
   const [error, setError] = useState(false);
   const [selectedEnquiry, setSelectedEnquiry] = useState<HcEnquiry | null>(null);
   const [reviewQuote, setReviewQuote] = useState<HcQuote | null>(null);
+  const paging = useVizitoPagination(enquiries ?? [], 'enquiries');
 
   const loadEnquiries = useCallback(async () => {
     setLoading(true);setError(false);
@@ -63,7 +66,7 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {enquiries.map((enq) => {
+        {paging.visibleItems.map((enq) => {
           const st = STATUS_MAP[enq.status] || { label: enq.status, cls: 'bg-slate-100 text-slate-600 border-slate-200' };
           const latestQuote = enq.quote || (enq.quotes && enq.quotes.find((q: any) => q.status === 'SENT')) || (enq.quotes && enq.quotes[0]);
           const hasQuote = Boolean(latestQuote && (['QUOTED', 'QUOTE_SENT'].includes(enq.status) || latestQuote.status === 'SENT'));
@@ -140,6 +143,7 @@ export default function EnquiriesList({ onQuoteAccepted, className = '' }: Enqui
           );
         })}
       </div>
+      <VizitoPagination page={paging.page} pageSize={paging.pageSize} total={enquiries.length} label="quote requests" onPageChange={paging.setPage} onPageSizeChange={paging.setPageSize} />
 
       {/* Tracker Modal */}
       {selectedEnquiry && (

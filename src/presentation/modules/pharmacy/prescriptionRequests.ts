@@ -5,6 +5,8 @@ export const quoteExpired=(r:PharmacyRequestItem,now=Date.now())=>!!r.quote_vali
 // A closed request shows its own state first: a cancelled order's request reads "Cancelled", never "Ordered".
 export const requestLabel=(r:PharmacyRequestItem)=>['Cancelled','Rejected','Expired'].includes(r.status)?({Rejected:'Declined by pharmacy',Cancelled:'Cancelled',Expired:'Expired'} as Record<string,string>)[r.status]:r.order_id?'Ordered':r.status==='Accepted'&&(r.quote_items||'').trim()&&quoteLines(r)?.length?'Quote ready':({Requested:'Waiting for pharmacy',Accepted:'Accepted',Rejected:'Declined by pharmacy',Cancelled:'Cancelled',Expired:'Expired'}[r.status]||r.status);
 export const requestDate=(value:string|null|undefined)=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}):null;
-const baseName=(name:string)=>name.toLowerCase().replace(/\s+\d+(\.\d+)?\s*(mg|mcg|g|gm|ml|iu|%)\b.*$/,'').replace(/\s+/g,' ').trim();
+// Dosage-form words ("Tab Paracetamol 650" vs "Paracetamol 650 mg Tablet") don't make a substitute (same rule as the pharmacy).
+const FORM_WORDS=/\b(tab|tabs|tablet|tablets|cap|caps|capsule|capsules|syp|syrup|inj|injection|susp|suspension|oint|ointment|drops?|cream|gel)\b\.?/g;
+const baseName=(name:string)=>name.toLowerCase().replace(FORM_WORDS,' ').replace(/\s+/g,' ').trim().replace(/\s*\d+(\.\d+)?\s*(mg|mcg|g|gm|ml|iu|%)\b.*$/,'').replace(/\s+/g,' ').trim();
 export const differentProduct=(line:PharmacyQuoteLine)=>!!line.item_name&&baseName(line.item_name)!==baseName(line.prescribed_name);
 export const canResendRequest=(r:PharmacyRequestItem,all:PharmacyRequestItem[])=>['Rejected','Cancelled','Expired'].includes(r.status)&&!all.some(other=>other.id!==r.id&&(other.prescription_id?other.prescription_id===r.prescription_id:!!r.document_id&&other.document_id===r.document_id)&&['Requested','Accepted'].includes(other.status));
