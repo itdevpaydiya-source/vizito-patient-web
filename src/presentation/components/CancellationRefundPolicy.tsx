@@ -28,12 +28,12 @@ const POLICY_DETAILS: Record<
       {
         icon: Clock,
         title: 'No Cancellation In The Last 2 Hours',
-        desc: 'Within 2 hours of your appointment, the booking cannot be cancelled online. Contact the hospital or support.',
+        desc: 'Within 2 hours of your appointment, the booking cannot be cancelled online. Contact your doctor or Vizito support.',
       },
       {
         icon: RotateCcw,
         title: 'Refund to Source',
-        desc: 'Online payments go back to your original payment method, usually within 5–7 working days. If it can’t go back automatically, Vizito support completes it. Pay-at-clinic bookings have no cancellation charge.',
+        desc: 'Online payments go back to your original payment method, usually within 5–7 working days. If it can’t go back automatically, Vizito support completes it. If you chose to pay later (at the clinic or after a home visit), there is no cancellation charge.',
       },
     ],
     serverRef: 'appointments.service.ts:496-505, 587-606',

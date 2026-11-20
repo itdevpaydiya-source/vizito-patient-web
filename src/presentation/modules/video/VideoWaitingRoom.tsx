@@ -8,6 +8,16 @@ import { doctorName, clinicName, type DoctorBooking } from '../bookings/doctorAp
 import { dateLabel, timeRange } from '../bookings/bookingsPresentation';
 import { playSpeakerTestSound } from '../../../services/videoConsultationHelper';
 import './VideoConsultation.css';
+import { formatTime } from '../../../utils/dateFormat';
+
+// "2026-11-20" + "12:00" -> "Fri, 20 Nov 2026 | 12:00 PM" (ranges like "9:30 AM – 9:45 AM" pass through).
+const niceWhen = (date?: string | null, slot?: string | null, sep = ' | '): string => {
+  const d = date && /^\d{4}-\d{2}-\d{2}/.test(date)
+    ? new Date(`${date.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+    : date || '';
+  const t = slot && /^\d{1,2}:\d{2}(:\d{2})?$/.test(slot) ? formatTime(slot) : slot || '';
+  return [d, t].filter(Boolean).join(sep);
+};
 
 interface VideoWaitingRoomProps {
   booking: DoctorBooking;
@@ -187,7 +197,7 @@ export const VideoWaitingRoom: React.FC<VideoWaitingRoomProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const docRating = d?.rating != null && Number(d.review_count) > 0 ? `${d.rating.toFixed(1)} (${d.review_count} reviews)` : '4.6 (120 reviews)';
+  const docRating = d?.rating != null && Number(d.review_count) > 0 ? `${d.rating.toFixed(1)} (${d.review_count} reviews)` : null;
 
   return (
     <div className="video-consult-page">
@@ -223,7 +233,7 @@ export const VideoWaitingRoom: React.FC<VideoWaitingRoomProps> = ({
               {canJoin ? 'Call Active' : minutesUntil !== null ? `${minutesUntil} min` : 'Soon'}
             </div>
             <div className="scheduled-time">
-              {b.appointmentDate ? `${b.appointmentDate}, ${b.timeSlot || '11:30 AM'}` : 'Today, 11:30 AM'}
+              {niceWhen(b.appointmentDate, b.timeSlot, ', ')}
             </div>
           </div>
         </div>
@@ -234,18 +244,16 @@ export const VideoWaitingRoom: React.FC<VideoWaitingRoomProps> = ({
         {/* Left Column: Doctor Profile & Appointment Meta */}
         <section className="video-card">
           <div className="video-doctor-profile">
-            <img
-              src={d?.photo_url || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300'}
+            {d?.photo_url && <img
+              src={d?.photo_url || undefined}
               alt={doctorName(b) || 'Doctor'}
               className="video-doctor-avatar"
-            />
+            />}
             <div className="video-doctor-meta">
-              <h2>{doctorName(b) || 'Dr. Sravani Reddy'}</h2>
-              <p className="quals">{d?.qualification || 'MBBS, MD (General Medicine)'}</p>
-              <p className="spec">{d?.speciality || 'General Physician'}</p>
-              <span className="video-rating-pill">
-                ★ {docRating}
-              </span>
+              <h2>{doctorName(b) || 'Your doctor'}</h2>
+              <p className="quals">{d?.qualification || ''}</p>
+              <p className="spec">{d?.speciality || ''}</p>
+              {docRating && <span className="video-rating-pill">★ {docRating}</span>}
             </div>
           </div>
 
@@ -263,7 +271,7 @@ export const VideoWaitingRoom: React.FC<VideoWaitingRoomProps> = ({
               <div>
                 <div className="label">Scheduled time</div>
                 <div className="value">
-                  {b.appointmentDate ? `${b.appointmentDate} | ${b.timeSlot || '11:30 AM – 11:45 AM (15 min)'}` : 'Today, 28 Oct 2026 | 11:30 AM – 11:45 AM (15 min)'}
+                  {niceWhen(b.appointmentDate, b.timeSlot)}
                 </div>
               </div>
             </div>
@@ -272,7 +280,7 @@ export const VideoWaitingRoom: React.FC<VideoWaitingRoomProps> = ({
               <User className="icon" />
               <div>
                 <div className="label">Patient</div>
-                <div className="value">{b.patientName || 'Kavya Reddy'} (Self)</div>
+                <div className="value">{b.patientName || 'You'}</div>
               </div>
             </div>
 

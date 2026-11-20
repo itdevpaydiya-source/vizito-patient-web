@@ -7,6 +7,16 @@ import {
 } from 'lucide-react';
 import { doctorName, type DoctorBooking } from '../bookings/doctorAppointmentsData';
 import './VideoConsultation.css';
+import { formatTime } from '../../../utils/dateFormat';
+
+// "2026-11-20" + "12:00" -> "Fri, 20 Nov 2026 | 12:00 PM" (ranges like "9:30 AM – 9:45 AM" pass through).
+const niceWhen = (date?: string | null, slot?: string | null, sep = ' | '): string => {
+  const d = date && /^\d{4}-\d{2}-\d{2}/.test(date)
+    ? new Date(`${date.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+    : date || '';
+  const t = slot && /^\d{1,2}:\d{2}(:\d{2})?$/.test(slot) ? formatTime(slot) : slot || '';
+  return [d, t].filter(Boolean).join(sep);
+};
 
 interface VideoInConsultationProps {
   booking: DoctorBooking;
@@ -99,9 +109,9 @@ export const VideoInConsultation: React.FC<VideoInConsultationProps> = ({
     }
   }, [isVideoOff]);
 
-  const patientName = b.patientName || 'Kavya Reddy';
-  const docDisplayName = doctorName(b) || 'Dr. Sravani Reddy';
-  const docRating = d?.rating != null && Number(d.review_count) > 0 ? `${d.rating.toFixed(1)} (${d.review_count} reviews)` : '4.6 (120 reviews)';
+  const patientName = b.patientName || 'You';
+  const docDisplayName = doctorName(b) || 'Your doctor';
+  const docRating = d?.rating != null && Number(d.review_count) > 0 ? `${d.rating.toFixed(1)} (${d.review_count} reviews)` : null;
 
   // Jitsi URL with config params
   const jitsiUrl = `https://meet.jit.si/${encodeURIComponent(roomName)}#userInfo.displayName=${encodeURIComponent(patientName)}&config.prejoinPageEnabled=false&config.disableDeepLinking=true&config.toolbarButtons=["microphone","camera","chat","desktop","hangup"]`;
@@ -129,22 +139,18 @@ export const VideoInConsultation: React.FC<VideoInConsultationProps> = ({
           <div className="video-overlay-top">
             {/* Top Left: Doctor Info Badge */}
             <div className="video-overlay-doctor-badge">
-              <img
-                src={d?.photo_url || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=150'}
+              {d?.photo_url && <img
+                src={d?.photo_url || undefined}
                 alt={docDisplayName}
-              />
+              />}
               <div>
                 <div className="name">{docDisplayName}</div>
-                <div className="sub">11:32 | 15 min consultation</div>
+                <div className="sub">{b.timeSlot || 'Video consultation'}</div>
               </div>
             </div>
 
             {/* Top Right: Connection & Call Timer */}
             <div className="video-overlay-stats">
-              <div className="video-connection-pill">
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Good connection</span>
-              </div>
               <div className="video-timer-pill">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>{formatTimer(elapsedSeconds)}</span>
@@ -258,19 +264,21 @@ export const VideoInConsultation: React.FC<VideoInConsultationProps> = ({
               <>
                 {/* Doctor Mini Card */}
                 <div className="video-doctor-profile" style={{ marginBottom: '10px', paddingBottom: '12px' }}>
-                  <img
-                    src={d?.photo_url || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200'}
+                  {d?.photo_url && <img
+                    src={d?.photo_url || undefined}
                     alt={docDisplayName}
                     className="video-doctor-avatar"
                     style={{ width: '60px', height: '60px' }}
-                  />
+                  />}
                   <div className="video-doctor-meta">
                     <h2 style={{ fontSize: '15px' }}>{docDisplayName}</h2>
-                    <p className="quals">{d?.qualification || 'MBBS, MD (General Medicine)'}</p>
-                    <p className="spec">{d?.speciality || 'General Physician'}</p>
-                    <span className="video-rating-pill">
-                      ★ {docRating}
-                    </span>
+                    <p className="quals">{d?.qualification || ''}</p>
+                    <p className="spec">{d?.speciality || ''}</p>
+                    {docRating && (
+                      <span className="video-rating-pill">
+                        ★ {docRating}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -281,7 +289,7 @@ export const VideoInConsultation: React.FC<VideoInConsultationProps> = ({
                     <div>
                       <div className="label">Scheduled time</div>
                       <div className="value">
-                        {b.appointmentDate ? `${b.appointmentDate} | ${b.timeSlot || '11:30 AM – 11:45 AM'}` : 'Today, 28 Oct 2026 | 11:30 AM – 11:45 AM'}
+                        {niceWhen(b.appointmentDate, b.timeSlot)}
                       </div>
                     </div>
                   </div>

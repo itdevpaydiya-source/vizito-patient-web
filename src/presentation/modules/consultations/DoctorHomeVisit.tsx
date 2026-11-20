@@ -14,6 +14,7 @@ import {istDateTime12} from './homeVisitStatus';
 import './DoctorJourney.css';
 import './DoctorSlotPicker.css';
 import './DoctorHomeVisit.css';
+import { landmarkText } from '../../../utils/address';
 
 const istDay=(offsetDays=0)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+offsetDays*86400000));
 const dayChip=(iso:string,opt:Intl.DateTimeFormatOptions)=>new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-IN',{...opt,timeZone:'UTC'});
@@ -29,7 +30,7 @@ const PERIODS=[{name:'Morning',from:0,to:12,Icon:Sunrise},{name:'Afternoon',from
  * Steps: date & time → patient & address → review & pay → request sent. Everything is checked with the
  * server BEFORE any online payment, so a patient is never charged for a request that can't be sent.
  */
-export function DoctorHomeVisit({doctor,offer,pincode,onBack,backLabel='Back to consultation types',family,who,onWho}:{family:PatientFamilyMember[];who:string;onWho:(value:string)=>void;doctor:{id:string;name:string};offer:HomeVisitDoctor;pincode:string;onBack:()=>void;backLabel?:string}){
+export function DoctorHomeVisit({doctor,offer,pincode,onBack,backLabel='Back to consultation types',doneLink={to:'/home-care?tab=doctor',label:'Back to Home care'},family,who,onWho}:{doneLink?:{to:string;label:string};family:PatientFamilyMember[];who:string;onWho:(value:string)=>void;doctor:{id:string;name:string};offer:HomeVisitDoctor;pincode:string;onBack:()=>void;backLabel?:string}){
  const doctorLabel=formatDoctorName(doctor.name)||'the doctor';
  const [params,setParams]=useSearchParams();
  const step=Math.min(2,Math.max(0,Number(params.get('hv_step')||0)));
@@ -104,7 +105,7 @@ export function DoctorHomeVisit({doctor,offer,pincode,onBack,backLabel='Back to 
    <dl><div><dt>Booking number</dt><dd>{receipt.booking_number||'Not provided'}</dd></div><div><dt>Doctor</dt><dd>{formatDoctorName(receipt.doctor_name)||doctorLabel} · Home visit</dd></div><div><dt>Date &amp; time</dt><dd>{dateLabel(receipt.visit_date)}, {timeLabel(receipt.visit_time)}</dd></div><div><dt>Patient</dt><dd>{patient}</dd></div><div><dt>Address</dt><dd>{receipt.address}{receipt.pincode?` – ${receipt.pincode}`:''}</dd></div><div><dt>Fee</dt><dd>{rupees(receipt.fee)} · {receipt.payment_status==='PAID'?paidLabel():'Pay the doctor after the visit (cash or UPI)'}</dd></div></dl>
    <ol className="hv-next"><li><b>Doctor confirms</b><span>You get a 4-digit visit code.</span></li><li><b>Doctor on the way</b><span>You see it in your bookings.</span></li><li><b>At your door</b><span>Share the code so you know it’s your doctor.</span></li></ol>
    <p>If the doctor can’t come, you’re not charged (online payments are refunded). Not for emergencies — call 108.</p>
-   <Link className="dj-primary" to="/home-care?tab=mine&view=doctor">View your request</Link><Link to="/home-care?tab=doctor">Back to Home care</Link></section>;}
+   <Link className="dj-primary" to="/home-care?tab=mine&view=doctor">View your request</Link><Link to={doneLink.to}>{doneLink.label}</Link></section>;}
 
  const summary=<aside className="dj-appointment-summary hv-summary"><div className="dj-final-heading"><h2>Visit summary</h2>{step>0&&<button onClick={()=>goStep(0)}>Edit</button>}</div>
   <div className="hv-doc"><span aria-hidden><Stethoscope/></span><div><strong>{doctorLabel}</strong><small>{[offer.qualification,offer.specialization].filter(Boolean).join(' · ')||'Doctor'}</small></div></div>
@@ -164,7 +165,7 @@ export function DoctorHomeVisit({doctor,offer,pincode,onBack,backLabel='Back to 
    {step===2&&<div className="dj-final-grid"><div className="dj-final-main">
     <header><h2>Review &amp; send request</h2><p>Check the details. The doctor confirms your request before the visit.</p></header>
     <section className="dj-final-card"><div className="dj-final-heading"><h3>Visit</h3><button onClick={()=>goStep(0)}>Edit</button></div><dl className="dj-review-facts"><div><dt>Doctor</dt><dd>{doctorLabel}</dd></div><div><dt>Date</dt><dd>{niceDay(date)}</dd></div><div><dt>Doctor arrives</dt><dd>{timeLabel(time)}</dd></div></dl></section>
-    <section className="dj-final-card"><div className="dj-final-heading"><h3>Patient &amp; address</h3><button onClick={()=>goStep(1)}>Edit</button></div><dl className="dj-review-facts"><div><dt>Patient</dt><dd>{patientName}</dd></div><div><dt>Address</dt><dd>{[address.line,address.area,address.landmark?`Near ${address.landmark}`:'',address.city].filter(Boolean).join(', ')} – {address.pincode}</dd></div><div><dt>Map pin</dt><dd>{pin?'Pinned for the doctor':'Not pinned'}</dd></div></dl><p><b>Reason:</b> {reason.trim()}</p></section>
+    <section className="dj-final-card"><div className="dj-final-heading"><h3>Patient &amp; address</h3><button onClick={()=>goStep(1)}>Edit</button></div><dl className="dj-review-facts"><div><dt>Patient</dt><dd>{patientName}</dd></div><div><dt>Address</dt><dd>{[address.line,address.area,landmarkText(address.landmark),address.city].filter(Boolean).join(', ')} – {address.pincode}</dd></div><div><dt>Map pin</dt><dd>{pin?'Pinned for the doctor':'Not pinned'}</dd></div></dl><p><b>Reason:</b> {reason.trim()}</p></section>
     <section className="dj-final-card"><h3>How do you want to pay?</h3><fieldset className="dj-payment-options" disabled={busy}><div>
      <label><input type="radio" name="home-visit-payment" value="CASH" checked={pay==='CASH'} onChange={()=>setPay('CASH')}/><span><strong>Pay the doctor after the visit</strong><small>Cash or UPI to the doctor at your home</small></span></label>
      <label><input type="radio" name="home-visit-payment" value="UPI" checked={pay==='UPI'} onChange={()=>setPay('UPI')}/><span><strong>Pay online now</strong><small>UPI, cards or net banking. Refunded in full if the doctor can’t come.</small></span></label></div></fieldset>

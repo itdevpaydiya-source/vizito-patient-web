@@ -250,6 +250,9 @@ export default function PharmacyV2() {
   const quote = activeRequest ? quoteLines(activeRequest) : null;
   const accepted = !!activeRequest && activeRequest.status === 'Accepted' && !activeRequest.order_id;
   const quoteReady = accepted && !!activeRequest?.quote_items && !!quote?.length && !quoteExpired(activeRequest);
+  // Owner 18 Nov: a Vizito e-prescription is never quoted. Once it is at the pharmacy the patient orders
+  // at that pharmacy's live prices (or shows the Rx number at the counter); only uploaded photos are quoted.
+  const liveRx = accepted && !activeRequest?.quote_items && !!activeRequest?.prescription_id && !activeRequest?.document_id;
 
   const livePrices = useMemo(() => {
     const here = together?.find((p) => p.pharmacy_id === draft.pharmacyId);
@@ -284,7 +287,7 @@ export default function PharmacyV2() {
     : [];
   // The prescription decides this order until a live quote exists, even if the basket has no Rx line.
   const openRequest = !!activeRequest && !activeRequest.order_id;
-  const rxPending = (needsRx || openRequest) && !quoteReady;
+  const rxPending = (needsRx || openRequest) && !quoteReady && !liveRx;
   // Opened from Requests with nothing orderable yet: show the request, not a cart.
   const requestOnly = !!requestId && !quoteReady && (cartLines.length === 0 || (!!requestParam && draft.requestId !== requestParam));
 
@@ -831,7 +834,7 @@ export default function PharmacyV2() {
           delivery_pincode: deliveryPin,
         } : {}),
       };
-      const order = quoteReady && activeRequest
+      const order = (quoteReady || liveRx) && activeRequest
         ? await createRxOrderApi({ ...common, pharmacy_request_id: activeRequest.id })
         : await createDirectOrderApi({ ...common, pharmacy_partner_id: pharmacyId });
       baskets.updateDraft({ lines: [], subject: 'self' });
@@ -1259,10 +1262,11 @@ export default function PharmacyV2() {
               {status === 'Accepted' ? <CheckCircle2 /> : status === 'Rejected' || status === 'Cancelled' || status === 'Expired' ? <AlertTriangle /> : <Clock />}
             </span>
             <div>
-              <h2>{activeRequest.order_id && status === 'Accepted' ? 'Order already created' : status === 'Requested' ? 'Waiting for pharmacist review' : status === 'Accepted' ? (expired && activeRequest.quote_items ? 'Quote expired' : 'Pharmacist accepted your prescription') : status === 'Rejected' ? 'Prescription not accepted' : `Request ${status.toLowerCase()}`}</h2>
+              <h2>{activeRequest.order_id && status === 'Accepted' ? 'Order already created' : status === 'Requested' ? 'Waiting for pharmacist review' : status === 'Accepted' ? (expired && activeRequest.quote_items ? 'Quote expired' : liveRx ? `Your prescription is at ${providerById.get(activeRequest.pharmacy_partner_id)?.name || pharmacyName}` : 'Pharmacist accepted your prescription') : status === 'Rejected' ? 'Prescription not accepted' : `Request ${status.toLowerCase()}`}</h2>
               <p>
                 {activeRequest.order_id ? 'This prescription request has already become an order.'
                   : status === 'Requested' ? 'The pharmacy is checking your prescription and stock. This page refreshes automatically.'
+                    : liveRx ? `Show ${prescriptions.find((p) => p.id === activeRequest.prescription_id)?.prescription_number || 'your prescription number'} at their counter; they bill it at their prices. For pickup or delivery, add these medicines to your cart and order at the pharmacy's prices.`
                     : status === 'Accepted' && !activeRequest.quote_items ? 'The pharmacist accepted the request and is preparing a quote.'
                       : status === 'Accepted' && expired ? 'The pharmacist’s price is no longer valid, so this quote can’t be ordered.'
                       : status === 'Accepted' ? 'Review the pharmacist’s quote, then place your order.'
@@ -1273,7 +1277,7 @@ export default function PharmacyV2() {
           {activeRequest.order_id && <Link className="ph2-btn ph2-btn--primary ph2-btn--sm" to={`/pharmacy-orders/${activeRequest.order_id}`}>View order <ChevronRight /></Link>}
           {beneficiaryLabel(activeRequest) && <p className="ph2-muted" style={{ marginTop: 8 }}>{beneficiaryLabel(activeRequest)}</p>}
           {!activeRequest.quote_items && sentMedicines.length > 0 && <p className="ph2-muted" style={{ marginTop: 8 }}>Medicines on this prescription: {sentMedicines.join(', ')}</p>}
-          {status === 'Accepted' && !activeRequest.quote_items && !activeRequest.order_id && <p className="ph2-muted" style={{ marginTop: 8 }}>Nothing to do yet. You’ll get a notification when the price is ready.</p>}
+          {status === 'Accepted' && !activeRequest.quote_items && !activeRequest.order_id && !liveRx && <p className="ph2-muted" style={{ marginTop: 8 }}>Nothing to do yet. You’ll get a notification when the price is ready.</p>}
           {status === 'Accepted' && activeRequest.quote_items && (
             <>
               {lines === null ? <p className="ph2-error">Quote details could not be read. Refresh before ordering.</p> : (

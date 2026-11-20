@@ -38,110 +38,11 @@ export const VideoConsultationScreen: React.FC = () => {
           (b as any).appointment_id === bookingId
       );
 
-      if (found) {
-        setBooking(found);
-      } else {
-        // Fallback placeholder with standard details so UI never blanks out
-        setBooking({
-          id: bookingId || 'video-booking',
-          bookingNumber: bookingId || 'BK-VIDEO-2026',
-          status: 'Confirmed',
-          bookingDate: new Date().toISOString(),
-          appointmentDate: '28 Oct 2026',
-          timeSlot: '11:30 AM – 11:45 AM',
-          appointmentType: 'VIDEO_CALL',
-          patientName: 'Kavya Reddy',
-          totalAmount: 500,
-          paymentStatus: 'PAID',
-          notes: null,
-          createdAt: new Date().toISOString(),
-          doctorName: 'Dr. Sravani Reddy',
-          provider: {
-            doctor: {
-              name: 'Dr. Sravani Reddy',
-              photo_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300',
-              qualification: 'MBBS, MD (General Medicine)',
-              speciality: 'General Physician',
-              experience_years: 12,
-              rating: 4.6,
-              review_count: 120,
-            },
-            payment: {
-              receipt_number: 'REC-2026-001',
-              transaction_number: 'TXN-9823412',
-              payment_reference: 'pay_video_1',
-              method: 'UPI',
-              amount: 500,
-              paid_at: new Date().toISOString(),
-            },
-          },
-          visit: {
-            can_cancel: true,
-            can_reschedule: true,
-            reschedules_left: 2,
-            token_number: null,
-            reason_for_visit: 'Seasonal viral fever and throat irritation',
-            prescription: null,
-            timeline: [],
-            video: {
-              how: 'WAITING_ROOM',
-              can_join: true,
-              join_url: null,
-              call_expected_from: new Date().toISOString(),
-              call_expected_until: new Date(Date.now() + 30 * 60000).toISOString(),
-              message: 'Your video consultation will start soon.',
-              mode_used: null,
-            },
-          },
-        } as unknown as DoctorBooking);
-      }
-    } catch (e: any) {
-      console.warn('Could not load dashboard booking:', e);
-      // Still set standard fallback
-      setBooking({
-        id: bookingId || 'video-booking',
-        bookingNumber: bookingId || 'BK-VIDEO-2026',
-        status: 'Confirmed',
-        bookingDate: new Date().toISOString(),
-        appointmentDate: '28 Oct 2026',
-        timeSlot: '11:30 AM – 11:45 AM',
-        appointmentType: 'VIDEO_CALL',
-        patientName: 'Kavya Reddy',
-        totalAmount: 500,
-        paymentStatus: 'PAID',
-        notes: null,
-        createdAt: new Date().toISOString(),
-        doctorName: 'Dr. Sravani Reddy',
-        provider: {
-          doctor: {
-            name: 'Dr. Sravani Reddy',
-            photo_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300',
-            qualification: 'MBBS, MD (General Medicine)',
-            speciality: 'General Physician',
-            experience_years: 12,
-            rating: 4.6,
-            review_count: 120,
-          },
-        },
-        visit: {
-          can_cancel: true,
-          can_reschedule: true,
-          reschedules_left: 2,
-          token_number: null,
-          reason_for_visit: 'Seasonal viral fever and throat irritation',
-          prescription: null,
-          timeline: [],
-          video: {
-            how: 'WAITING_ROOM',
-            can_join: true,
-            join_url: null,
-            call_expected_from: new Date().toISOString(),
-            call_expected_until: new Date(Date.now() + 30 * 60000).toISOString(),
-            message: 'Your video consultation will start soon.',
-            mode_used: null,
-          },
-        },
-      } as unknown as DoctorBooking);
+      // Never stand in a made-up booking: a missing booking is an honest error, not a demo doctor.
+      if (found) setBooking(found);
+      else setError('We could not find this video consultation. Open it again from My Bookings.');
+    } catch {
+      setError('The video consultation could not be loaded. Check your connection and retry.');
     } finally {
       setLoading(false);
     }
@@ -225,20 +126,17 @@ export const VideoConsultationScreen: React.FC = () => {
   if (!booking) return null;
 
   // Determine room name
-  const effectiveRoomName =
-    videoStatus?.room_name ||
-    booking.visit?.video?.room_name ||
-    `vizito-${(bookingId || 'consult').replace(/[^a-zA-Z0-9]/g, '')}`;
+  // Only the doctor's real room: an invented name would leave the patient alone in another call.
+  const effectiveRoomName = videoStatus?.room_name || booking.visit?.video?.room_name || '';
 
   // Doctor has admitted / call is ready
   const effectiveCanJoin = Boolean(
     videoStatus?.can_join ||
     booking.visit?.video?.can_join ||
-    videoStatus?.video_started_at ||
-    isCallRoute
-  );
+    videoStatus?.video_started_at
+  ) && Boolean(effectiveRoomName);
 
-  return inCall ? (
+  return inCall && effectiveRoomName ? (
     <VideoInConsultation
       booking={booking}
       roomName={effectiveRoomName}
